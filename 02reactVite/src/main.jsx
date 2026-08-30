@@ -5,7 +5,9 @@ import { StrictMode } from 'react'
 
  function MyApp(){
   return (
+    <>
     <h1>Samir Ali | Java Developer</h1>
+    <p>how are you</p></>
   )
  }
 //  const ReactElement = {
