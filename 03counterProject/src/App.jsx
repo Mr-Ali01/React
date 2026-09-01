@@ -5,11 +5,31 @@ import viteLogo from './assets/vite.svg'
 import './App.css'
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [counter, setCount] = useState(15)
+  
+  function addNumber() {
+    if(counter < 20) {
+      setCount(count=> count+1);
+    console.log(counter, Math.random());
+    } else {
+      alert("Please add number less than equal 20");
+    }
+    
+  }
+  const removeNumber=()=>{
+    if(counter > 0) {
+    setCount((count)=> count-1);
+    } else{
+      alert("Please add number Greater than equal 0");
+
+    }
+  }
 
   return (
     <>
-      <h1>How are you</h1>
+      <p>{counter}</p>
+      <button onClick={addNumber}>Up-Counter</button>
+      <button onClick={removeNumber}>Down-Counter</button>
     </>
   )
 }
