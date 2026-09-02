@@ -21,6 +21,8 @@ function App() {
     setCount((count)=> count-1);
     } else{
       alert("Please add number Greater than equal 0");
+      console.log("it's working code");
+      
 
     }
   }
