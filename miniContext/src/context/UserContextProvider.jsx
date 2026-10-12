@@ -3,6 +3,7 @@ import UserContext from "./UserContext";
 
 const UserContextProvider = ({children}) => {
     console.log("how its work");
+    console.log("how its work");
     
     const [user, setUser] = React.useState(null)
     return(
