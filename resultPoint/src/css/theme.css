@@ -1,0 +1,151 @@
+:root {
+  --bg: #F8FAFC;
+  --bg-secondary: #F1F5F9;
+  --bg-tertiary: #FFFFFF;
+  --card: #FFFFFF;
+  --card-hover: #FFF7ED;
+  --card-elevated: #FFFFFF;
+  --border: #E2E8F0;
+  --border-light: #F1F5F9;
+  --text-h: #0F172A;
+  --text-m: #475569;
+  --text-light: #64748B;
+  --text-inverse: #FFFFFF;
+  --accent: #FF6B00;
+  --accent-hover: #EA580C;
+  --accent-light: #FF8A32;
+  --accent-soft: #FFF1E8;
+  --accent-border: #FFD8BE;
+  --shadow: rgba(15, 23, 42, 0.06);
+  --shadow-accent: rgba(255, 107, 0, 0.20);
+  --connector-glow: rgba(255, 107, 0, 0.45);
+  --connector-base: #E2E8F0;
+}
+
+.dark {
+  --bg: #0B0D10;
+  --bg-secondary: #0D141F;
+  --bg-tertiary: #111A26;
+  --card: #111418;
+  --card-hover: #15202D;
+  --card-elevated: #172433;
+  --border: #1E2A35;
+  --border-light: #18232F;
+  --text-h: #F8FAFC;
+  --text-m: #94A3B8;
+  --text-light: #64748B;
+  --text-inverse: #080D14;
+  --accent: #FF7300;
+  --accent-hover: #FF8A1A;
+  --accent-light: #FFA042;
+  --accent-soft: rgba(255, 115, 0, 0.12);
+  --accent-border: rgba(255, 115, 0, 0.28);
+  --shadow: rgba(0, 0, 0, 0.45);
+  --shadow-accent: rgba(255, 115, 0, 0.35);
+  --connector-glow: rgba(255, 115, 0, 0.85);
+  --connector-base: #1E2A35;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--text-m);
+  font-family: 'Inter', sans-serif;
+  transition: background-color 0.25s ease, color 0.25s ease;
+  min-height: 100vh;
+}
+
+/* Custom thin scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 9999px;
+}
+
+/* Step Pipeline Connector Styling */
+.step-line-container {
+  position: relative;
+}
+
+.step-track-bg {
+  background-color: var(--connector-base);
+}
+
+.step-track-fill {
+  background: linear-gradient(90deg, var(--accent) 0%, var(--accent-light) 100%);
+  box-shadow: 0 0 12px var(--connector-glow);
+  transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1), height 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ==========================================================
+   Mobile Navigation Drawer & Overlay
+   ========================================================== */
+
+/* Disable transitions during window resize to prevent DevTools animation glitches */
+body.resize-active *,
+body.resize-active *::before,
+body.resize-active *::after {
+  transition: none !important;
+}
+
+#mobile-menu-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  background-color: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+#mobile-menu-overlay.active {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+#mobile-nav-menu {
+  position: fixed;
+  top: 0;
+  right: 0;
+  z-index: 9999;
+  height: 100vh;
+  height: 100dvh;
+  width: 20rem;
+  max-width: 85vw;
+  transform: translateX(100%);
+  visibility: hidden;
+  pointer-events: none;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow-y: auto;
+}
+
+#mobile-nav-menu.active {
+  transform: translateX(0);
+  visibility: visible;
+  pointer-events: auto;
+}
+
+@media (min-width: 1024px) {
+  #mobile-menu-overlay,
+  #mobile-nav-menu {
+    display: none !important;
+  }
+}
