@@ -55,7 +55,7 @@ export default function Header({ onOpenMobileMenu }) {
               <ChevronDown className="w-3.5 h-3.5 transition-transform group-hover:rotate-180" />
             </Link>
             <div className="absolute left-0 top-full mt-1.5 w-56 rounded-2xl bg-card border border-border p-2 shadow-theme opacity-0 translate-y-1 pointer-events-none group-hover:opacity-100 group-hover:translate-y-0 group-hover:pointer-events-auto transition-all duration-200 z-50">
-              <Link to="/calculators" className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-text-m hover:text-accent hover:bg-bg-sec transition-colors">
+              <Link to="/calculators/cgpa" className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-text-m hover:text-accent hover:bg-bg-sec transition-colors">
                 <Calculator className="w-4 h-4 text-accent" />
                 <span>CGPA Calculator</span>
               </Link>
@@ -86,7 +86,7 @@ export default function Header({ onOpenMobileMenu }) {
             Universities
           </Link>
 
-          <div className="relative group">
+          {/* <div className="relative group">
             <Link to="/tools" className="text-text-m hover:text-text-h flex items-center gap-1 py-1.5 transition-colors">
               <span>Tools</span>
               <ChevronDown className="w-3.5 h-3.5 transition-transform group-hover:rotate-180" />
@@ -109,7 +109,7 @@ export default function Header({ onOpenMobileMenu }) {
                 <span>Marks to Grade</span>
               </Link>
             </div>
-          </div>
+          </div> */}
 
           <div className="relative group">
             <Link to="/resources" className="text-text-m hover:text-text-h flex items-center gap-1 py-1.5 transition-colors">
@@ -124,6 +124,10 @@ export default function Header({ onOpenMobileMenu }) {
               <Link to="/resources#study-materials" className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-text-m hover:text-accent hover:bg-bg-sec transition-colors">
                 <BookOpen className="w-4 h-4 text-brandBlue" />
                 <span>Study Materials</span>
+              </Link>
+              <Link to="/resources/details" className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-text-m hover:text-accent hover:bg-bg-sec transition-colors">
+                <BookOpen className="w-4 h-4 text-brandBlue" />
+                <span>University Guides</span>
               </Link>
             </div>
           </div>
@@ -151,7 +155,7 @@ export default function Header({ onOpenMobileMenu }) {
           </Link>
 
           <Link
-            to="/signup"
+            to="/signup?tab=signup"
             className="hidden sm:inline-flex items-center gap-1.5 px-4 sm:px-4.5 py-2 rounded-xl text-xs sm:text-[13px] font-bold text-white bg-accent hover:bg-accent-hover shadow-accent active:scale-95 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
             <span>Sign Up</span>

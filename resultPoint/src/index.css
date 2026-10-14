@@ -1,92 +1,29 @@
-/* @import "tailwindcss";
-
-
-:root {
-  --bg: #F8FAFC;
-  --bg-secondary: #F1F5F9;
-  --bg-tertiary: #FFFFFF;
-  --card: #FFFFFF;
-  --card-hover: #FFF7ED;
-  --card-elevated: #FFFFFF;
-  --border: #E2E8F0;
-  --border-light: #F1F5F9;
-  --text-h: #0F172A;
-  --text-m: #475569;
-  --text-light: #64748B;
-  --text-inverse: #FFFFFF;
-  --accent: #FF6B00;
-  --accent-hover: #EA580C;
-  --accent-light: #FF8A32;
-  --accent-soft: #FFF1E8;
-  --accent-border: #FFD8BE;
-  --shadow: rgba(15, 23, 42, 0.06);
-  --shadow-accent: rgba(255, 107, 0, 0.20);
-  --connector-glow: rgba(255, 107, 0, 0.45);
-  --connector-base: #E2E8F0;
-}
-
-.dark {
-  --bg: #0B0D10;
-  --bg-secondary: #0D141F;
-  --bg-tertiary: #111A26;
-  --card: #111418;
-  --card-hover: #15202D;
-  --card-elevated: #172433;
-  --border: #1E2A35;
-  --border-light: #18232F;
-  --text-h: #F8FAFC;
-  --text-m: #94A3B8;
-  --text-light: #64748B;
-  --text-inverse: #080D14;
-  --accent: #FF7300;
-  --accent-hover: #FF8A1A;
-  --accent-light: #FFA042;
-  --accent-soft: rgba(255, 115, 0, 0.12);
-  --accent-border: rgba(255, 115, 0, 0.28);
-  --shadow: rgba(0, 0, 0, 0.45);
-  --shadow-accent: rgba(255, 115, 0, 0.35);
-  --connector-glow: rgba(255, 115, 0, 0.85);
-  --connector-base: #1E2A35;
-}
-
-body {
-  background-color: var(--bg);
-  color: var(--text-m);
-  font-family: 'Inter', sans-serif;
-  transition: background-color 0.25s ease, color 0.25s ease;
-  min-height: 100vh;
-}
-
-.step-track-bg {
-  background-color: var(--connector-base);
-}
-
-.step-track-fill {
-  background: linear-gradient(90deg, var(--accent) 0%, var(--accent-light) 100%);
-  box-shadow: 0 0 12px var(--connector-glow);
-  transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1), height 0.35s cubic-bezier(0.4, 0, 0.2, 1);
-} */
-
 @import "tailwindcss";
 
-/* 1. Tell Tailwind v4 to trigger dark: variants via the .dark parent class */
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* 2. Register your custom tokens so classes like text-accent, bg-bg, bg-card exist */
 @theme {
+  /* Surface Tokens */
   --color-bg: var(--bg);
   --color-bg-sec: var(--bg-secondary);
+  --color-surface: var(--bg-secondary);
   --color-card: var(--card);
   --color-border: var(--border);
 
+  /* Typography Tokens */
   --color-text-h: var(--text-h);
   --color-text-m: var(--text-m);
   --color-text-light: var(--text-light);
+  --color-text-primary: var(--text-h);
+  --color-text-secondary: var(--text-m);
+  --color-text-muted: var(--text-light);
 
+  /* Accent Tokens */
   --color-accent: var(--accent);
   --color-accent-hover: var(--accent-hover);
   --color-accent-soft: var(--accent-soft);
 
+  /* Brand Colors */
   --color-brandBlue: #3B82F6;
   --color-brandGreen: #10B981;
   --color-brandPurple: #8B5CF6;
@@ -94,12 +31,20 @@ body {
   --color-brandPink: #EC4899;
   --color-brandCyan: #06B6D4;
 
+  /* Status Aliases */
+  --color-success: #10B981;
+  --color-warning: #F59E0B;
+  --color-danger: #EC4899;
+
+  /* Shadows */
   --shadow-theme: 0 10px 30px -10px var(--shadow);
   --shadow-accent: 0 10px 25px -5px var(--shadow-accent);
   --shadow-subtle: 0 4px 20px -2px var(--shadow);
+  --shadow-card: 0 10px 30px -10px var(--shadow);
+  --shadow-orange: 0 10px 25px -5px var(--shadow-accent);
 }
 
-/* 3. Your light mode values */
+/* Home Page Light Mode (Locked) */
 :root {
   --bg: #F8FAFC;
   --bg-secondary: #F1F5F9;
@@ -118,7 +63,7 @@ body {
   --connector-base: #E2E8F0;
 }
 
-/* 4. Your dark mode values */
+/* Home Page Dark Mode (Locked) */
 .dark {
   --bg: #0B0D10;
   --bg-secondary: #0D141F;
@@ -137,13 +82,36 @@ body {
   --connector-base: #1E2A35;
 }
 
-/* 5. Base body and animation styles */
+html, body {
+  overflow-x: clip;
+}
+
 body {
   background-color: var(--bg);
   color: var(--text-m);
   font-family: 'Inter', sans-serif;
   transition: background-color 0.25s ease, color 0.25s ease;
   min-height: 100vh;
+}
+
+/* Input elements styled to match Home card & border tokens */
+.calc-input {
+  background-color: var(--card);
+  border: 1px solid var(--border);
+  color: var(--text-h);
+  transition: all 180ms ease;
+}
+
+.calc-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+.progress-ring-circle {
+  transition: stroke-dashoffset 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  transform: rotate(-90deg);
+  transform-origin: 50% 50%;
 }
 
 .step-track-bg {
