@@ -46,6 +46,7 @@ export default function LoginSignup() {
   // Submitting States
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [isSigningUp, setIsSigningUp] = useState(false);
+console.log("usp");
 
   const navigate = useNavigate();
   const { showToast } = useToast();
