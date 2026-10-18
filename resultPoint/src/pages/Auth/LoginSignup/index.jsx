@@ -47,6 +47,7 @@ export default function LoginSignup() {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [isSigningUp, setIsSigningUp] = useState(false);
 console.log("usp");
+console.log("usp");
 
   const navigate = useNavigate();
   const { showToast } = useToast();
