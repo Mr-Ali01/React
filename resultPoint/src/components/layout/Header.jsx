@@ -19,10 +19,13 @@ import {
   Moon,
   ArrowRight,
   Menu,
+  LayoutDashboard
 } from 'lucide-react';
+import { authService } from '../../services/authService';
 
 export default function Header({ onOpenMobileMenu }) {
   const { theme, toggleTheme } = useTheme();
+  const isAuthenticated = authService.isAuthenticated();
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border bg-bg/85 backdrop-blur-md transition-colors">
@@ -147,20 +150,32 @@ export default function Header({ onOpenMobileMenu }) {
             {theme === 'dark' ? <Sun className="w-4 h-4 text-accent" /> : <Moon className="w-4 h-4 text-accent" />}
           </button>
 
-          <Link
-            to="/login"
-            className="hidden sm:inline-flex text-xs sm:text-[13px] font-semibold text-text-h hover:text-accent px-3 py-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-xl"
-          >
-            Login
-          </Link>
+          {isAuthenticated ? (
+            <Link
+              to="/student/dashboard"
+              className="inline-flex items-center gap-1.5 px-3.5 sm:px-4.5 py-2 rounded-xl text-xs sm:text-[13px] font-bold text-white bg-accent hover:bg-accent-hover shadow-accent active:scale-95 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >
+              <LayoutDashboard className="w-3.5 h-3.5" />
+              <span>Student Dashboard</span>
+            </Link>
+          ) : (
+            <>
+              <Link
+                to="/login"
+                className="hidden sm:inline-flex text-xs sm:text-[13px] font-semibold text-text-h hover:text-accent px-3 py-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-xl"
+              >
+                Login
+              </Link>
 
-          <Link
-            to="/signup?tab=signup"
-            className="hidden sm:inline-flex items-center gap-1.5 px-4 sm:px-4.5 py-2 rounded-xl text-xs sm:text-[13px] font-bold text-white bg-accent hover:bg-accent-hover shadow-accent active:scale-95 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-          >
-            <span>Sign Up</span>
-            <ArrowRight className="w-3.5 h-3.5" />
-          </Link>
+              <Link
+                to="/signup?tab=signup"
+                className="hidden sm:inline-flex items-center gap-1.5 px-4 sm:px-4.5 py-2 rounded-xl text-xs sm:text-[13px] font-bold text-white bg-accent hover:bg-accent-hover shadow-accent active:scale-95 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              >
+                <span>Sign Up</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </>
+          )}
 
           <button
             onClick={onOpenMobileMenu}

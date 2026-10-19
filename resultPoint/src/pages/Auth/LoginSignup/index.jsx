@@ -17,9 +17,11 @@ import {
   Smartphone,
   Users,
   Key,
-  X
+  X,
+  AlertCircle
 } from 'lucide-react';
 import { useToast } from '../../../context/ToastContext';
+import { authService } from '../../../services/authService';
 
 export default function LoginSignup() {
   const [searchParams] = useSearchParams();
@@ -46,8 +48,6 @@ export default function LoginSignup() {
   // Submitting States
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [isSigningUp, setIsSigningUp] = useState(false);
-console.log("usp");
-console.log("usp");
 
   const navigate = useNavigate();
   const { showToast } = useToast();
@@ -83,10 +83,19 @@ console.log("usp");
     setIsLoggingIn(true);
     setTimeout(() => {
       setIsLoggingIn(false);
-      const username = loginForm.email.split('@')[0];
-      showToast(`Welcome back, ${username}!`);
-      navigate('/calculators');
-    }, 950);
+      const res = authService.login({
+        email: loginForm.email,
+        password: loginForm.password
+      });
+
+      if (res.success) {
+        showToast(`Welcome back, ${res.user.fullName}!`);
+        navigate('/student/dashboard');
+      } else {
+        setLoginErrors({ general: res.error });
+        showToast(res.error);
+      }
+    }, 600);
   };
 
   // Sign Up Submit Handler
@@ -126,18 +135,30 @@ console.log("usp");
     setIsSigningUp(true);
     setTimeout(() => {
       setIsSigningUp(false);
-      showToast(`Account successfully created for ${signupForm.fullName}! Please log in.`);
-      setActiveTab('login');
-      setLoginForm((prev) => ({ ...prev, email: signupForm.email }));
-    }, 950);
+      const res = authService.register({
+        fullName: signupForm.fullName,
+        email: signupForm.email,
+        password: signupForm.password
+      });
+
+      if (res.success) {
+        showToast(`Account successfully created for ${res.user.fullName}!`);
+        navigate('/student/dashboard');
+      } else {
+        setSignupErrors({ email: res.error, general: res.error });
+        showToast(res.error);
+      }
+    }, 600);
   };
 
   const handleSocialLogin = (provider) => {
     showToast(`Connecting to ${provider}...`);
     setTimeout(() => {
-      showToast(`${provider} authorization successful!`);
-      navigate('/calculators');
-    }, 900);
+      authService.initialize();
+      const user = authService.getCurrentUser();
+      showToast(`${provider} authorization successful! Welcome, ${user?.fullName || 'Student'}!`);
+      navigate('/student/dashboard');
+    }, 700);
   };
 
   const handleForgotPasswordSubmit = (e) => {
@@ -293,7 +314,7 @@ console.log("usp");
             {/* LOGIN FORM */}
             {activeTab === 'login' && (
               <div className="space-y-4">
-                <div className="space-y-1 mb-5 sm:mb-6">
+                <div className="space-y-1 mb-4 sm:mb-5">
                   <h2 className="text-2xl sm:text-3xl font-extrabold text-text-h tracking-tight">
                     Welcome Back
                   </h2>
@@ -301,6 +322,34 @@ console.log("usp");
                     Login to your ResultPoint student session
                   </p>
                 </div>
+
+                {/* Demo Credentials Quick-Fill Helper */}
+                <div className="p-3 rounded-xl bg-accent/10 border border-accent/25 flex items-center justify-between text-xs mb-3">
+                  <div className="text-text-m">
+                    Demo: <strong className="text-text-h">samir@resultpoint.edu</strong> / <strong className="text-text-h">password123</strong>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLoginForm({
+                        email: 'samir@resultpoint.edu',
+                        password: 'password123',
+                        remember: true
+                      });
+                      setLoginErrors({});
+                    }}
+                    className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-accent text-white hover:bg-accent-hover shadow-2xs transition-colors shrink-0"
+                  >
+                    Quick Fill
+                  </button>
+                </div>
+
+                {loginErrors.general && (
+                  <div className="p-3 rounded-xl bg-brandPink/15 border border-brandPink/30 text-brandPink text-xs font-semibold flex items-center gap-2 mb-2">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>{loginErrors.general}</span>
+                  </div>
+                )}
 
                 <form onSubmit={handleLoginSubmit} noValidate className="space-y-4 text-xs">
                   <div>
