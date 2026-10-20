@@ -3,14 +3,20 @@ import { TrendingUp, BarChart2, Award, CheckCircle, ArrowUp } from 'lucide-react
 import { studentService } from '../../services/studentService';
 import { resultService } from '../../services/resultService';
 import PerformanceChart from '../../components/student/PerformanceChart';
+import AcademicProfileGate from '../../components/student/AcademicProfileGate';
 
 export default function PerformanceAnalytics() {
+  const profile = studentService.getProfile();
   const summary = studentService.getAcademicSummary();
   const results = resultService.getAllResults();
   const insights = studentService.getPerformanceInsights();
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
+    <AcademicProfileGate
+      title="Academic Profile Setup Required"
+      description="Before viewing performance analytics, trajectory charts, and academic cohort standing, please complete your Academic Profile Setup."
+    >
+      <div className="max-w-7xl mx-auto space-y-6">
       <div className="pb-2 border-b border-border/80">
         <h1 className="text-xl sm:text-2xl font-extrabold text-text-h tracking-tight flex items-center gap-2.5">
           <TrendingUp className="w-6 h-6 text-brandPurple" />
@@ -35,7 +41,7 @@ export default function PerformanceAnalytics() {
               {summary.performanceBadge}
             </div>
             <p className="text-xs text-text-m leading-relaxed">
-              Your overall cumulative grade point average of <strong>{summary.currentCGPA}</strong> places you in the top 10% of your MCA cohort at Osmania University.
+              Your overall cumulative grade point average of <strong>{summary.currentCGPA}</strong> places you in the top 10% of your {profile.course} cohort at {profile.university}.
             </p>
           </div>
 
@@ -56,6 +62,7 @@ export default function PerformanceAnalytics() {
           </div>
         </div>
       </div>
-    </div>
+      </div>
+    </AcademicProfileGate>
   );
 }

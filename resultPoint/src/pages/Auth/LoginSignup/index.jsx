@@ -22,10 +22,12 @@ import {
 } from 'lucide-react';
 import { useToast } from '../../../context/ToastContext';
 import { authService } from '../../../services/authService';
+import ThemeToggle from '../../../components/ThemeToggle';
 
 export default function LoginSignup() {
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState('login');
+  const [loginRole, setLoginRole] = useState('student'); // 'student' | 'admin'
 
   // Form States
   const [loginForm, setLoginForm] = useState({ email: '', password: '', remember: false });
@@ -56,6 +58,9 @@ export default function LoginSignup() {
     if (searchParams.get('tab') === 'signup') {
       setActiveTab('signup');
     }
+    if (searchParams.get('role') === 'admin') {
+      setLoginRole('admin');
+    }
   }, [searchParams]);
 
   const validateEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.toLowerCase());
@@ -66,7 +71,7 @@ export default function LoginSignup() {
     const errors = {};
 
     if (!loginForm.email.trim()) {
-      errors.email = 'Email address is required.';
+      errors.email = `${loginRole === 'admin' ? 'Administrator' : 'Student'} email is required.`;
     } else if (!validateEmail(loginForm.email.trim())) {
       errors.email = 'Please enter a valid email address.';
     }
@@ -89,8 +94,28 @@ export default function LoginSignup() {
       });
 
       if (res.success) {
-        showToast(`Welcome back, ${res.user.fullName}!`);
-        navigate('/student/dashboard');
+        if (loginRole === 'admin') {
+          if (res.user.role !== 'admin') {
+            setLoginErrors({ general: 'This account does not have administrator privileges. Please switch to Student Login.' });
+            showToast('Access denied: Administrator privileges required.');
+            return;
+          }
+          showToast(`Welcome to Admin Panel, ${res.user.fullName}!`);
+          navigate('/admin/dashboard');
+        } else {
+          // Student role flow
+          if (res.user.role === 'admin') {
+            showToast(`Administrator account authenticated. Navigating to Admin Dashboard...`);
+            navigate('/admin/dashboard');
+          } else {
+            showToast(`Welcome back, ${res.user.fullName}!`);
+            if (!res.user.hasCompletedProfile) {
+              navigate('/student/profile-setup');
+            } else {
+              navigate('/student/dashboard');
+            }
+          }
+        }
       } else {
         setLoginErrors({ general: res.error });
         showToast(res.error);
@@ -142,8 +167,12 @@ export default function LoginSignup() {
       });
 
       if (res.success) {
-        showToast(`Account successfully created for ${res.user.fullName}!`);
-        navigate('/student/dashboard');
+        showToast(`Account successfully created! Please configure your academic profile.`);
+        if (!res.user.hasCompletedProfile) {
+          navigate('/student/profile-setup');
+        } else {
+          navigate('/student/dashboard');
+        }
       } else {
         setSignupErrors({ email: res.error, general: res.error });
         showToast(res.error);
@@ -180,14 +209,41 @@ export default function LoginSignup() {
   };
 
   return (
-    <div className="min-h-screen bg-bg text-text-h flex items-center justify-center p-3 sm:p-5 lg:p-8 antialiased selection:bg-accent selection:text-white relative overflow-x-hidden">
-      {/* Background Ambient Aura */}
-      <div className="fixed top-0 right-0 w-[550px] h-[550px] bg-orange-400/5 dark:bg-orange-500/5 rounded-full blur-3xl pointer-events-none -z-10"></div>
-      <div className="fixed bottom-0 left-0 w-[550px] h-[550px] bg-blue-400/5 dark:bg-blue-500/5 rounded-full blur-3xl pointer-events-none -z-10"></div>
+    <div className="min-h-screen bg-bg text-text-h flex flex-col antialiased selection:bg-accent selection:text-white relative overflow-x-hidden">
+      {/* ==================== MINIMAL AUTH HEADER ==================== */}
+      <header className="w-full border-b border-border bg-card/90 backdrop-blur-md sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+          {/* Main Logo & ResultPoint Branding */}
+          <Link to="/" className="inline-flex items-center gap-2.5 group focus:outline-none" aria-label="ResultPoint Home">
+            <div className="w-10 h-10 rounded-xl bg-accent text-white flex items-center justify-center shadow-accent transition-transform group-hover:scale-105 shrink-0">
+              <GraduationCap className="w-5 h-5" />
+            </div>
+            <div className="flex flex-col text-left">
+              <div className="text-[19px] font-extrabold tracking-tight text-text-h leading-none">
+                Result<span className="text-accent">Point</span>
+              </div>
+              <span className="text-[10px] font-medium tracking-tight text-text-light mt-1">
+                Calculate. Analyze. Improve.
+              </span>
+            </div>
+          </Link>
 
-      {/* Main Card Container */}
-      <div className="w-full max-w-[1440px] bg-card rounded-3xl border border-border shadow-theme overflow-hidden grid grid-cols-1 lg:grid-cols-12 min-h-[720px] lg:min-h-[820px] relative z-10">
-        
+          {/* Theme Toggle Button ONLY */}
+          <div className="flex items-center">
+            <ThemeToggle />
+          </div>
+        </div>
+      </header>
+
+      {/* ==================== MAIN AUTHENTICATION CONTAINER ==================== */}
+      <main className="flex-1 flex items-center justify-center p-3 sm:p-5 lg:p-8 relative">
+        {/* Background Ambient Aura */}
+        <div className="fixed top-0 right-0 w-[550px] h-[550px] bg-orange-400/5 dark:bg-orange-500/5 rounded-full blur-3xl pointer-events-none -z-10"></div>
+        <div className="fixed bottom-0 left-0 w-[550px] h-[550px] bg-blue-400/5 dark:bg-blue-500/5 rounded-full blur-3xl pointer-events-none -z-10"></div>
+
+        {/* Main Card Container */}
+        <div className="w-full max-w-[1440px] bg-card rounded-3xl border border-border shadow-theme overflow-hidden grid grid-cols-1 lg:grid-cols-12 min-h-[660px] lg:min-h-[740px] relative z-10">
+
         {/* ==================== LEFT BRAND & PROMOTIONAL PANEL ==================== */}
         <div className="lg:col-span-6 bg-accent-soft/30 dark:bg-amber-950/20 border-b lg:border-b-0 lg:border-r border-border p-6 sm:p-10 lg:p-12 xl:p-14 flex flex-col justify-between relative overflow-hidden text-left">
           <div className="space-y-4 sm:space-y-5 max-w-xl z-10">
@@ -290,22 +346,20 @@ export default function LoginSignup() {
               <button
                 type="button"
                 onClick={() => setActiveTab('login')}
-                className={`py-3 text-xs sm:text-sm font-bold rounded-xl transition-all text-center ${
-                  activeTab === 'login'
+                className={`py-3 text-xs sm:text-sm font-bold rounded-xl transition-all text-center ${activeTab === 'login'
                     ? 'shadow-subtle bg-card text-accent border-b-2 border-accent'
                     : 'text-text-m hover:text-text-h'
-                }`}
+                  }`}
               >
                 Login
               </button>
               <button
                 type="button"
                 onClick={() => setActiveTab('signup')}
-                className={`py-3 text-xs sm:text-sm font-bold rounded-xl transition-all text-center ${
-                  activeTab === 'signup'
+                className={`py-3 text-xs sm:text-sm font-bold rounded-xl transition-all text-center ${activeTab === 'signup'
                     ? 'shadow-subtle bg-card text-accent border-b-2 border-accent'
                     : 'text-text-m hover:text-text-h'
-                }`}
+                  }`}
               >
                 Sign Up
               </button>
@@ -314,34 +368,59 @@ export default function LoginSignup() {
             {/* LOGIN FORM */}
             {activeTab === 'login' && (
               <div className="space-y-4">
-                <div className="space-y-1 mb-4 sm:mb-5">
-                  <h2 className="text-2xl sm:text-3xl font-extrabold text-text-h tracking-tight">
-                    Welcome Back
-                  </h2>
-                  <p className="text-xs sm:text-sm text-text-m">
-                    Login to your ResultPoint student session
-                  </p>
+                {/* Role Selection Selector */}
+                <div className="mb-4">
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-text-m mb-2 flex items-center justify-between">
+                    <span>Select Login Role</span>
+                    <span className="text-[10px] font-semibold text-accent capitalize">
+                      {loginRole === 'admin' ? 'Admin Portal' : 'Student Portal'}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 p-1.5 rounded-2xl bg-bg-sec border border-border gap-1.5">
+                    <button
+                      type="button"
+                      id="role-select-student"
+                      onClick={() => {
+                        setLoginRole('student');
+                        setLoginErrors({});
+                      }}
+                      className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl font-bold text-xs sm:text-sm transition-all ${
+                        loginRole === 'student'
+                          ? 'bg-accent text-white shadow-subtle'
+                          : 'text-text-m hover:text-text-h hover:bg-card/70'
+                      }`}
+                    >
+                      <GraduationCap className="w-4 h-4 shrink-0" />
+                      <span>Student Login</span>
+                    </button>
+                    <button
+                      type="button"
+                      id="role-select-admin"
+                      onClick={() => {
+                        setLoginRole('admin');
+                        setLoginErrors({});
+                      }}
+                      className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl font-bold text-xs sm:text-sm transition-all ${
+                        loginRole === 'admin'
+                          ? 'bg-text-h text-card dark:text-bg-main shadow-subtle'
+                          : 'text-text-m hover:text-text-h hover:bg-card/70'
+                      }`}
+                    >
+                      <ShieldCheck className="w-4 h-4 shrink-0" />
+                      <span>Admin Login</span>
+                    </button>
+                  </div>
                 </div>
 
-                {/* Demo Credentials Quick-Fill Helper */}
-                <div className="p-3 rounded-xl bg-accent/10 border border-accent/25 flex items-center justify-between text-xs mb-3">
-                  <div className="text-text-m">
-                    Demo: <strong className="text-text-h">samir@resultpoint.edu</strong> / <strong className="text-text-h">password123</strong>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setLoginForm({
-                        email: 'samir@resultpoint.edu',
-                        password: 'password123',
-                        remember: true
-                      });
-                      setLoginErrors({});
-                    }}
-                    className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-accent text-white hover:bg-accent-hover shadow-2xs transition-colors shrink-0"
-                  >
-                    Quick Fill
-                  </button>
+                <div className="space-y-1 mb-4 sm:mb-5">
+                  <h2 className="text-2xl sm:text-3xl font-extrabold text-text-h tracking-tight">
+                    {loginRole === 'admin' ? 'Admin Portal Login' : 'Welcome Back'}
+                  </h2>
+                  <p className="text-xs sm:text-sm text-text-m">
+                    {loginRole === 'admin'
+                      ? 'Sign in to access platform management, academic catalogs, and grading rules'
+                      : 'Login to access your student results, calculators, and academic progress'}
+                  </p>
                 </div>
 
                 {loginErrors.general && (
@@ -354,15 +433,21 @@ export default function LoginSignup() {
                 <form onSubmit={handleLoginSubmit} noValidate className="space-y-4 text-xs">
                   <div>
                     <label className="block font-semibold text-text-h mb-1.5">
-                      Email Address <span className="text-brandPink font-bold">*</span>
+                      {loginRole === 'admin' ? 'Administrator Email' : 'Student Email'}{' '}
+                      <span className="text-brandPink font-bold">*</span>
                     </label>
                     <div className="relative">
                       <Mail className="w-4 h-4 absolute left-3.5 top-3.5 text-text-light pointer-events-none" />
                       <input
                         type="email"
+                        id="login-email-input"
                         value={loginForm.email}
                         onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
-                        placeholder="Enter your email address"
+                        placeholder={
+                          loginRole === 'admin'
+                            ? 'Enter administrator email address'
+                            : 'Enter your student email address'
+                        }
                         className="calc-input w-full pl-10 pr-3.5 py-3 rounded-xl border border-border bg-bg-sec text-xs sm:text-sm text-text-h"
                       />
                     </div>
@@ -377,6 +462,7 @@ export default function LoginSignup() {
                       <Lock className="w-4 h-4 absolute left-3.5 top-3.5 text-text-light pointer-events-none" />
                       <input
                         type={showLoginPassword ? 'text' : 'password'}
+                        id="login-password-input"
                         value={loginForm.password}
                         onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
                         placeholder="Enter your password"
@@ -386,6 +472,7 @@ export default function LoginSignup() {
                         type="button"
                         onClick={() => setShowLoginPassword(!showLoginPassword)}
                         className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-text-light hover:text-text-h focus:outline-none"
+                        aria-label={showLoginPassword ? 'Hide password' : 'Show password'}
                       >
                         {showLoginPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
@@ -416,40 +503,77 @@ export default function LoginSignup() {
                   <div className="pt-1.5">
                     <button
                       type="submit"
+                      id="login-submit-button"
                       disabled={isLoggingIn}
-                      className="w-full py-3.5 px-4 rounded-xl font-bold text-white bg-accent hover:bg-accent-hover shadow-accent transition-all active:scale-[0.99] flex items-center justify-center gap-2 text-xs sm:text-sm disabled:opacity-60"
+                      className={`w-full py-3.5 px-4 rounded-xl font-bold text-white transition-all active:scale-[0.99] flex items-center justify-center gap-2 text-xs sm:text-sm disabled:opacity-60 ${
+                        loginRole === 'admin'
+                          ? 'bg-slate-900 hover:bg-slate-800 dark:bg-amber-600 dark:hover:bg-amber-500 shadow-subtle'
+                          : 'bg-accent hover:bg-accent-hover shadow-accent'
+                      }`}
                     >
-                      <span>{isLoggingIn ? 'Logging in...' : 'Login'}</span>
+                      <span>
+                        {isLoggingIn
+                          ? 'Verifying...'
+                          : loginRole === 'admin'
+                          ? 'Sign In as Administrator'
+                          : 'Sign In as Student'}
+                      </span>
                       <ArrowRight className="w-4 h-4" />
                     </button>
                   </div>
                 </form>
 
-                {/* Divider */}
-                <div className="relative my-5 flex items-center justify-center">
-                  <div className="w-full border-t border-border"></div>
-                  <span className="absolute px-3 bg-card text-[11px] text-text-light font-bold uppercase tracking-wider">
-                    OR
-                  </span>
-                </div>
+                {/* Divider & Social Login (for Student) */}
+                {loginRole === 'student' ? (
+                  <>
+                    <div className="relative my-5 flex items-center justify-center">
+                      <div className="w-full border-t border-border"></div>
+                      <span className="absolute px-3 bg-card text-[11px] text-text-light font-bold uppercase tracking-wider">
+                        OR
+                      </span>
+                    </div>
 
-                {/* Social Login */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                  <button
-                    type="button"
-                    onClick={() => handleSocialLogin('Google')}
-                    className="w-full py-3 px-3.5 rounded-xl border border-border bg-card hover:bg-bg-sec text-text-h font-semibold transition-all shadow-subtle flex items-center justify-center gap-2.5 active:scale-95"
-                  >
-                    <span>Continue with Google</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleSocialLogin('Microsoft')}
-                    className="w-full py-3 px-3.5 rounded-xl border border-border bg-card hover:bg-bg-sec text-text-h font-semibold transition-all shadow-subtle flex items-center justify-center gap-2.5 active:scale-95"
-                  >
-                    <span>Continue with Microsoft</span>
-                  </button>
-                </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => handleSocialLogin('Google')}
+                        className="w-full py-3 px-3.5 rounded-xl border border-border bg-card hover:bg-bg-sec text-text-h font-semibold transition-all shadow-subtle flex items-center justify-center gap-2.5 active:scale-95"
+                      >
+                        <svg className="w-4 h-4" viewBox="0 0 24 24">
+                          <path
+                            fill="#EA4335"
+                            d="M12 5c1.54 0 2.9.55 3.97 1.45l2.97-2.97C17.15 1.8 14.77 1 12 1 7.42 1 3.51 3.6 1.62 7.37l3.65 2.83C6.15 7.43 8.84 5 12 5z"
+                          />
+                          <path
+                            fill="#4285F4"
+                            d="M23.49 12.27c0-.79-.07-1.54-.19-2.27H12v4.51h6.47c-.29 1.48-1.14 2.73-2.4 3.58l3.71 2.88c2.16-2 3.71-4.94 3.71-8.7z"
+                          />
+                          <path
+                            fill="#FBBC05"
+                            d="M5.27 14.79c-.25-.74-.39-1.53-.39-2.35 0-.82.14-1.61.39-2.35L1.62 7.26C.59 9.32 0 11.59 0 14c0 2.41.59 4.68 1.62 6.74l3.65-2.83z"
+                          />
+                          <path
+                            fill="#34A853"
+                            d="M12 23c3.24 0 5.95-1.08 7.93-2.91l-3.71-2.88c-1.07.72-2.45 1.16-4.22 1.16-3.16 0-5.85-2.43-6.73-5.2l-3.65 2.83C3.51 20.4 7.42 23 12 23z"
+                          />
+                        </svg>
+                        <span>Continue with Google</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSocialLogin('Microsoft')}
+                        className="w-full py-3 px-3.5 rounded-xl border border-border bg-card hover:bg-bg-sec text-text-h font-semibold transition-all shadow-subtle flex items-center justify-center gap-2.5 active:scale-95"
+                      >
+                        <span>Continue with Microsoft</span>
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <div className="mt-4 p-3 rounded-xl bg-bg-sec border border-border text-[11px] text-text-m flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 text-accent shrink-0" />
+                    <span>Administrator login requires verified institution staff credentials.</span>
+                  </div>
+                )}
 
                 <div className="text-center text-xs text-text-m pt-4">
                   Don't have an account?
@@ -679,6 +803,7 @@ export default function LoginSignup() {
           </div>
         </div>
       </div>
+      </main>
 
       {/* Forgot Password Modal */}
       {forgotModalOpen && (

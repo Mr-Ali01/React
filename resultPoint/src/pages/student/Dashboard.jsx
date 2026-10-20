@@ -17,6 +17,7 @@ import AcademicGoalCard from '../../components/student/AcademicGoalCard';
 import PerformanceInsights from '../../components/student/PerformanceInsights';
 import QuickActions from '../../components/student/QuickActions';
 import RecommendedForYou from '../../components/student/RecommendedForYou';
+import AcademicProfileGate from '../../components/student/AcademicProfileGate';
 
 export default function StudentDashboard() {
   const [profile, setProfile] = useState(() => studentService.getProfile());
@@ -59,7 +60,11 @@ export default function StudentDashboard() {
   }).format(new Date());
 
   return (
-    <div className="space-y-5 sm:space-y-6 max-w-7xl mx-auto">
+    <AcademicProfileGate
+      title="Academic Profile Setup Required"
+      description="Before accessing your student dashboard and academic metrics, please configure your University, Course, and Regulation so ResultPoint can calculate your SGPA, CGPA, and degree credits accurately."
+    >
+      <div className="space-y-5 sm:space-y-6 max-w-7xl mx-auto">
       {/* Top Bar with Date (No breadcrumbs as explicitly instructed) */}
       <div className="flex items-center justify-end">
         <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-card border border-border text-xs font-semibold text-text-light shadow-2xs">
@@ -226,6 +231,7 @@ export default function StudentDashboard() {
         <RecommendedForYou />
       </div>
 
-    </div>
+      </div>
+    </AcademicProfileGate>
   );
 }

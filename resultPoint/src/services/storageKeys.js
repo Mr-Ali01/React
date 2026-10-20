@@ -8,4 +8,5 @@ export const STORAGE_KEYS = {
   NOTIFICATIONS: 'resultpoint_notifications',
   SETTINGS: 'resultpoint_settings',
   THEME: 'resultpoint_theme',
+  ACADEMIC_CATALOG: 'resultpoint_academic_catalog',
 };

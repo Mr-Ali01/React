@@ -33,14 +33,33 @@ import ProtectedRoute from './routes/ProtectedRoute';
 import StudentLayout from './components/student/StudentLayout';
 import StudentDashboard from './pages/student/Dashboard';
 import MyResults from './pages/student/MyResults';
+import ResultDetail from './pages/student/ResultDetail';
 import AddResult from './pages/student/AddResult';
 import AcademicGoals from './pages/student/AcademicGoals';
 import PerformanceAnalytics from './pages/student/PerformanceAnalytics';
 import BacklogTracker from './pages/student/BacklogTracker';
 import CalculationHistory from './pages/student/CalculationHistory';
 import AcademicProfile from './pages/student/AcademicProfile';
+import AcademicProfileSetup from './pages/student/AcademicProfileSetup';
 import NotificationsPage from './pages/student/NotificationsPage';
 import SettingsPage from './pages/student/SettingsPage';
+
+// Admin Academic Configuration & Guards
+import AdminRoute from './routes/AdminRoute';
+import AdminLayout from './pages/admin/AdminLayout';
+import AdminDashboard from './pages/admin/AdminDashboard';
+import AcademicCatalogManager from './pages/admin/AcademicCatalogManager';
+import AdminManagementPage from './pages/admin/AdminManagementPage';
+import {
+  Users,
+  Wrench,
+  FolderOpen,
+  Newspaper,
+  Bell,
+  BarChart2,
+  MessageSquare,
+  Settings
+} from 'lucide-react';
 
 // Public Shell Layout (Includes Public Header, Drawer & Footer)
 function PublicLayout({ mobileMenuOpen, setMobileMenuOpen }) {
@@ -78,6 +97,7 @@ export default function App() {
               <Route index element={<StudentDashboard />} />
               <Route path="dashboard" element={<StudentDashboard />} />
               <Route path="results" element={<MyResults />} />
+              <Route path="results/:resultId" element={<ResultDetail />} />
               <Route path="add-result" element={<AddResult />} />
               <Route path="academic-history" element={<MyResults />} />
               <Route path="analytics" element={<PerformanceAnalytics />} />
@@ -85,8 +105,38 @@ export default function App() {
               <Route path="backlogs" element={<BacklogTracker />} />
               <Route path="calculation-history" element={<CalculationHistory />} />
               <Route path="profile" element={<AcademicProfile />} />
+              <Route path="profile-setup" element={<AcademicProfileSetup />} />
               <Route path="notifications" element={<NotificationsPage />} />
               <Route path="settings" element={<SettingsPage />} />
+            </Route>
+
+            {/* Admin Academic Configuration Routes (Role-Aware Protected) */}
+            <Route
+              path="/admin"
+              element={
+                <AdminRoute>
+                  <AdminLayout />
+                </AdminRoute>
+              }
+            >
+              <Route index element={<AdminDashboard />} />
+              <Route path="dashboard" element={<AdminDashboard />} />
+              <Route path="users" element={<AdminManagementPage title="Users Management" icon={Users} description="View and manage student accounts, verification statuses, and credentials." />} />
+              <Route path="universities" element={<AcademicCatalogManager initialTab="universities" />} />
+              <Route path="courses" element={<AcademicCatalogManager initialTab="courses" />} />
+              <Route path="regulations" element={<AcademicCatalogManager initialTab="regulations" />} />
+              <Route path="subjects" element={<AcademicCatalogManager initialTab="subjects" />} />
+              <Route path="grading-rules" element={<AcademicCatalogManager initialTab="grading" />} />
+              <Route path="calculation-rules" element={<AcademicCatalogManager initialTab="regulations" />} />
+              <Route path="tools" element={<AdminManagementPage title="Tools Management" icon={Wrench} description="Configure platform calculators, conversion algorithms, and tool availability." />} />
+              <Route path="resources" element={<AdminManagementPage title="Resources Management" icon={FolderOpen} description="Manage academic guides, syllabus PDFs, and study materials." />} />
+              <Route path="blogs" element={<AdminManagementPage title="Blog Management" icon={Newspaper} description="Publish articles, student advice, and academic performance strategies." />} />
+              <Route path="announcements" element={<AdminManagementPage title="Announcements" icon={Bell} description="Broadcast platform notices and institutional schedule changes." />} />
+              <Route path="reports" element={<AdminManagementPage title="Reports & Analytics" icon={BarChart2} description="View deep dive calculation analytics, conversion frequency, and university rankings." />} />
+              <Route path="support" element={<AdminManagementPage title="Support Queries" icon={MessageSquare} description="Respond to student calculation questions, grade discrepancies, and feedback." badge="12 Open" />} />
+              <Route path="settings" element={<AdminManagementPage title="Settings & Activity Logs" icon={Settings} description="Configure platform permissions, institutional security, and audit trails." />} />
+              <Route path="catalog" element={<AcademicCatalogManager />} />
+              <Route path="curriculum" element={<AcademicCatalogManager initialTab="subjects" />} />
             </Route>
 
             {/* Convenience Aliases */}
@@ -120,13 +170,15 @@ export default function App() {
               <Route path="/resources/details" element={<ResourceDetail />} />
               <Route path="/resources/resource-details" element={<ResourceDetail />} />
               <Route path="/resources/jntuh-r18-guide" element={<ResourceDetail />} />
-              <Route path="/login" element={<LoginSignup />} />
-              <Route path="/signup" element={<LoginSignup />} />
-              <Route path="/pages/auth/login-signup.html" element={<LoginSignup />} />
-
-              {/* Fallback to Home */}
-              <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
+
+            {/* Dedicated Authentication Routes (Minimal Auth Header: Logo + Branding + ThemeToggle, No Footer) */}
+            <Route path="/login" element={<LoginSignup />} />
+            <Route path="/signup" element={<LoginSignup />} />
+            <Route path="/pages/auth/login-signup.html" element={<LoginSignup />} />
+
+            {/* Fallback to Home */}
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
 
           {/* Global Toast Notifications */}

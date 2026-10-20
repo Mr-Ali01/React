@@ -1,12 +1,17 @@
 import React from 'react';
 import { Layers, CheckCircle2, ShieldCheck, Sparkles } from 'lucide-react';
 import { studentService } from '../../services/studentService';
+import AcademicProfileGate from '../../components/student/AcademicProfileGate';
 
 export default function BacklogTracker() {
   const summary = studentService.getAcademicSummary();
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <AcademicProfileGate
+      title="Academic Profile Setup Required"
+      description="Before tracking active arrears, backlog clearances, and examination eligibility, please complete your Academic Profile Setup."
+    >
+      <div className="max-w-4xl mx-auto space-y-6">
       <div className="pb-2 border-b border-border/80">
         <h1 className="text-xl sm:text-2xl font-extrabold text-text-h tracking-tight flex items-center gap-2.5">
           <Layers className="w-6 h-6 text-brandAmber" />
@@ -49,6 +54,7 @@ export default function BacklogTracker() {
           </div>
         </div>
       </div>
-    </div>
+      </div>
+    </AcademicProfileGate>
   );
 }

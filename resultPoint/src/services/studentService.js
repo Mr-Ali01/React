@@ -5,15 +5,19 @@ import { resultService } from './resultService';
 const DEFAULT_PROFILE = {
   fullName: 'Samir Ali',
   email: 'samir@resultpoint.edu',
+  hasCompletedProfile: true,
   avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=256&q=80',
-  course: 'MCA',
+  universityId: 'osmania',
+  courseId: 'mca',
+  regulationId: 'ou-mca-cbcs',
+  course: 'MCA — Master of Computer Applications',
   university: 'Osmania University',
   currentSemester: 4,
-  totalSemesters: 8,
-  totalDegreeCredits: 160,
+  totalSemesters: 4,
+  totalDegreeCredits: 80,
   regulation: 'CBCS',
   hallTicketNumber: '1005-23-772-045',
-  batch: '2023 - 2027'
+  batch: '2023 - 2025'
 };
 
 function safeGet(key, fallback) {
@@ -46,25 +50,41 @@ export const studentService = {
     this.initialize();
     const stored = safeGet(STORAGE_KEYS.STUDENT, DEFAULT_PROFILE);
     const authUser = authService.getCurrentUser();
-    return {
-      ...stored,
-      ...(authUser ? {
+    if (authUser) {
+      const isComplete = Boolean(authUser.hasCompletedProfile);
+      return {
+        ...stored,
         fullName: authUser.fullName || stored.fullName,
+        username: authUser.username || authUser.fullName || stored.username || stored.fullName,
         email: authUser.email || stored.email,
+        hasCompletedProfile: isComplete,
         avatar: authUser.avatar || stored.avatar,
-        course: authUser.course || stored.course,
-        university: authUser.university || stored.university,
+        universityId: isComplete ? (authUser.universityId || stored.universityId) : (authUser.universityId || ''),
+        courseId: isComplete ? (authUser.courseId || stored.courseId) : (authUser.courseId || ''),
+        regulationId: isComplete ? (authUser.regulationId || stored.regulationId) : (authUser.regulationId || ''),
+        course: isComplete ? (authUser.course || stored.course) : (authUser.course || ''),
+        university: isComplete ? (authUser.university || stored.university) : (authUser.university || ''),
         currentSemester: authUser.currentSemester || stored.currentSemester,
         totalSemesters: authUser.totalSemesters || stored.totalSemesters,
         regulation: authUser.regulation || stored.regulation
-      } : {})
-    };
+      };
+    }
+    return stored;
+  },
+
+  isProfileComplete() {
+    const p = this.getProfile();
+    return Boolean(p && p.hasCompletedProfile === true && p.universityId && p.courseId);
   },
 
   updateProfile(updates) {
     const current = this.getProfile();
-    const updated = { ...current, ...updates };
+    const updated = { ...current, ...updates, hasCompletedProfile: true };
     safeSet(STORAGE_KEYS.STUDENT, updated);
+    authService.updateCurrentUser(updated);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('academic_profile_updated'));
+    }
     return updated;
   },
 

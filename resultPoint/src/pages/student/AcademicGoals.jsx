@@ -3,6 +3,7 @@ import { Target, CheckCircle, Lightbulb, TrendingUp, Info } from 'lucide-react';
 import { goalService } from '../../services/goalService';
 import { studentService } from '../../services/studentService';
 import { useToast } from '../../context/ToastContext';
+import AcademicProfileGate from '../../components/student/AcademicProfileGate';
 
 export default function AcademicGoals() {
   const { showToast } = useToast();
@@ -24,7 +25,11 @@ export default function AcademicGoals() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <AcademicProfileGate
+      title="Academic Profile Setup Required"
+      description="Before setting academic goals and CGPA projection targets, please complete your Academic Profile Setup."
+    >
+      <div className="max-w-4xl mx-auto space-y-6">
       <div className="pb-2 border-b border-border/80">
         <h1 className="text-xl sm:text-2xl font-extrabold text-text-h tracking-tight flex items-center gap-2.5">
           <Target className="w-6 h-6 text-brandPink" />
@@ -118,6 +123,7 @@ export default function AcademicGoals() {
           </div>
         </div>
       </div>
-    </div>
+      </div>
+    </AcademicProfileGate>
   );
 }

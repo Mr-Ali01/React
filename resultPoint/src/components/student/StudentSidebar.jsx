@@ -14,7 +14,8 @@ import {
   Bell,
   Settings,
   LogOut,
-  X
+  X,
+  Shield
 } from 'lucide-react';
 import { notificationService } from '../../services/notificationService';
 
@@ -29,6 +30,7 @@ export const SIDEBAR_ITEMS = [
   { name: 'Calculation History', path: '/student/calculation-history', icon: Calculator },
   { name: 'Academic Profile', path: '/student/profile', icon: UserCheck },
   { name: 'Resources', path: '/resources', icon: BookOpen },
+  { name: 'Registry Admin', path: '/admin/catalog', icon: Shield },
   { name: 'Notifications', path: '/student/notifications', icon: Bell, badge: 3 },
   { name: 'Settings', path: '/student/settings', icon: Settings },
 ];
@@ -71,7 +73,14 @@ export default function StudentSidebar({
       <nav className="space-y-1 px-3" aria-label="Student Sidebar Navigation">
         {SIDEBAR_ITEMS.map((item) => {
           const Icon = item.icon;
-          const isActive = location.pathname === item.path || (item.path === '/student/dashboard' && location.pathname === '/student');
+          const isDashboard = item.path === '/student/dashboard' && (location.pathname === '/student' || location.pathname === '/student/dashboard');
+          const isResults = item.path === '/student/results' && location.pathname.startsWith('/student/results');
+          const isAcademicProfile = item.path === '/student/profile' && (
+            location.pathname === '/student/profile' ||
+            location.pathname === '/student/profile-setup' ||
+            location.pathname.startsWith('/student/profile')
+          );
+          const isActive = location.pathname === item.path || isDashboard || isResults || isAcademicProfile;
 
           return (
             <div key={item.name} className="relative group">

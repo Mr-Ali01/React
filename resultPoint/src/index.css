@@ -123,3 +123,31 @@ body {
   box-shadow: 0 0 12px var(--connector-glow);
   transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1), height 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 }
+
+/* Print Optimization: Hide website header, footer, sidebars, and non-printable elements */
+@media print {
+  header,
+  footer,
+  nav,
+  aside,
+  .no-print,
+  [aria-label="Student Sidebar Navigation"],
+  #student-sidebar,
+  .toast-container {
+    display: none !important;
+  }
+
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  .printable-card {
+    border: 1px solid #cbd5e1 !important;
+    box-shadow: none !important;
+    margin: 0 !important;
+    padding: 16px !important;
+  }
+}

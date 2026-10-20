@@ -1,43 +1,124 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { PlusCircle, Trash2, ArrowLeft, CheckCircle, Calculator } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
+import {
+  PlusCircle,
+  Trash2,
+  ArrowLeft,
+  CheckCircle,
+  AlertCircle,
+  Sparkles,
+  BookOpen,
+  Info,
+  Layers,
+  GraduationCap
+} from 'lucide-react';
+import { studentService } from '../../services/studentService';
 import { resultService } from '../../services/resultService';
+import { academicCatalogService } from '../../services/academicCatalogService';
+import { academicCalculationEngine } from '../../services/academicCalculationEngine';
+import AcademicProfileGate from '../../components/student/AcademicProfileGate';
 import { useToast } from '../../context/ToastContext';
-
-const GRADE_POINTS = {
-  O: 10,
-  'A+': 9,
-  A: 8,
-  'B+': 7,
-  B: 6,
-  C: 5,
-  P: 4,
-  F: 0
-};
 
 export default function AddResult() {
   const navigate = useNavigate();
   const { showToast } = useToast();
 
-  const [semesterNumber, setSemesterNumber] = useState(5);
-  const [academicPeriod, setAcademicPeriod] = useState('Jan 2027');
-  const [subjects, setSubjects] = useState([
-    { id: '1', code: 'CS501', name: 'Cloud Architecture', credits: 4, grade: 'A+' },
-    { id: '2', code: 'CS502', name: 'Advanced AI & Deep Learning', credits: 4, grade: 'O' },
-    { id: '3', code: 'CS503', name: 'Software Quality Assurance', credits: 4, grade: 'A' },
-    { id: '4', code: 'CS504', name: 'Cyber Security Essentials', credits: 3, grade: 'A+' },
-    { id: '5', code: 'CS505', name: 'Full Stack Capstone Lab', credits: 3, grade: 'O' }
-  ]);
+  const [profile, setProfile] = useState(() => studentService.getProfile());
+  const [existingResults, setExistingResults] = useState(() => resultService.getAllResults());
+
+  // Load catalog configuration
+  const catalogConfig = useMemo(() => {
+    return academicCatalogService.getFullConfiguration(
+      profile.universityId,
+      profile.courseId,
+      profile.regulationId
+    );
+  }, [profile.universityId, profile.courseId, profile.regulationId]);
+
+  const maxSemesters = catalogConfig?.course?.totalSemesters || profile.totalSemesters || 8;
+  const gradeScale = catalogConfig?.gradeScale || [
+    { grade: 'O', points: 10, isPass: true },
+    { grade: 'A+', points: 9, isPass: true },
+    { grade: 'A', points: 8, isPass: true },
+    { grade: 'B+', points: 7, isPass: true },
+    { grade: 'B', points: 6, isPass: true },
+    { grade: 'C', points: 5, isPass: true },
+    { grade: 'P', points: 4, isPass: true },
+    { grade: 'F', points: 0, isPass: false }
+  ];
+
+  // Determine which semesters already exist
+  const existingSemesterNumbers = useMemo(() => {
+    return new Set(existingResults.map((r) => Number(r.semesterNumber)));
+  }, [existingResults]);
+
+  // Determine default eligible semester: first semester not yet saved, or 1
+  const defaultEligibleSemester = useMemo(() => {
+    for (let i = 1; i <= maxSemesters; i++) {
+      if (!existingSemesterNumbers.has(i)) return i;
+    }
+    return 1;
+  }, [maxSemesters, existingSemesterNumbers]);
+
+  const [semesterNumber, setSemesterNumber] = useState(defaultEligibleSemester);
+  const [academicPeriod, setAcademicPeriod] = useState(`Semester ${defaultEligibleSemester} Exam`);
+  const [useMarksInput, setUseMarksInput] = useState(false);
+  const [subjects, setSubjects] = useState([]);
+
+  // Check if chosen semester is already recorded
+  const isDuplicateSemester = existingSemesterNumbers.has(Number(semesterNumber));
+
+  // Initialize/Load subjects when semesterNumber changes or when catalogConfig loads
+  useEffect(() => {
+    const configuredSubjects = academicCatalogService.getSemesterSubjects(
+      profile.universityId,
+      profile.courseId,
+      profile.regulationId,
+      semesterNumber
+    );
+
+    if (configuredSubjects && configuredSubjects.length > 0) {
+      setSubjects(
+        configuredSubjects.map((s, idx) => ({
+          id: s.id || `sub_${idx}_${Date.now()}`,
+          code: s.code,
+          name: s.name,
+          credits: s.credits,
+          defaultCredits: s.credits,
+          marksObtained: 85,
+          maxMarks: 100,
+          grade: s.credits >= 4 ? 'A+' : 'A',
+          isElective: Boolean(s.isElective)
+        }))
+      );
+    } else {
+      // Default fallback subjects for this semester if catalog has no specific list
+      setSubjects([
+        { id: '1', code: `CS${semesterNumber}01`, name: `Core Subject 1`, credits: 4, defaultCredits: 4, marksObtained: 85, maxMarks: 100, grade: 'A+' },
+        { id: '2', code: `CS${semesterNumber}02`, name: `Core Subject 2`, credits: 4, defaultCredits: 4, marksObtained: 80, maxMarks: 100, grade: 'A' },
+        { id: '3', code: `CS${semesterNumber}03`, name: `Core Subject 3`, credits: 3, defaultCredits: 3, marksObtained: 78, maxMarks: 100, grade: 'B+' },
+        { id: '4', code: `CS${semesterNumber}04`, name: `Department Elective`, credits: 3, defaultCredits: 3, marksObtained: 90, maxMarks: 100, grade: 'O' },
+        { id: '5', code: `CS${semesterNumber}05`, name: `Laboratory / Practical`, credits: 2, defaultCredits: 2, marksObtained: 92, maxMarks: 100, grade: 'O' }
+      ]);
+    }
+
+    setAcademicPeriod(`Semester ${semesterNumber} - 202${semesterNumber + 2}`);
+  }, [semesterNumber, profile.universityId, profile.courseId, profile.regulationId]);
 
   const handleAddSubject = () => {
+    const newIdx = subjects.length + 1;
     setSubjects([
       ...subjects,
       {
         id: String(Date.now()),
-        code: `CS50${subjects.length + 1}`,
-        name: 'New Elective Course',
+        code: `EL${semesterNumber}0${newIdx}`,
+        name: `Professional Elective ${newIdx}`,
         credits: 3,
-        grade: 'A'
+        defaultCredits: 3,
+        marksObtained: 75,
+        maxMarks: 100,
+        grade: 'A',
+        isElective: true
       }
     ]);
   };
@@ -48,54 +129,118 @@ export default function AddResult() {
   };
 
   const handleSubjectChange = (id, field, value) => {
-    setSubjects(
-      subjects.map((s) => (s.id === id ? { ...s, [field]: value } : s))
+    setSubjects((prev) =>
+      prev.map((s) => {
+        if (s.id !== id) return s;
+        const updated = { ...s, [field]: value };
+
+        // If marks changed, automatically derive the letter grade using catalog grading scale
+        if (field === 'marksObtained' || field === 'maxMarks') {
+          const obt = field === 'marksObtained' ? Number(value) : s.marksObtained;
+          const max = field === 'maxMarks' ? Number(value) : s.maxMarks;
+          const derived = academicCalculationEngine.getGradeFromMarks(obt, max, gradeScale);
+          updated.grade = derived.grade;
+        }
+
+        return updated;
+      })
     );
   };
 
-  // Compute SGPA dynamically
-  let totalCredits = 0;
-  let weightedPoints = 0;
-  subjects.forEach((s) => {
-    const cred = Number(s.credits) || 0;
-    const pts = GRADE_POINTS[s.grade] ?? 8;
-    totalCredits += cred;
-    weightedPoints += cred * pts;
-  });
-  const calculatedSGPA = totalCredits > 0 ? (weightedPoints / totalCredits).toFixed(2) : '0.00';
+  // Dynamic SGPA Calculation using centralized engine
+  const calculationResult = useMemo(() => {
+    return academicCalculationEngine.calculateSGPA(subjects, gradeScale);
+  }, [subjects, gradeScale]);
+
+  // Dynamic CGPA simulation: what will cumulative CGPA be when saving this semester?
+  const projectedCGPA = useMemo(() => {
+    const otherSemesters = existingResults.filter(
+      (r) => Number(r.semesterNumber) !== Number(semesterNumber)
+    );
+    const simulatedSemesters = [
+      ...otherSemesters,
+      {
+        semesterNumber: Number(semesterNumber),
+        creditsEarned: calculationResult.earnedCredits,
+        totalCredits: calculationResult.totalCredits,
+        sgpa: calculationResult.sgpa
+      }
+    ];
+    return academicCalculationEngine.calculateCGPA(simulatedSemesters).cgpa;
+  }, [existingResults, semesterNumber, calculationResult]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
 
-    const formattedSubjects = subjects.map((s) => ({
-      code: s.code,
+    if (isDuplicateSemester) {
+      showToast(`Semester ${semesterNumber} already exists in your records. Please choose another semester or edit the existing result.`);
+      return;
+    }
+
+    if (Number(semesterNumber) < 1 || Number(semesterNumber) > maxSemesters) {
+      showToast(`Invalid semester. Allowed semesters for ${catalogConfig?.course?.name || 'this course'} are 1 to ${maxSemesters}.`);
+      return;
+    }
+
+    if (calculationResult.totalCredits <= 0) {
+      showToast('Total credits must be greater than zero.');
+      return;
+    }
+
+    const formattedSubjects = calculationResult.subjects.map((s) => ({
+      code: s.code || `SUB-${Date.now()}`,
       name: s.name,
       credits: Number(s.credits) || 3,
+      defaultCredits: s.defaultCredits || Number(s.credits) || 3,
       grade: s.grade,
-      points: GRADE_POINTS[s.grade] ?? 8
+      points: s.points,
+      marksObtained: Number(s.marksObtained) || 0,
+      maxMarks: Number(s.maxMarks) || 100,
+      isPass: s.isPass
     }));
 
-    resultService.addResult({
+    const resultRecord = {
+      id: `semester-${semesterNumber}`,
       semesterNumber: Number(semesterNumber),
+      semesterLabel: `Semester ${semesterNumber}`,
       semesterTitle: `Semester ${semesterNumber}`,
       academicPeriod,
-      sgpa: Number(calculatedSGPA),
-      cgpa: Number(calculatedSGPA),
-      creditsEarned: totalCredits,
-      totalCredits,
-      status: 'Passed',
-      badgeColor: 'purple',
-      subjects: formattedSubjects
-    });
+      sgpa: calculationResult.sgpa,
+      cgpa: projectedCGPA,
+      creditsEarned: calculationResult.earnedCredits,
+      totalCredits: calculationResult.totalCredits,
+      subjectCount: formattedSubjects.length,
+      status: calculationResult.status,
+      badgeColor: calculationResult.sgpa >= 8.5 ? 'purple' : calculationResult.sgpa >= 7.5 ? 'blue' : 'emerald',
+      subjects: formattedSubjects,
+      // Traceability and rule versioning
+      universityId: profile.universityId,
+      courseId: profile.courseId,
+      regulationId: profile.regulationId,
+      ruleVersion: catalogConfig?.regulation?.ruleVersion || '1.0',
+      academicBatch: profile.batch,
+      savedAt: new Date().toISOString()
+    };
 
-    showToast(`Semester ${semesterNumber} result saved successfully!`);
-    navigate('/student/dashboard');
+    resultService.addResult(resultRecord);
+    showToast(`Semester ${semesterNumber} result saved with SGPA: ${calculationResult.sgpa} and CGPA: ${projectedCGPA}!`);
+    navigate('/student/my-results');
   };
+
+  // If profile is incomplete, display AcademicProfileGate
+  if (!studentService.isProfileComplete()) {
+    return (
+      <AcademicProfileGate
+        title="Academic Profile Setup Required"
+        description="Before adding semester results, please configure your University, Course, and Regulation so the platform can load the correct subjects, credit weights, and grading rules."
+      />
+    );
+  }
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between pb-3 border-b border-border/80">
+      {/* Page Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border">
         <div>
           <button
             type="button"
@@ -105,84 +250,158 @@ export default function AddResult() {
             <ArrowLeft className="w-3.5 h-3.5" />
             <span>Back to Dashboard</span>
           </button>
-          <h1 className="text-xl sm:text-2xl font-extrabold text-text-h">
-            Add Semester Result
+          <h1 className="text-xl sm:text-2xl font-extrabold text-text-h flex items-center gap-2">
+            <span>Add Semester Result</span>
+            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-accent/15 text-accent border border-accent/20">
+              {catalogConfig?.course?.code || 'Course'} • {catalogConfig?.regulation?.code || 'Regulation'}
+            </span>
           </h1>
           <p className="text-xs text-text-light">
-            Enter semester subjects, credit weights, and letter grades.
+            {catalogConfig?.university?.name} ({catalogConfig?.course?.name})
           </p>
         </div>
 
-        {/* Live Computed SGPA Preview */}
-        <div className="text-right p-3 rounded-xl bg-accent/10 border border-accent/20">
-          <span className="text-[10px] font-bold text-accent uppercase tracking-wider block">
-            Computed SGPA
+        {/* Live Metrics Previews */}
+        <div className="flex items-center gap-3">
+          <div className="text-right p-3 rounded-2xl bg-card border border-border">
+            <span className="text-[10px] font-bold text-text-light uppercase tracking-wider block">
+              Semester SGPA
+            </span>
+            <span className="text-xl font-extrabold text-accent">
+              {calculationResult.sgpa.toFixed(2)}
+            </span>
+            <span className="text-[10px] text-text-light block">
+              {calculationResult.earnedCredits} / {calculationResult.totalCredits} Credits
+            </span>
+          </div>
+
+          <div className="text-right p-3 rounded-2xl bg-card border border-border">
+            <span className="text-[10px] font-bold text-text-light uppercase tracking-wider block">
+              Projected CGPA
+            </span>
+            <span className="text-xl font-extrabold text-brandGreen">
+              {projectedCGPA.toFixed(2)}
+            </span>
+            <span className="text-[10px] text-text-light block">
+              Cumulative
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Duplicate Warning Alert */}
+      {isDuplicateSemester && (
+        <div className="p-4 rounded-2xl bg-brandPink/10 border border-brandPink/30 flex items-start gap-3 text-brandPink">
+          <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+          <div className="text-xs space-y-1">
+            <p className="font-bold">Semester {semesterNumber} has already been saved!</p>
+            <p className="text-text-light dark:text-slate-300">
+              You already have a verified scorecard for Semester {semesterNumber}. To update subjects or marks,
+              go to <Link to="/student/my-results" className="text-accent underline font-semibold">My Results</Link> and select Edit.
+              Or choose an unsaved semester number below.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Catalog Context Banner */}
+      <div className="p-3.5 rounded-2xl bg-bg-sec border border-border flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div className="flex items-center gap-2 text-text-h">
+          <Info className="w-4 h-4 text-accent shrink-0" />
+          <span>
+            Grading Rule: <strong className="text-accent">{catalogConfig?.regulation?.gradingSystem}</strong> ({catalogConfig?.gradeScale?.length || 8}-level scale)
           </span>
-          <span className="text-xl font-extrabold text-text-h">
-            {calculatedSGPA}
-          </span>
-          <span className="text-[10px] text-text-light block">
-            {totalCredits} Total Credits
-          </span>
+          <span className="text-text-light">• Max Semesters: {maxSemesters}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-xs text-text-light font-medium cursor-pointer flex items-center gap-1.5">
+            <input
+              type="checkbox"
+              checked={useMarksInput}
+              onChange={(e) => setUseMarksInput(e.target.checked)}
+              className="rounded text-accent focus:ring-accent"
+            />
+            <span>Enable Marks Input Mode</span>
+          </label>
         </div>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Semester Meta Inputs */}
+        {/* Semester Configuration Selectors */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-2xl bg-card border border-border">
           <div>
             <label className="block text-xs font-semibold text-text-h mb-1">
-              Semester Number
+              Select Semester <span className="text-brandPink">*</span>
             </label>
-            <input
-              type="number"
-              min="1"
-              max="12"
+            <select
               value={semesterNumber}
-              onChange={(e) => setSemesterNumber(e.target.value)}
-              className="calc-input w-full px-3 py-2 rounded-xl text-xs font-semibold"
+              onChange={(e) => setSemesterNumber(Number(e.target.value))}
+              className="calc-input w-full px-3 py-2 rounded-xl text-xs font-semibold cursor-pointer"
               required
-            />
+            >
+              {Array.from({ length: maxSemesters }, (_, i) => i + 1).map((num) => {
+                const isSaved = existingSemesterNumbers.has(num);
+                return (
+                  <option key={num} value={num}>
+                    Semester {num} {isSaved ? '(Already Saved)' : '(Available)'}
+                  </option>
+                );
+              })}
+            </select>
+            <p className="text-[11px] text-text-light mt-1">
+              Capped to {maxSemesters} semesters per {catalogConfig?.course?.name || 'course'} structure.
+            </p>
           </div>
 
           <div>
             <label className="block text-xs font-semibold text-text-h mb-1">
-              Academic Examination Period
+              Examination Period / Label <span className="text-brandPink">*</span>
             </label>
             <input
               type="text"
               value={academicPeriod}
               onChange={(e) => setAcademicPeriod(e.target.value)}
-              placeholder="e.g. Jan 2027"
+              placeholder="e.g. Nov 2026 Regular"
               className="calc-input w-full px-3 py-2 rounded-xl text-xs font-semibold"
               required
             />
+            <p className="text-[11px] text-text-light mt-1">
+              Display title for the scorecard and semester transcript.
+            </p>
           </div>
         </div>
 
-        {/* Subject Rows Table */}
+        {/* Subjects Table */}
         <div className="p-4 sm:p-5 rounded-2xl bg-card border border-border space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-xs font-bold text-text-h uppercase tracking-wider">
-              Subjects & Marks
-            </h3>
+            <div>
+              <h3 className="text-xs font-bold text-text-h uppercase tracking-wider flex items-center gap-2">
+                <BookOpen className="w-3.5 h-3.5 text-accent" />
+                <span>Configured Course Subjects & Credits</span>
+              </h3>
+              <p className="text-[11px] text-text-light">
+                Pre-populated from {catalogConfig?.university?.name} curriculum. You can adjust elective names or credits.
+              </p>
+            </div>
             <button
               type="button"
               onClick={handleAddSubject}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-accent bg-accent/10 hover:bg-accent hover:text-white transition-all"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-accent bg-accent/10 hover:bg-accent hover:text-white transition-all shadow-2xs"
             >
               <PlusCircle className="w-3.5 h-3.5" />
-              <span>Add Subject</span>
+              <span>Add Elective / Lab</span>
             </button>
           </div>
 
           <div className="space-y-3">
-            {subjects.map((sub, idx) => (
+            {subjects.map((sub) => (
               <div
                 key={sub.id}
-                className="grid grid-cols-12 gap-2 sm:gap-3 items-center p-2.5 rounded-xl bg-bg border border-border/70"
+                className="grid grid-cols-12 gap-2 sm:gap-3 items-center p-3 rounded-xl bg-bg border border-border/70 hover:border-accent/40 transition-colors"
               >
+                {/* Subject Code */}
                 <div className="col-span-3 sm:col-span-2">
+                  <label className="text-[10px] text-text-light uppercase font-bold block mb-0.5">Code</label>
                   <input
                     type="text"
                     value={sub.code}
@@ -192,7 +411,9 @@ export default function AddResult() {
                   />
                 </div>
 
-                <div className="col-span-9 sm:col-span-5">
+                {/* Subject Name */}
+                <div className="col-span-9 sm:col-span-4">
+                  <label className="text-[10px] text-text-light uppercase font-bold block mb-0.5">Subject Title</label>
                   <input
                     type="text"
                     value={sub.name}
@@ -203,40 +424,68 @@ export default function AddResult() {
                   />
                 </div>
 
+                {/* Credits Dropdown */}
                 <div className="col-span-4 sm:col-span-2">
+                  <label className="text-[10px] text-text-light uppercase font-bold block mb-0.5">Credits</label>
                   <select
                     value={sub.credits}
                     onChange={(e) => handleSubjectChange(sub.id, 'credits', Number(e.target.value))}
-                    className="calc-input w-full px-2 py-1.5 rounded-lg text-xs font-semibold"
+                    className="calc-input w-full px-2 py-1.5 rounded-lg text-xs font-semibold cursor-pointer"
                   >
-                    {[1, 2, 3, 4, 5, 6].map((c) => (
+                    {[1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 6].map((c) => (
                       <option key={c} value={c}>
-                        {c} Credits
+                        {c} Credit{c > 1 ? 's' : ''}
                       </option>
                     ))}
                   </select>
                 </div>
 
-                <div className="col-span-5 sm:col-span-2">
-                  <select
-                    value={sub.grade}
-                    onChange={(e) => handleSubjectChange(sub.id, 'grade', e.target.value)}
-                    className="calc-input w-full px-2 py-1.5 rounded-lg text-xs font-bold text-accent"
-                  >
-                    {Object.keys(GRADE_POINTS).map((g) => (
-                      <option key={g} value={g}>
-                        {g} ({GRADE_POINTS[g]} pts)
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                {/* Marks or Grade Input */}
+                {useMarksInput ? (
+                  <div className="col-span-5 sm:col-span-3 grid grid-cols-2 gap-1.5">
+                    <div>
+                      <label className="text-[10px] text-text-light uppercase font-bold block mb-0.5">Marks</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max={sub.maxMarks || 100}
+                        value={sub.marksObtained}
+                        onChange={(e) => handleSubjectChange(sub.id, 'marksObtained', e.target.value)}
+                        className="calc-input w-full px-2 py-1.5 rounded-lg text-xs font-bold text-center text-accent"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-text-light uppercase font-bold block mb-0.5">Grade</label>
+                      <span className="w-full inline-block px-2 py-1.5 rounded-lg text-xs font-bold text-center bg-bg-sec border border-border text-accent">
+                        {sub.grade}
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="col-span-5 sm:col-span-3">
+                    <label className="text-[10px] text-text-light uppercase font-bold block mb-0.5">Letter Grade</label>
+                    <select
+                      value={sub.grade}
+                      onChange={(e) => handleSubjectChange(sub.id, 'grade', e.target.value)}
+                      className="calc-input w-full px-2 py-1.5 rounded-lg text-xs font-bold text-accent cursor-pointer"
+                    >
+                      {gradeScale.map((g) => (
+                        <option key={g.grade} value={g.grade}>
+                          {g.grade} ({g.points} pts{g.isPass ? '' : ' - Fail'})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
 
-                <div className="col-span-3 sm:col-span-1 text-right">
+                {/* Delete Button */}
+                <div className="col-span-3 sm:col-span-1 text-right pt-4 sm:pt-3">
                   <button
                     type="button"
                     onClick={() => handleRemoveSubject(sub.id)}
                     disabled={subjects.length <= 1}
                     className="p-1.5 rounded-lg text-text-light hover:text-brandPink hover:bg-brandPink/10 transition-colors disabled:opacity-30"
+                    title="Remove subject"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -246,25 +495,43 @@ export default function AddResult() {
           </div>
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex items-center justify-end gap-3 pt-2">
-          <button
-            type="button"
-            onClick={() => navigate(-1)}
-            className="px-4 py-2.5 rounded-xl text-xs font-semibold text-text-h hover:bg-bg-sec border border-border transition-colors"
-          >
-            Cancel
-          </button>
+        {/* Calculation Summary Footer */}
+        <div className="p-4 rounded-2xl bg-card border border-border flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-accent/10 border border-accent/20 flex items-center justify-center text-accent">
+              <Sparkles className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-text-h">
+                Rule Formula: <span className="text-accent">{catalogConfig?.regulation?.sgpaFormula || 'SGPA = Σ(Credit × GradePoint) / Σ(Credit)'}</span>
+              </p>
+              <p className="text-[11px] text-text-light">
+                Results conform to official {catalogConfig?.regulation?.code || 'Regulation'} passing criteria.
+              </p>
+            </div>
+          </div>
 
-          <button
-            type="submit"
-            className="px-6 py-2.5 rounded-xl text-xs font-bold text-white bg-accent hover:bg-accent-hover shadow-accent transition-all flex items-center gap-2"
-          >
-            <CheckCircle className="w-4 h-4" />
-            <span>Save Result & Update Records</span>
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => navigate(-1)}
+              className="px-4 py-2.5 rounded-xl text-xs font-semibold text-text-h hover:bg-bg-sec border border-border transition-colors"
+            >
+              Cancel
+            </button>
+
+            <button
+              type="submit"
+              disabled={isDuplicateSemester}
+              className="px-6 py-2.5 rounded-xl text-xs font-bold text-white bg-accent hover:bg-accent-hover shadow-accent transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <CheckCircle className="w-4 h-4" />
+              <span>Save Semester Result</span>
+            </button>
+          </div>
         </div>
       </form>
     </div>
   );
 }
+
