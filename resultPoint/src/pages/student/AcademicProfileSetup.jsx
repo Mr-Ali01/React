@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   GraduationCap,
@@ -18,9 +18,12 @@ import {
 import { academicCatalogService } from '../../services/academicCatalogService';
 import { studentService } from '../../services/studentService';
 import { useToast } from '../../context/ToastContext';
+import { useAppDispatch } from '../../hooks/useAppDispatch';
+import { saveAcademicProfile } from '../../features/academicProfile/academicProfileSlice';
 
 export default function AcademicProfileSetup() {
   const navigate = useNavigate();
+  const dispatch = useAppDispatch();
   const { showToast } = useToast();
 
   const [step, setStep] = useState(1);
@@ -137,7 +140,7 @@ export default function AcademicProfileSetup() {
       hasCompletedProfile: true
     };
 
-    studentService.updateProfile(updatedProfile);
+    dispatch(saveAcademicProfile(updatedProfile));
     showToast('Academic Profile configured and verified successfully!');
     navigate('/student/dashboard');
   };

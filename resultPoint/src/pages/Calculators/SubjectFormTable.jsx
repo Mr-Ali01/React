@@ -18,6 +18,8 @@ export default function SubjectFormTable({
   setRegulation,
   gradeSystem,
   setGradeSystem,
+  semester,
+  setSemester,
   subjects,
   onAddSubject,
   onRemoveSubject,
@@ -103,6 +105,29 @@ export default function SubjectFormTable({
               <ChevronDown className="w-3.5 h-3.5 absolute right-2.5 top-3 pointer-events-none text-text-light" />
             </div>
           </div>
+
+          {setSemester && (
+            <div>
+              <label className="block text-xs font-semibold text-text-h mb-1">Select Semester</label>
+              <div className="relative">
+                <select
+                  value={semester || 'Semester 1'}
+                  onChange={(e) => setSemester(e.target.value)}
+                  className="calc-input w-full px-3 py-2 rounded-xl text-xs font-medium cursor-pointer appearance-none pr-8"
+                >
+                  <option value="Semester 1">Semester 1</option>
+                  <option value="Semester 2">Semester 2</option>
+                  <option value="Semester 3">Semester 3</option>
+                  <option value="Semester 4">Semester 4</option>
+                  <option value="Semester 5">Semester 5</option>
+                  <option value="Semester 6">Semester 6</option>
+                  <option value="Semester 7">Semester 7</option>
+                  <option value="Semester 8">Semester 8</option>
+                </select>
+                <ChevronDown className="w-3.5 h-3.5 absolute right-2.5 top-3 pointer-events-none text-text-light" />
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Info Banner */}

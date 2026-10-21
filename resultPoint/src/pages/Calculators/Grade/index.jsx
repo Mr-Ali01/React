@@ -11,13 +11,23 @@ import {
   FileCheck,
   Bookmark,
   Award,
-  Lightbulb
+  Lightbulb,
+  Download,
+  Share2,
+  Loader2
 } from 'lucide-react';
 import CalculatorDirectorySidebar from '../CalculatorDirectorySidebar';
 import ExploreMoreTools from '../ExploreMoreTools';
 import CalculatorPageHeader from '../CalculatorPageHeader';
+import MobileResultModal from '../MobileResultModal';
 import SaveModal from '../CGPA/components/SaveModal';
 import { useToast } from '../../../context/ToastContext';
+import { useAuth } from '../../../hooks/useAuth';
+import { useAppDispatch } from '../../../hooks/useAppDispatch';
+import { saveCalculationToHistory } from '../../../features/calculation/calculationSlice';
+import { calculationSaveService } from '../../../services/calculationSaveService';
+import { downloadCalculatorPdf } from '../../../services/calculatorPdfService';
+import { shareCalculationResult } from '../../../services/calculatorShareService';
 
 const GRADING_TABLE_DATA = [
   { range: '90 - 100', grade: 'S', points: 10, performance: 'Outstanding', badgeClass: 'bg-emerald-500/10 text-brandGreen' },
@@ -31,6 +41,10 @@ const GRADING_TABLE_DATA = [
 ];
 
 export default function GradeCalculator() {
+  const { user, isAuthenticated } = useAuth();
+  const dispatch = useAppDispatch();
+  const { showToast } = useToast();
+
   const [university, setUniversity] = useState('jntuh');
   const [regulation, setRegulation] = useState('r18');
   const [course, setCourse] = useState('btech-cse');
@@ -38,9 +52,24 @@ export default function GradeCalculator() {
   const [maxMarks, setMaxMarks] = useState(100);
   const [obtainedMarks, setObtainedMarks] = useState(85);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isResultModalOpen, setIsResultModalOpen] = useState(false);
+  const [pendingCalc, setPendingCalc] = useState(null);
   const [validationError, setValidationError] = useState('');
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const [isSharing, setIsSharing] = useState(false);
 
-  const { showToast } = useToast();
+  const handleCalculate = () => {
+    if (isNaN(obtainedMarks) || obtainedMarks < 0) {
+      setValidationError('Please enter valid obtained marks.');
+      return;
+    }
+    if (obtainedMarks > maxMarks) {
+      setValidationError('Obtained marks cannot exceed maximum marks.');
+      return;
+    }
+    setValidationError('');
+    setIsResultModalOpen(true);
+  };
 
   const handleMaxMarksChange = (val) => {
     const num = parseFloat(val);
@@ -98,6 +127,122 @@ export default function GradeCalculator() {
       ...evaluated,
     };
   }, [maxMarks, obtainedMarks]);
+
+  const handleSaveResult = () => {
+    const calcRecord = {
+      calculatorType: 'Grade Calculator',
+      title: 'Grade Evaluation',
+      score: `${result.grade} (${result.points} pts)`,
+      scale: '10.0',
+      result: `Grade ${result.grade} (${result.percentage}%)`,
+      standing: result.performance,
+      summary: `Marks: ${obtainedMarks}/${maxMarks} | Grade: ${result.grade} | Points: ${result.points} | Performance: ${result.performance}`,
+      data: {
+        obtainedMarks,
+        maxMarks,
+        percentage: result.percentage,
+        grade: result.grade,
+        points: result.points,
+        performance: result.performance,
+        university,
+        regulation,
+        course,
+      },
+    };
+
+    if (isAuthenticated) {
+      const res = calculationSaveService.saveCalculation(calcRecord, user);
+      if (res.success) {
+        dispatch(saveCalculationToHistory(res.record));
+        showToast('Grade calculation saved to your history!');
+      } else {
+        showToast(res.error || 'Failed to save calculation');
+      }
+    } else {
+      setPendingCalc(calcRecord);
+      calculationSaveService.setPendingCalculation(calcRecord);
+      setIsModalOpen(true);
+    }
+  };
+
+  const handleDownloadPdf = async () => {
+    if (isGeneratingPdf) return;
+    setIsGeneratingPdf(true);
+    try {
+      const pdfData = {
+        calculatorName: 'Grade Evaluation Result Card',
+        subtitle: 'Calculated using your marks and university grading scale',
+        filename: 'ResultPoint_Grade_Result.pdf',
+        score: result.grade,
+        maxScale: `${result.points} pts`,
+        standing: result.performance,
+        metadata: {
+          university: university.toUpperCase(),
+          regulation: regulation.toUpperCase(),
+          course: course.toUpperCase(),
+          subjectType: subjectType.toUpperCase(),
+          calculationMethod: 'Absolute Scale Grading',
+          totalMarks: `${obtainedMarks} / ${maxMarks}`
+        },
+        metrics: [
+          { label: 'Obtained Marks', value: Math.round(obtainedMarks) },
+          { label: 'Maximum Marks', value: Math.round(maxMarks) },
+          { label: 'Percentage', value: `${result.percentage.toFixed(2)}%` },
+          { label: 'Grade', value: result.grade },
+          { label: 'Grade Point', value: result.points },
+          { label: 'Performance', value: result.performance }
+        ],
+        subjectRows: [
+          { param: 'Obtained Marks', value: `${Math.round(obtainedMarks)} marks` },
+          { param: 'Maximum Marks', value: `${Math.round(maxMarks)} marks` },
+          { param: 'Calculated Percentage', value: `${result.percentage.toFixed(2)}%` },
+          { param: 'Assigned Letter Grade', value: result.grade },
+          { param: 'Grade Point Value', value: `${result.points} / 10` },
+          { param: 'Academic Standing', value: result.performance },
+          { param: 'Curriculum Regulation', value: regulation.toUpperCase() }
+        ]
+      };
+      downloadCalculatorPdf(pdfData);
+      showToast('PDF downloaded successfully!');
+    } catch (err) {
+      console.error('PDF generation error:', err);
+      showToast('Failed to download PDF. Please try again.', 'error');
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  };
+
+  const handleShareResult = async () => {
+    if (isSharing) return;
+    setIsSharing(true);
+    try {
+      const shareData = {
+        toolName: 'Grade Calculator',
+        score: result.grade,
+        scaleText: `(${result.points} Grade Points)`,
+        metrics: [
+          { label: 'Obtained Marks', value: `${Math.round(obtainedMarks)} / ${Math.round(maxMarks)}` },
+          { label: 'Percentage', value: `${result.percentage.toFixed(2)}%` },
+          { label: 'Performance', value: result.performance }
+        ],
+        metadata: {
+          university: university.toUpperCase(),
+          regulation: regulation.toUpperCase()
+        }
+      };
+      const res = await shareCalculationResult(shareData);
+      if (res.success) {
+        showToast(res.message);
+      } else if (!res.cancelled) {
+        showToast(res.message || 'Unable to share result.', 'error');
+      }
+    } catch (err) {
+      console.error('Share error:', err);
+      showToast('Failed to share result.', 'error');
+    } finally {
+      setIsSharing(false);
+    }
+  };
 
   return (
     <>
@@ -291,11 +436,11 @@ export default function GradeCalculator() {
 
                   <button
                     type="button"
-                    onClick={() => setIsModalOpen(true)}
+                    onClick={handleCalculate}
                     className="px-6 py-2.5 rounded-xl bg-accent hover:bg-accent-hover text-white text-xs font-bold shadow-accent transition-all active:scale-95 flex items-center justify-center gap-1.5"
                   >
                     <BarChart2 className="w-3.5 h-3.5" />
-                    <span>Find & Save Grade</span>
+                    <span>Calculate Grade</span>
                     <ArrowRight className="w-3.5 h-3.5" />
                   </button>
                 </div>
@@ -355,8 +500,8 @@ export default function GradeCalculator() {
             </div>
           </div>
 
-          {/* Right Column: Grade Result Showcase & Quick Reference */}
-          <aside className="lg:col-span-3 xl:col-span-3 space-y-3.5 lg:sticky lg:top-20" aria-label="Grade Evaluation Results">
+          {/* Right Column: Grade Result Showcase & Quick Reference (Desktop / Tablet Only) */}
+          <aside className="hidden lg:block lg:col-span-3 xl:col-span-3 space-y-3.5 lg:sticky lg:top-20" aria-label="Grade Evaluation Results">
             {/* Orange Result Card */}
             <div className="rounded-2xl bg-gradient-to-b from-[#FF6B00] via-[#FF7A18] to-[#EA580C] text-white p-5 shadow-accent text-center relative overflow-hidden">
               <h3 className="text-xs font-bold uppercase tracking-wider text-white/90">
@@ -426,14 +571,45 @@ export default function GradeCalculator() {
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={() => setIsModalOpen(true)}
-                className="mt-3 w-full py-2 px-3 rounded-xl bg-white text-accent hover:bg-slate-50 text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-subtle active:scale-95"
-              >
-                <Bookmark className="w-3.5 h-3.5" />
-                <span>Save Result</span>
-              </button>
+              {/* Action Button Cluster: Save, Download PDF, Share */}
+              <div className="mt-3.5 space-y-2">
+                <button
+                  type="button"
+                  onClick={handleSaveResult}
+                  className="w-full py-2 px-3 rounded-xl bg-white text-accent hover:bg-slate-50 text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-subtle active:scale-95 cursor-pointer"
+                >
+                  <Bookmark className="w-3.5 h-3.5" />
+                  <span>Save Result</span>
+                </button>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    disabled={isGeneratingPdf}
+                    onClick={handleDownloadPdf}
+                    className="py-2 px-2.5 rounded-xl bg-white/20 hover:bg-white/30 text-white border border-white/30 backdrop-blur-sm text-xs font-bold transition-all flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Download result as a clean PDF"
+                  >
+                    {isGeneratingPdf ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Download className="w-3.5 h-3.5" />
+                    )}
+                    <span>{isGeneratingPdf ? 'Generating...' : 'Download PDF'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={isSharing}
+                    onClick={handleShareResult}
+                    className="py-2 px-2.5 rounded-xl bg-white/20 hover:bg-white/30 text-white border border-white/30 backdrop-blur-sm text-xs font-bold transition-all flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer disabled:opacity-50"
+                    title="Share result or copy summary"
+                  >
+                    <Share2 className="w-3.5 h-3.5" />
+                    <span>Share</span>
+                  </button>
+                </div>
+              </div>
             </div>
 
             {/* Quick Examples Reference Card */}
@@ -509,7 +685,49 @@ export default function GradeCalculator() {
         <ExploreMoreTools />
       </main>
 
-      <SaveModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+      <SaveModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        calculationData={pendingCalc}
+        onSaveSuccess={(saved) => {
+          if (saved) {
+            dispatch(saveCalculationToHistory(saved));
+          }
+        }}
+      />
+
+      {/* Mobile Result Modal Popup */}
+      <MobileResultModal
+        isOpen={isResultModalOpen}
+        onClose={() => setIsResultModalOpen(false)}
+        title="YOUR GRADE RESULT"
+        score={result.points}
+        maxScale={10}
+        standing={{
+          icon: result.icon,
+          text: `Grade ${result.grade} (${result.performance})`,
+          narrative: `You achieved an assigned letter grade of ${result.grade} with ${result.points} grade points (${result.percentage.toFixed(2)}%).`
+        }}
+        metrics={[
+          { label: 'Letter Grade', value: result.grade },
+          { label: 'Grade Points', value: `${result.points} / 10` },
+          { label: 'Obtained Marks', value: `${Math.round(obtainedMarks)} / ${Math.round(maxMarks)}` },
+          { label: 'Calculated Percentage', value: `${result.percentage.toFixed(2)}%` },
+          { label: 'Academic Standing', value: result.performance }
+        ]}
+        metadata={{
+          university: university.toUpperCase(),
+          regulation: regulation.toUpperCase(),
+          course: course.toUpperCase(),
+          calculationMethod: 'Absolute Scale Grading'
+        }}
+        calculationMethod="Absolute Scale Grading"
+        onSave={handleSaveResult}
+        onDownloadPdf={handleDownloadPdf}
+        onShareResult={handleShareResult}
+        isGeneratingPdf={isGeneratingPdf}
+        isSharing={isSharing}
+      />
     </>
   );
 }

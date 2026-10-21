@@ -4,6 +4,8 @@
  * Eliminates ad-hoc, hard-coded formulas across calculators and result pages.
  */
 
+import { academicCatalogService } from './academicCatalogService.js';
+
 export const academicCalculationEngine = {
   /**
    * Calculates SGPA for a list of course results using the configured grade scale.
@@ -146,14 +148,51 @@ export const academicCalculationEngine = {
   },
 
   /**
-   * Converts CGPA to Percentage using the university-specific conversion formula.
+   * Converts CGPA to Percentage using the university-specific conversion formula or calculation rule.
+   * Pure declarative calculation - strictly prohibits eval or arbitrary JS execution.
    */
-  convertCGPAToPercentage(cgpa = 0, formulaString = '(CGPA - 0.5) * 10') {
+  convertCGPAToPercentage(cgpa = 0, formulaOrRule = '(CGPA - 0.5) * 10') {
     const val = Number(cgpa) || 0;
-    let percent = 0;
-    const formulaClean = (formulaString || '').toLowerCase().replace(/\s+/g, '');
+    let ruleObj = null;
+    let formulaString = '(CGPA - 0.5) * 10';
+    let decimalPrecision = 2;
+    let roundingMode = 'round';
 
-    if (formulaClean.includes('cgpa-0.5') || formulaClean.includes('(cgpa-0.5)*10')) {
+    if (typeof formulaOrRule === 'object' && formulaOrRule !== null) {
+      ruleObj = formulaOrRule;
+    } else if (typeof formulaOrRule === 'string' && formulaOrRule.trim()) {
+      const trimmed = formulaOrRule.trim();
+      try {
+        const resolved = academicCatalogService.getCalculationRule(trimmed);
+        if (resolved) {
+          ruleObj = resolved;
+        }
+      } catch {}
+      if (!ruleObj) {
+        formulaString = trimmed;
+      }
+    }
+
+    if (ruleObj) {
+      formulaString = ruleObj.percentageFormula || formulaString;
+      if (Number.isInteger(ruleObj.decimalPrecision) && ruleObj.decimalPrecision >= 0) {
+        decimalPrecision = ruleObj.decimalPrecision;
+      }
+      if (ruleObj.roundingMode) {
+        roundingMode = ruleObj.roundingMode;
+      }
+    }
+
+    let percent = 0;
+    const formulaClean = formulaString.toLowerCase().replace(/\s+/g, '');
+
+    // Declarative parser matching approved university calculation models
+    const linearMatch = formulaClean.match(/^\(?cgpa(?:-([0-9.]+))?\)?\*([0-9.]+)$/);
+    if (linearMatch) {
+      const offset = linearMatch[1] ? parseFloat(linearMatch[1]) : 0;
+      const multiplier = parseFloat(linearMatch[2]);
+      percent = Math.max(0, (val - offset) * multiplier);
+    } else if (formulaClean.includes('cgpa-0.5') || formulaClean.includes('(cgpa-0.5)*10')) {
       percent = Math.max(0, (val - 0.5) * 10);
     } else if (formulaClean.includes('cgpa-0.75') || formulaClean.includes('(cgpa-0.75)*10')) {
       percent = Math.max(0, (val - 0.75) * 10);
@@ -164,9 +203,104 @@ export const academicCalculationEngine = {
       percent = Math.min(100, val * 10);
     }
 
+    // Apply configured rounding mode
+    const factor = Math.pow(10, decimalPrecision);
+    let finalPercentage;
+    if (roundingMode === 'floor') {
+      finalPercentage = Math.floor(percent * factor) / factor;
+    } else if (roundingMode === 'ceil') {
+      finalPercentage = Math.ceil(percent * factor) / factor;
+    } else if (roundingMode === 'truncate') {
+      finalPercentage = Math.trunc(percent * factor) / factor;
+    } else {
+      finalPercentage = Number(percent.toFixed(decimalPrecision));
+    }
+
     return {
-      percentage: Number(percent.toFixed(2)),
-      formulaUsed: formulaString || 'Percentage = CGPA × 10'
+      percentage: finalPercentage,
+      formulaUsed: formulaString || 'Percentage = CGPA × 10',
+      valueOf: () => finalPercentage,
+      [Symbol.toPrimitive]: () => finalPercentage
+    };
+  },
+
+  /**
+   * Executes a calculation rule declaratively against student context.
+   */
+  executeCalculationRule(rule, context = {}) {
+    if (!rule || typeof rule !== 'object') {
+      return {
+        success: false,
+        error: 'Invalid calculation rule specification provided.'
+      };
+    }
+
+    if (rule.status === 'archived' && !context.allowArchived) {
+      return {
+        success: false,
+        error: `Calculation rule "${rule.name}" is archived and cannot be used for active calculations.`,
+        isArchived: true
+      };
+    }
+
+    const type = rule.ruleType || 'percentage';
+
+    if (type === 'percentage') {
+      const res = this.convertCGPAToPercentage(context.cgpa || 0, rule);
+      return {
+        success: true,
+        type: 'percentage',
+        result: res.percentage,
+        percentage: res.percentage,
+        formulaUsed: res.formulaUsed,
+        ruleId: rule.id,
+        ruleName: rule.name
+      };
+    }
+
+    if (type === 'sgpa') {
+      const res = this.calculateSGPA(context.subjects || [], context.gradeScale || []);
+      return {
+        success: true,
+        type: 'sgpa',
+        ...res,
+        ruleId: rule.id,
+        ruleName: rule.name
+      };
+    }
+
+    if (type === 'cgpa') {
+      const res = this.calculateCGPA(context.historicalResults || []);
+      return {
+        success: true,
+        type: 'cgpa',
+        ...res,
+        ruleId: rule.id,
+        ruleName: rule.name
+      };
+    }
+
+    if (type === 'composite') {
+      const sgpaRes = context.subjects ? this.calculateSGPA(context.subjects, context.gradeScale || []) : null;
+      const cgpaRes = context.historicalResults ? this.calculateCGPA(context.historicalResults) : null;
+      const effectiveCgpa = context.cgpa !== undefined ? context.cgpa : (cgpaRes?.cgpa || 0);
+      const percentRes = this.convertCGPAToPercentage(effectiveCgpa, rule);
+
+      return {
+        success: true,
+        type: 'composite',
+        sgpa: sgpaRes?.sgpa || null,
+        cgpa: cgpaRes?.cgpa || effectiveCgpa,
+        percentage: percentRes.percentage,
+        formulaUsed: percentRes.formulaUsed,
+        ruleId: rule.id,
+        ruleName: rule.name
+      };
+    }
+
+    return {
+      success: false,
+      error: `Unsupported calculation rule type "${type}".`
     };
   },
 
@@ -198,6 +332,67 @@ export const academicCalculationEngine = {
       desc: lowest?.desc || 'Fail',
       isPass: false,
       percentage: Number(percentage.toFixed(2))
+    };
+  },
+
+  /**
+   * Calculates overall academic summaries including CGPA, GPA, and Overall Grade
+   * conforming to the university regulation and grading scale.
+   */
+  calculateOverallMetrics(resultsList = [], gradeScale = [], calculationRule = {}) {
+    if (!Array.isArray(resultsList) || resultsList.length === 0) {
+      return {
+        cgpa: 0,
+        gpa: 0,
+        latestSGPA: 0,
+        overallGrade: 'N/A',
+        overallGradeDesc: 'No Results Recorded',
+        totalCreditsEarned: 0,
+        semestersCompleted: 0,
+        percentage: 0,
+        status: 'No Results'
+      };
+    }
+
+    const sorted = [...resultsList].sort((a, b) => Number(a.semesterNumber) - Number(b.semesterNumber));
+    const cgpaResult = this.calculateCGPA(sorted);
+    const cgpa = cgpaResult.cgpa;
+    const latest = sorted[sorted.length - 1];
+    const latestSGPA = Number(latest.sgpa) || 0;
+
+    // Convert CGPA to percentage using regulation conversion formula
+    const formulaStr = calculationRule?.percentageFormula || 'CGPA * 10';
+    const percentResult = this.convertCGPAToPercentage(cgpa, formulaStr);
+    const percentage = percentResult.percentage;
+
+    // Determine overall letter grade and classification
+    let overallGrade = 'P';
+    let overallGradeDesc = 'Pass';
+
+    if (Array.isArray(gradeScale) && gradeScale.length > 0) {
+      const match = this.getGradeFromMarks(percentage, 100, gradeScale);
+      overallGrade = match.grade;
+      overallGradeDesc = match.desc;
+    } else {
+      if (cgpa >= 9.0) { overallGrade = 'O'; overallGradeDesc = 'Outstanding'; }
+      else if (cgpa >= 8.0) { overallGrade = 'A+'; overallGradeDesc = 'Excellent'; }
+      else if (cgpa >= 7.0) { overallGrade = 'A'; overallGradeDesc = 'Very Good'; }
+      else if (cgpa >= 6.0) { overallGrade = 'B+'; overallGradeDesc = 'Good'; }
+      else if (cgpa >= 5.0) { overallGrade = 'B'; overallGradeDesc = 'Above Average'; }
+      else if (cgpa >= 4.0) { overallGrade = 'C'; overallGradeDesc = 'Pass'; }
+      else { overallGrade = 'F'; overallGradeDesc = 'Fail'; }
+    }
+
+    return {
+      cgpa,
+      gpa: cgpa,
+      latestSGPA,
+      overallGrade,
+      overallGradeDesc,
+      totalCreditsEarned: cgpaResult.totalCredits,
+      semestersCompleted: sorted.length,
+      percentage,
+      status: cgpa >= 5.0 ? 'Passed' : 'Arrears / Under Review'
     };
   }
 };

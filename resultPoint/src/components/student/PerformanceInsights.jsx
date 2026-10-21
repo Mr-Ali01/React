@@ -24,7 +24,7 @@ export default function PerformanceInsights({ insights = [] }) {
       </div>
 
       {/* Insight Items */}
-      <div className="space-y-3.5 my-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 my-3">
         {insights.map((item) => {
           let IconComponent = TrendingUp;
           let iconColorClass = 'bg-purple-500/10 text-brandPurple';
@@ -43,26 +43,26 @@ export default function PerformanceInsights({ insights = [] }) {
           return (
             <div
               key={item.id}
-              className="flex items-start justify-between gap-3 p-2.5 rounded-xl bg-bg border border-border/60 hover:border-border transition-colors"
+              className="flex items-start justify-between gap-3 p-3.5 rounded-xl bg-bg border border-border/60 hover:border-border transition-colors min-w-0"
             >
-              <div className="flex items-start gap-3">
+              <div className="flex items-start gap-3 min-w-0 flex-1">
                 <div
                   className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${iconColorClass}`}
                 >
                   <IconComponent className="w-4 h-4 stroke-[2.5]" />
                 </div>
 
-                <div>
-                  <h4 className="text-xs font-semibold text-text-light">{item.title}</h4>
-                  <p className="text-xs font-bold text-text-h mt-0.5">{item.subtitle}</p>
+                <div className="min-w-0 flex-1">
+                  <h4 className="text-xs font-semibold text-text-light truncate">{item.title}</h4>
+                  <p className="text-xs font-bold text-text-h mt-0.5 line-clamp-2">{item.subtitle}</p>
                   {item.detail && (
-                    <span className="text-[11px] text-text-light">{item.detail}</span>
+                    <span className="text-[11px] text-text-light block mt-0.5 truncate">{item.detail}</span>
                   )}
                 </div>
               </div>
 
               <span
-                className={`px-2.5 py-1 rounded-lg text-[10.5px] font-bold shrink-0 ${badgeClass}`}
+                className={`px-2.5 py-1 rounded-lg text-[10.5px] font-bold shrink-0 self-start ${badgeClass}`}
               >
                 {item.badge}
               </span>

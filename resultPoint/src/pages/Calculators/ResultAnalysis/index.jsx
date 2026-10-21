@@ -22,6 +22,10 @@ import ResultGaugeCard from '../ResultGaugeCard';
 import CalculatorPageHeader from '../CalculatorPageHeader';
 import SaveModal from '../CGPA/components/SaveModal';
 import { useToast } from '../../../context/ToastContext';
+import { useAuth } from '../../../hooks/useAuth';
+import { useAppDispatch } from '../../../hooks/useAppDispatch';
+import { saveCalculationToHistory } from '../../../features/calculation/calculationSlice';
+import { calculationSaveService } from '../../../services/calculationSaveService';
 
 const DEFAULT_SEMESTER_RESULTS = [
   { id: '1', sem: 1, sgpa: 7.8, credits: 20, status: 'Cleared' },
@@ -35,15 +39,32 @@ const DEFAULT_SEMESTER_RESULTS = [
 ];
 
 export default function ResultAnalysis() {
+  const { user, isAuthenticated } = useAuth();
+  const dispatch = useAppDispatch();
+  const { showToast } = useToast();
+
   const [university, setUniversity] = useState('jntuh');
   const [regulation, setRegulation] = useState('r18');
   const [course, setCourse] = useState('btech-cse');
   const [totalSemestersConfigured, setTotalSemestersConfigured] = useState(8);
   const [semesters, setSemesters] = useState(DEFAULT_SEMESTER_RESULTS);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isResultModalOpen, setIsResultModalOpen] = useState(false);
+  const [pendingCalc, setPendingCalc] = useState(null);
   const [validationError, setValidationError] = useState('');
 
-  const { showToast } = useToast();
+  const handleCalculate = () => {
+    const validCount = semesters.filter(
+      (s) => s.sgpa !== '' && s.sgpa !== null && !isNaN(s.sgpa) && parseFloat(s.sgpa) >= 0 && parseFloat(s.sgpa) <= 10
+    ).length;
+
+    if (validCount === 0) {
+      setValidationError('Please enter at least one valid SGPA between 0.0 and 10.0');
+      return;
+    }
+    setValidationError('');
+    setIsResultModalOpen(true);
+  };
 
   const handleTotalSemestersChange = (val) => {
     const total = parseInt(val, 10) || 8;
@@ -249,6 +270,45 @@ export default function ResultAnalysis() {
     { label: 'Lowest SGPA', value: metrics.lowestSgpaStr },
     { label: 'Overall Status', value: standing.text }
   ];
+
+  const handleSaveResult = () => {
+    const calcRecord = {
+      calculatorType: 'Result Analysis',
+      title: 'Result Analysis & Prediction',
+      score: metrics.formattedCgpa,
+      scale: '10.0',
+      result: `CGPA: ${metrics.formattedCgpa} (${metrics.completedCount} Semesters Cleared)`,
+      standing: standing?.text || 'Consistent',
+      summary: `CGPA: ${metrics.formattedCgpa} | Semesters: ${metrics.completedCount}/${totalSemestersConfigured} | Backlogs: ${metrics.backlogs}`,
+      data: {
+        currentCgpa: metrics.currentCgpa,
+        formattedCgpa: metrics.formattedCgpa,
+        completedCount: metrics.completedCount,
+        backlogs: metrics.backlogs,
+        highestSgpa: metrics.highestSgpaStr,
+        lowestSgpa: metrics.lowestSgpaStr,
+        projectedCgpa: metrics.projectedCgpa,
+        university,
+        course,
+        regulation,
+        semesters,
+      },
+    };
+
+    if (isAuthenticated) {
+      const res = calculationSaveService.saveCalculation(calcRecord, user);
+      if (res.success) {
+        dispatch(saveCalculationToHistory(res.record));
+        showToast('Result analysis saved to your history!');
+      } else {
+        showToast(res.error || 'Failed to save calculation');
+      }
+    } else {
+      setPendingCalc(calcRecord);
+      calculationSaveService.setPendingCalculation(calcRecord);
+      setIsModalOpen(true);
+    }
+  };
 
   const getLetterGrade = (sgpa) => {
     if (sgpa === null || isNaN(sgpa) || sgpa === '') return '-';
@@ -541,11 +601,11 @@ export default function ResultAnalysis() {
 
                   <button
                     type="button"
-                    onClick={() => setIsModalOpen(true)}
+                    onClick={handleCalculate}
                     className="px-6 py-2.5 rounded-xl bg-accent hover:bg-accent-hover text-white text-xs font-bold shadow-accent transition-all active:scale-95 flex items-center justify-center gap-1.5"
                   >
                     <BarChart2 className="w-3.5 h-3.5" />
-                    <span>Analyze & Save</span>
+                    <span>Calculate Analysis</span>
                     <ArrowRight className="w-3.5 h-3.5" />
                   </button>
                 </div>
@@ -554,48 +614,79 @@ export default function ResultAnalysis() {
           </div>
 
           {/* Right Column: Result Summary Gauge & Insights */}
-          <aside className="lg:col-span-3 xl:col-span-3 space-y-3.5 lg:sticky lg:top-20" aria-label="Result Analysis Summary">
-            <ResultGaugeCard
-              score={metrics.currentCgpa}
-              maxScale={10}
-              title="YOUR RESULT SUMMARY"
-              metrics={resultCardsData}
-              standing={standing}
-              onSave={() => setIsModalOpen(true)}
-            />
-
-            {/* Quick Insights Cards */}
-            <div className="rounded-2xl bg-card border border-border p-3.5 shadow-subtle space-y-2.5">
-              <h4 className="text-xs font-bold text-text-h uppercase tracking-wider pb-1 border-b border-border">
-                Quick Insights
-              </h4>
-              <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-brandGreen/20 flex items-start gap-2.5">
-                <TrendingUp className="w-4 h-4 text-brandGreen shrink-0 mt-0.5" />
-                <div>
-                  <span className="font-bold text-text-h block text-xs">Improving Trend</span>
-                  <span className="text-[11px] text-text-m leading-snug">Recent semesters reflect consistent upward momentum.</span>
-                </div>
-              </div>
-              <div className="p-2.5 rounded-xl bg-pink-500/10 border border-brandPink/20 flex items-start gap-2.5">
-                <AlertCircle className="w-4 h-4 text-brandPink shrink-0 mt-0.5" />
-                <div>
-                  <span className="font-bold text-text-h block text-xs">Focus on Weak Areas</span>
-                  <span className="text-[11px] text-text-m leading-snug">Prioritize subjects where your score falls below 7.0.</span>
-                </div>
-              </div>
-              <div className="p-2.5 rounded-xl bg-orange-500/10 border border-accent/20 flex items-start gap-2.5">
-                <Target className="w-4 h-4 text-accent shrink-0 mt-0.5" />
-                <div>
-                  <span className="font-bold text-text-h block text-xs">Stay Consistent</span>
-                  <span className="text-[11px] text-text-m leading-snug">Maintain high credit semester targets to achieve honors.</span>
-                </div>
-              </div>
-            </div>
-          </aside>
+          <ResultGaugeCard
+            score={metrics.currentCgpa}
+            maxScale={10}
+            title="YOUR RESULT SUMMARY"
+            metrics={resultCardsData}
+            standing={standing}
+            isMobileModalOpen={isResultModalOpen}
+            onCloseMobileModal={() => setIsResultModalOpen(false)}
+            metadata={{
+              university: university.toUpperCase(),
+              regulation: regulation.toUpperCase(),
+              course: course.toUpperCase(),
+              calculationMethod: 'Multi-Semester Cumulative Analysis',
+              totalSemesters: `${semesters.length} Semesters`
+            }}
+            subjectRows={semesters.map((s) => ({
+              semester: `Semester ${s.sem}`,
+              credits: s.credits || 0,
+              sgpa: s.sgpa ? parseFloat(s.sgpa).toFixed(2) : 'N/A',
+              status: s.status || 'Cleared'
+            }))}
+            pdfData={{
+              calculatorName: 'Result Analysis Scorecard',
+              subtitle: 'Comprehensive multi-semester performance evaluation',
+              filename: 'ResultPoint_Result_Analysis.pdf',
+              score: metrics.currentCgpa.toFixed(2),
+              maxScale: 10,
+              standing: standing?.text,
+              metadata: {
+                university: university.toUpperCase(),
+                regulation: regulation.toUpperCase(),
+                course: course.toUpperCase(),
+                calculationMethod: 'Multi-Semester Cumulative Analysis',
+                totalSemesters: `${semesters.length} Semesters`
+              },
+              metrics: [
+                { label: 'Current CGPA', value: metrics.currentCgpa.toFixed(2) },
+                { label: 'Total Credits', value: metrics.totalAttemptedCredits },
+                { label: 'Cleared Semesters', value: `${metrics.completedCount} of ${semesters.length}` },
+                { label: 'Active Backlogs', value: metrics.backlogs },
+                { label: 'Overall Trend', value: standing?.text || 'Consistent' }
+              ],
+              subjectRows: semesters.map((s) => ({
+                semester: `Semester ${s.sem}`,
+                credits: s.credits || 0,
+                sgpa: s.sgpa ? parseFloat(s.sgpa).toFixed(2) : 'N/A',
+                status: s.status || 'Cleared'
+              }))
+            }}
+            shareData={{
+              toolName: 'Result Analyzer',
+              score: `${metrics.currentCgpa.toFixed(2)} CGPA`,
+              scaleText: 'out of 10',
+              metrics: [
+                { label: 'CGPA', value: metrics.currentCgpa.toFixed(2) },
+                { label: 'Attempted Credits', value: metrics.totalAttemptedCredits },
+                { label: 'Cleared Semesters', value: metrics.completedCount },
+                { label: 'Backlogs', value: metrics.backlogs }
+              ],
+              metadata: {
+                university: university.toUpperCase(),
+                regulation: regulation.toUpperCase()
+              }
+            }}
+            onSave={(record) => {
+              setPendingCalc(record);
+              setIsModalOpen(true);
+            }}
+          />
         </div>
 
-        {/* Charts Row: Trend Line Chart & Grade Doughnut Chart */}
-        <section className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch" aria-label="Performance Charts">
+        {/* Charts Row: Trend Line Chart & Grade Doughnut Chart (Desktop / Tablet Only) */}
+        <section className="hidden lg:grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch" aria-label="Performance Charts">
           {/* CGPA & SGPA Line Trend Chart */}
           <div className="lg:col-span-7 rounded-2xl bg-card border border-border p-4 sm:p-5 shadow-subtle space-y-3 flex flex-col justify-between">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-border/70">
@@ -873,7 +964,16 @@ export default function ResultAnalysis() {
         <ExploreMoreTools />
       </main>
 
-      <SaveModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+      <SaveModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        calculationData={pendingCalc}
+        onSaveSuccess={(saved) => {
+          if (saved) {
+            dispatch(saveCalculationToHistory(saved));
+          }
+        }}
+      />
     </>
   );
 }

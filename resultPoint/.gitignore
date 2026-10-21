@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Developer Tools Sessions & Outputs
+.playwright/
+.playwright-cli/
+scratch/skillui_output/

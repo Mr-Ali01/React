@@ -19,8 +19,16 @@ import ResultGaugeCard from '../ResultGaugeCard';
 import CalculatorPageHeader from '../CalculatorPageHeader';
 import SaveModal from '../CGPA/components/SaveModal';
 import { useToast } from '../../../context/ToastContext';
+import { useAuth } from '../../../hooks/useAuth';
+import { useAppDispatch } from '../../../hooks/useAppDispatch';
+import { saveCalculationToHistory } from '../../../features/calculation/calculationSlice';
+import { calculationSaveService } from '../../../services/calculationSaveService';
 
 export default function TargetCGPACalculator() {
+  const { user, isAuthenticated } = useAuth();
+  const dispatch = useAppDispatch();
+  const { showToast } = useToast();
+
   const [university, setUniversity] = useState('jntuh');
   const [regulation, setRegulation] = useState('r18');
   const [course, setCourse] = useState('btech-cse');
@@ -32,9 +40,9 @@ export default function TargetCGPACalculator() {
   const [totalCourseCredits, setTotalCourseCredits] = useState(160);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isResultModalOpen, setIsResultModalOpen] = useState(false);
+  const [pendingCalc, setPendingCalc] = useState(null);
   const [validationError, setValidationError] = useState('');
-
-  const { showToast } = useToast();
 
   const handleReset = () => {
     setCurrentCgpa(7.5);
@@ -130,6 +138,64 @@ export default function TargetCGPACalculator() {
     { label: 'Required CGPA', value: metrics.formattedRequired, highlight: true },
     { label: 'Status', value: standing.text }
   ];
+
+  const handleSaveResult = () => {
+    const calcRecord = {
+      calculatorType: 'Target CGPA Calculator',
+      title: 'Target CGPA Planning',
+      score: metrics.formattedRequired,
+      scale: '10.0',
+      result: `Required: ${metrics.formattedRequired} for Target ${parseFloat(targetCgpa).toFixed(2)}`,
+      standing: standing?.text || 'Target Plan',
+      summary: `Target: ${parseFloat(targetCgpa).toFixed(2)} | Current: ${parseFloat(currentCgpa).toFixed(2)} | Remaining Credits: ${metrics.remainingCredits}`,
+      data: {
+        currentCgpa: parseFloat(currentCgpa),
+        completedCredits: parseFloat(completedCredits),
+        targetCgpa: parseFloat(targetCgpa),
+        totalCourseCredits: parseFloat(totalCourseCredits),
+        remainingCredits: metrics.remainingCredits,
+        requiredCgpa: metrics.requiredCgpa,
+        formattedRequired: metrics.formattedRequired,
+        university,
+        course,
+        regulation,
+        semester,
+      },
+    };
+
+    if (isAuthenticated) {
+      const res = calculationSaveService.saveCalculation(calcRecord, user);
+      if (res.success) {
+        dispatch(saveCalculationToHistory(res.record));
+        showToast('Target CGPA plan saved to your history!');
+      } else {
+        showToast(res.error || 'Failed to save calculation');
+      }
+    } else {
+      setPendingCalc(calcRecord);
+      calculationSaveService.setPendingCalculation(calcRecord);
+      setIsModalOpen(true);
+    }
+  };
+
+  const handleCalculate = () => {
+    if (metrics.errorMsg) {
+      setValidationError(metrics.errorMsg);
+      return;
+    }
+    const cur = parseFloat(currentCgpa);
+    const tgt = parseFloat(targetCgpa);
+    if (isNaN(cur) || cur < 0 || cur > 10) {
+      setValidationError('Please enter a valid current CGPA between 0.0 and 10.0.');
+      return;
+    }
+    if (isNaN(tgt) || tgt < 0 || tgt > 10) {
+      setValidationError('Please enter a valid target CGPA between 0.0 and 10.0.');
+      return;
+    }
+    setValidationError('');
+    setIsResultModalOpen(true);
+  };
 
   return (
     <>
@@ -347,11 +413,11 @@ export default function TargetCGPACalculator() {
 
                   <button
                     type="button"
-                    onClick={() => setIsModalOpen(true)}
-                    className="px-6 py-2.5 rounded-xl bg-accent hover:bg-accent-hover text-white text-xs font-bold shadow-accent transition-all active:scale-95 flex items-center justify-center gap-1.5"
+                    onClick={handleCalculate}
+                    className="px-6 py-2.5 rounded-xl bg-accent hover:bg-accent-hover text-white text-xs font-bold shadow-accent transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
                   >
                     <BarChart2 className="w-3.5 h-3.5" />
-                    <span>Calculate & Save Target</span>
+                    <span>Calculate Target</span>
                     <ArrowRight className="w-3.5 h-3.5" />
                   </button>
                 </div>
@@ -412,15 +478,85 @@ export default function TargetCGPACalculator() {
             </div>
           </div>
 
-          {/* Right Column: Result Gauge & Target History */}
-          <aside className="lg:col-span-3 xl:col-span-3 space-y-3.5 lg:sticky lg:top-20" aria-label="Target Evaluation Results">
+          {/* Right Column: Result Gauge & Target History (Desktop / Tablet Only) */}
+          <aside className="hidden lg:block lg:col-span-3 xl:col-span-3 space-y-3.5 lg:sticky lg:top-20" aria-label="Target Evaluation Results">
             <ResultGaugeCard
               score={Math.min(10, Math.max(0, metrics.requiredCgpa))}
               maxScale={10}
               title="YOUR TARGET RESULT"
               metrics={resultCardsData}
               standing={standing}
-              onSave={() => setIsModalOpen(true)}
+              isMobileModalOpen={isResultModalOpen}
+              onCloseMobileModal={() => setIsResultModalOpen(false)}
+              metadata={{
+                university: university.toUpperCase(),
+                regulation: regulation.toUpperCase(),
+                course: course.toUpperCase(),
+                targetCGPA: parseFloat(targetCgpa).toFixed(2),
+                calculationMethod: 'Linear Academic Credit Balance Model',
+                remainingCredits: `${metrics.remainingCredits} Credits`
+              }}
+              subjectRows={[
+                { param: 'Current CGPA', value: `${parseFloat(currentCgpa).toFixed(2)} / 10` },
+                { param: 'Completed Credits', value: `${completedCredits} Credits` },
+                { param: 'Target CGPA Goal', value: `${parseFloat(targetCgpa).toFixed(2)} / 10` },
+                { param: 'Total Degree Credits', value: `${totalCourseCredits} Credits` },
+                { param: 'Remaining Credits', value: `${metrics.remainingCredits} Credits` },
+                { param: 'Required Future SGPA', value: `${metrics.formattedRequired} / 10` },
+                { param: 'Feasibility Assessment', value: standing.text }
+              ]}
+              pdfData={{
+                calculatorName: 'Target CGPA Strategy Card',
+                subtitle: 'Calculated required future performance to hit target CGPA',
+                filename: 'ResultPoint_Target_CGPA_Result.pdf',
+                score: `${metrics.formattedRequired}`,
+                maxScale: '10.0 Target Scale',
+                standing: standing?.text,
+                metadata: {
+                  university: university.toUpperCase(),
+                  regulation: regulation.toUpperCase(),
+                  course: course.toUpperCase(),
+                  targetCGPA: parseFloat(targetCgpa).toFixed(2),
+                  calculationMethod: 'Linear Academic Credit Balance Model',
+                  remainingCredits: `${metrics.remainingCredits} Credits`
+                },
+                metrics: [
+                  { label: 'Current CGPA', value: parseFloat(currentCgpa).toFixed(2) },
+                  { label: 'Target CGPA', value: parseFloat(targetCgpa).toFixed(2) },
+                  { label: 'Completed Credits', value: completedCredits },
+                  { label: 'Remaining Credits', value: metrics.remainingCredits },
+                  { label: 'Required CGPA', value: metrics.formattedRequired },
+                  { label: 'Strategic Status', value: standing.text }
+                ],
+                subjectRows: [
+                  { param: 'Current CGPA', value: `${parseFloat(currentCgpa).toFixed(2)} / 10` },
+                  { param: 'Completed Credits', value: `${completedCredits} Credits` },
+                  { param: 'Target CGPA Goal', value: `${parseFloat(targetCgpa).toFixed(2)} / 10` },
+                  { param: 'Total Degree Credits', value: `${totalCourseCredits} Credits` },
+                  { param: 'Remaining Credits', value: `${metrics.remainingCredits} Credits` },
+                  { param: 'Required Future SGPA', value: `${metrics.formattedRequired} / 10` },
+                  { param: 'Feasibility Assessment', value: standing.text }
+                ]
+              }}
+              shareData={{
+                toolName: 'Target CGPA Planner',
+                score: `${metrics.formattedRequired} CGPA Required`,
+                scaleText: `(to reach ${parseFloat(targetCgpa).toFixed(2)} Target)`,
+                metrics: [
+                  { label: 'Current CGPA', value: parseFloat(currentCgpa).toFixed(2) },
+                  { label: 'Target CGPA', value: parseFloat(targetCgpa).toFixed(2) },
+                  { label: 'Remaining Credits', value: metrics.remainingCredits },
+                  { label: 'Required CGPA', value: metrics.formattedRequired }
+                ],
+                metadata: {
+                  university: university.toUpperCase(),
+                  regulation: regulation.toUpperCase()
+                }
+              }}
+              onSave={(record) => {
+                setPendingCalc(record);
+                setIsModalOpen(true);
+              }}
             />
 
             {/* Recent Targets Card */}
@@ -487,8 +623,8 @@ export default function TargetCGPACalculator() {
           </aside>
         </div>
 
-        {/* Dynamic Comparison Bar Chart (Current vs Required vs Target) */}
-        <section className="rounded-2xl bg-card border border-border p-4 sm:p-5 shadow-subtle space-y-3" aria-label="CGPA Progress Visualization">
+        {/* Dynamic Comparison Bar Chart (Desktop / Tablet Only) */}
+        <section className="hidden lg:block rounded-2xl bg-card border border-border p-4 sm:p-5 shadow-subtle space-y-3" aria-label="CGPA Progress Visualization">
           <div className="flex items-center justify-between pb-2 border-b border-border">
             <div>
               <h3 className="text-sm font-bold text-text-h">CGPA Progress Visualization</h3>
@@ -549,7 +685,16 @@ export default function TargetCGPACalculator() {
         <ExploreMoreTools />
       </main>
 
-      <SaveModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+      <SaveModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        calculationData={pendingCalc}
+        onSaveSuccess={(saved) => {
+          if (saved) {
+            dispatch(saveCalculationToHistory(saved));
+          }
+        }}
+      />
     </>
   );
 }

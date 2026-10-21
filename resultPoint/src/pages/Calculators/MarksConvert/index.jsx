@@ -20,11 +20,22 @@ import {
   Award,
   ListChecks,
   Binary,
-  Divide
+  Divide,
+  Download,
+  Share2,
+  Loader2
 } from 'lucide-react';
 import CalculatorDirectorySidebar from '../CalculatorDirectorySidebar';
 import ExploreMoreTools from '../ExploreMoreTools';
+import MobileResultModal from '../MobileResultModal';
+import SaveModal from '../CGPA/components/SaveModal';
 import { useToast } from '../../../context/ToastContext';
+import { useAuth } from '../../../hooks/useAuth';
+import { useAppDispatch } from '../../../hooks/useAppDispatch';
+import { saveCalculationToHistory } from '../../../features/calculation/calculationSlice';
+import { calculationSaveService } from '../../../services/calculationSaveService';
+import { downloadCalculatorPdf } from '../../../services/calculatorPdfService';
+import { shareCalculationResult } from '../../../services/calculatorShareService';
 
 const CONVERSION_SPECS = {
   'percentage-to-cgpa': {
@@ -204,9 +215,28 @@ const CONVERSION_SPECS = {
 };
 
 export default function MarksConvert() {
+  const { user, isAuthenticated } = useAuth();
+  const dispatch = useAppDispatch();
+  const { showToast } = useToast();
+
   const [activeConvKey, setActiveConvKey] = useState('percentage-to-cgpa');
   const [university, setUniversity] = useState('osmania');
   const [gradingScale, setGradingScale] = useState('10-point');
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isResultModalOpen, setIsResultModalOpen] = useState(false);
+  const [pendingCalc, setPendingCalc] = useState(null);
+  const [validationError, setValidationError] = useState('');
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const [isSharing, setIsSharing] = useState(false);
+
+  const handleConvert = () => {
+    if (!conversionResult || !conversionResult.outputNum) {
+      setValidationError('Please enter valid numeric values for conversion.');
+      return;
+    }
+    setValidationError('');
+    setIsResultModalOpen(true);
+  };
   const [inputValues, setInputValues] = useState({
     input_percentage: 78.5,
     input_cgpa: 8.0,
@@ -216,8 +246,6 @@ export default function MarksConvert() {
     input_marks: 82,
     input_grade_select: 'A+'
   });
-
-  const { showToast } = useToast();
 
   const activeSpec = CONVERSION_SPECS[activeConvKey];
 
@@ -245,20 +273,114 @@ export default function MarksConvert() {
 
   const handleSaveResult = () => {
     if (!conversionResult) return;
-    const record = {
-      conversion: activeSpec.name,
-      inputValue: conversionResult.inputDisplay,
-      outputValue: conversionResult.outputNum,
-      university,
-      timestamp: new Date().toISOString()
+    const calcRecord = {
+      calculatorType: 'Marks Convert',
+      title: activeSpec.name,
+      score: conversionResult.outputNum,
+      scale: activeSpec.targetScaleText || '10.0',
+      result: `${conversionResult.inputDisplay} ➔ ${conversionResult.outputDisplay}`,
+      standing: 'Converted',
+      summary: `${activeSpec.name}: ${conversionResult.inputDisplay} = ${conversionResult.outputDisplay} (${university.toUpperCase()})`,
+      data: {
+        conversionKey: activeConvKey,
+        conversionName: activeSpec.name,
+        inputDisplay: conversionResult.inputDisplay,
+        outputDisplay: conversionResult.outputDisplay,
+        outputNum: conversionResult.outputNum,
+        formula: conversionResult.formulaEq,
+        calculation: conversionResult.formulaCalc,
+        university,
+      },
     };
+
+    if (isAuthenticated) {
+      const res = calculationSaveService.saveCalculation(calcRecord, user);
+      if (res.success) {
+        dispatch(saveCalculationToHistory(res.record));
+        showToast('Conversion saved to your history!');
+      } else {
+        showToast(res.error || 'Failed to save calculation');
+      }
+    } else {
+      setPendingCalc(calcRecord);
+      calculationSaveService.setPendingCalculation(calcRecord);
+      setIsModalOpen(true);
+    }
+  };
+
+  const handleDownloadPdf = async () => {
+    if (!conversionResult || isGeneratingPdf) return;
+    setIsGeneratingPdf(true);
     try {
-      const existing = JSON.parse(localStorage.getItem('resultpoint_saved_conversions') || '[]');
-      existing.unshift(record);
-      localStorage.setItem('resultpoint_saved_conversions', JSON.stringify(existing.slice(0, 10)));
-      showToast('Conversion saved to your study profile!');
-    } catch {
-      showToast('Result recorded for this session.');
+      const pdfData = {
+        calculatorName: `${activeSpec.name} Conversion Card`,
+        subtitle: 'Calculated using official university conversion standards',
+        filename: `ResultPoint_${activeSpec.name.replace(/[^a-zA-Z0-9]/g, '_')}_Result.pdf`,
+        score: conversionResult.outputNum,
+        maxScale: activeSpec.targetScaleText,
+        standing: 'Converted Successfully',
+        metadata: {
+          university: university.toUpperCase(),
+          conversionType: activeSpec.name,
+          sourceType: activeSpec.sourceType.toUpperCase(),
+          targetLabel: activeSpec.targetLabel,
+          calculationMethod: 'Equivalence Standard Formula',
+          gradingSystem: gradingScale
+        },
+        metrics: [
+          { label: 'Input Expression', value: conversionResult.inputDisplay },
+          { label: 'Converted Output', value: conversionResult.outputDisplay },
+          { label: 'Grading Scale', value: gradingScale },
+          { label: 'University Standard', value: university.toUpperCase() }
+        ],
+        subjectRows: [
+          { param: 'Conversion Type', value: activeSpec.name },
+          { param: 'Input Expression', value: conversionResult.inputDisplay },
+          { param: 'Converted Equivalent', value: conversionResult.outputDisplay },
+          { param: 'Formula Applied', value: conversionResult.formulaEq },
+          { param: 'Mathematical Derivation', value: conversionResult.formulaCalc },
+          { param: 'Applicable University', value: university.toUpperCase() },
+          { param: 'Curriculum Guidance', value: conversionResult.noteText }
+        ]
+      };
+      downloadCalculatorPdf(pdfData);
+      showToast('PDF downloaded successfully!');
+    } catch (err) {
+      console.error('PDF generation error:', err);
+      showToast('Failed to download PDF. Please try again.', 'error');
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  };
+
+  const handleShareResult = async () => {
+    if (!conversionResult || isSharing) return;
+    setIsSharing(true);
+    try {
+      const shareData = {
+        toolName: activeSpec.name,
+        score: conversionResult.outputNum,
+        scaleText: activeSpec.targetScaleText,
+        metrics: [
+          { label: 'Input', value: conversionResult.inputDisplay },
+          { label: 'Converted', value: conversionResult.outputDisplay },
+          { label: 'Formula', value: conversionResult.formulaEq }
+        ],
+        metadata: {
+          university: university.toUpperCase()
+        }
+      };
+      const res = await shareCalculationResult(shareData);
+      if (res.success) {
+        showToast(res.message);
+      } else if (!res.cancelled) {
+        showToast(res.message || 'Unable to share result.', 'error');
+      }
+    } catch (err) {
+      console.error('Share error:', err);
+      showToast('Failed to share result.', 'error');
+    } finally {
+      setIsSharing(false);
     }
   };
 
@@ -475,7 +597,7 @@ export default function MarksConvert() {
                 <div className="pt-2 flex items-center gap-2.5">
                   <button
                     type="button"
-                    onClick={() => showToast('Conversion updated instantly!')}
+                    onClick={handleConvert}
                     className="flex-1 py-2.5 px-4 rounded-xl bg-accent hover:bg-accent-hover text-white font-bold text-xs shadow-accent active:scale-95 transition-all flex items-center justify-center gap-2"
                   >
                     <span>Convert Now</span>
@@ -494,6 +616,7 @@ export default function MarksConvert() {
                         input_marks: 82,
                         input_grade_select: 'A+'
                       });
+                      setValidationError('');
                       showToast('Form reset to default parameters.');
                     }}
                     className="px-4 py-2.5 rounded-xl border border-border bg-card hover:bg-bg-sec text-text-m hover:text-text-h font-semibold text-xs transition-all flex items-center gap-1.5"
@@ -502,6 +625,9 @@ export default function MarksConvert() {
                     <span>Reset</span>
                   </button>
                 </div>
+                {validationError && (
+                  <p className="text-[11px] text-brandPink mt-2 text-center font-medium">{validationError}</p>
+                )}
               </div>
             </div>
 
@@ -560,30 +686,60 @@ export default function MarksConvert() {
                   <div className="text-[11px] text-accent font-mono">{conversionResult.formulaCalc}</div>
                 </div>
 
-                <div className="flex items-center gap-2 pt-1">
-                  <button
-                    type="button"
-                    onClick={handleCopyResult}
-                    className="flex-1 py-2 px-3 rounded-xl border border-border bg-card hover:bg-bg-sec text-text-h text-xs font-semibold transition-all flex items-center justify-center gap-1.5"
-                  >
-                    <Copy className="w-3.5 h-3.5" />
-                    <span>Copy Result</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleSaveResult}
-                    className="flex-1 py-2 px-3 rounded-xl border border-border bg-card hover:bg-bg-sec text-text-h text-xs font-semibold transition-all flex items-center justify-center gap-1.5"
-                  >
-                    <Bookmark className="w-3.5 h-3.5" />
-                    <span>Save Result</span>
-                  </button>
+                <div className="pt-2 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleSaveResult}
+                      className="flex-1 py-2 px-3 rounded-xl bg-accent hover:bg-accent-hover text-white text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-accent active:scale-95 cursor-pointer"
+                    >
+                      <Bookmark className="w-3.5 h-3.5" />
+                      <span>Save Result</span>
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isGeneratingPdf}
+                      onClick={handleDownloadPdf}
+                      className="flex-1 py-2 px-3 rounded-xl border border-border bg-card hover:bg-bg-sec text-text-h text-xs font-semibold transition-all flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer disabled:opacity-50"
+                      title="Download genuine conversion PDF"
+                    >
+                      {isGeneratingPdf ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Download className="w-3.5 h-3.5 text-accent" />
+                      )}
+                      <span>{isGeneratingPdf ? 'Generating...' : 'Download PDF'}</span>
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={isSharing}
+                      onClick={handleShareResult}
+                      className="flex-1 py-2 px-3 rounded-xl border border-border bg-card hover:bg-bg-sec text-text-h text-xs font-semibold transition-all flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer disabled:opacity-50"
+                      title="Share conversion summary"
+                    >
+                      <Share2 className="w-3.5 h-3.5 text-accent" />
+                      <span>Share Result</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCopyResult}
+                      className="flex-1 py-2 px-3 rounded-xl border border-border bg-card hover:bg-bg-sec text-text-h text-xs font-semibold transition-all flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer"
+                      title="Copy result and formula"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>Copy Summary</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
           </section>
 
-          {/* Column 3: Right Sidebar with Popular Conversions & Tips */}
-          <aside className="lg:col-span-3 space-y-4" aria-label="Popular Conversions">
+          {/* Column 3: Right Sidebar with Popular Conversions & Tips (Desktop / Tablet Only) */}
+          <aside className="hidden lg:block lg:col-span-3 space-y-4" aria-label="Popular Conversions">
             <div className="rounded-2xl bg-card border border-border p-4 shadow-subtle space-y-3">
               <div className="flex items-center gap-2 pb-2 border-b border-border">
                 <div className="w-6 h-6 rounded-lg bg-orange-500/10 text-accent flex items-center justify-center text-xs">
@@ -770,6 +926,55 @@ export default function MarksConvert() {
         {/* Reusable Explore More Tools */}
         <ExploreMoreTools />
       </main>
+
+      {/* Save Modal */}
+      <SaveModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        calculationData={pendingCalc}
+        onSaveSuccess={(saved) => {
+          if (saved) {
+            dispatch(saveCalculationToHistory(saved));
+          }
+        }}
+      />
+
+      {/* Mobile Result Modal */}
+      {conversionResult && (
+        <MobileResultModal
+          isOpen={isResultModalOpen}
+          onClose={() => setIsResultModalOpen(false)}
+          title={activeSpec.name.toUpperCase()}
+          score={conversionResult.outputNum}
+          maxScale={activeSpec.targetScaleText}
+          standing={{
+            icon: '🔄',
+            text: `${activeSpec.targetLabel}: ${conversionResult.outputDisplay}`,
+            narrative: `Converted ${conversionResult.inputDisplay} to ${conversionResult.outputDisplay} using ${university.toUpperCase()} standard formula.`
+          }}
+          metrics={[
+            { label: `Input ${activeSpec.sourceType.toUpperCase()}`, value: conversionResult.inputDisplay },
+            { label: `Converted ${activeSpec.targetLabel}`, value: conversionResult.outputDisplay },
+            { label: 'Grading System', value: gradingScale },
+            { label: 'Formula Used', value: conversionResult.formulaEq },
+            { label: 'University', value: university.toUpperCase() }
+          ]}
+          metadata={{
+            university: university.toUpperCase(),
+            conversionType: activeSpec.name,
+            sourceType: activeSpec.sourceType.toUpperCase(),
+            targetLabel: activeSpec.targetLabel,
+            calculationMethod: 'Equivalence Standard Formula',
+            gradingSystem: gradingScale
+          }}
+          calculationMethod={conversionResult.formulaEq}
+          onSave={handleSaveResult}
+          onDownloadPdf={handleDownloadPdf}
+          onShareResult={handleShareResult}
+          isGeneratingPdf={isGeneratingPdf}
+          isSharing={isSharing}
+        />
+      )}
     </>
   );
 }

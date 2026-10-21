@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useState, useMemo, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import {
   FileText,
   Search,
@@ -11,70 +11,79 @@ import {
   Trash2,
   X,
   Check,
-  AlertTriangle
+  AlertTriangle,
+  Award,
+  TrendingUp,
+  GraduationCap,
+  Sparkles,
+  Percent
 } from 'lucide-react';
 import { resultService, DEMO_STUDENT_RESULTS } from '../../services/resultService';
+import { studentService } from '../../services/studentService';
 import ResultStatusBadge from '../../components/student/ResultStatusBadge';
 import AcademicProfileGate from '../../components/student/AcademicProfileGate';
 import { useToast } from '../../context/ToastContext';
-
-/**
- * Standard Demo Results definition (prepared for future API swap)
- */
-export const demoResults = DEMO_STUDENT_RESULTS.map((r) => ({
-  id: r.id,
-  semesterNumber: r.semesterNumber,
-  semesterLabel: r.semesterLabel || `Semester ${r.semesterNumber}`,
-  semesterTitle: r.semesterTitle || r.semesterLabel || `Semester ${r.semesterNumber}`,
-  academicPeriod: r.academicPeriod,
-  subjectCount: r.subjectCount || (r.subjects ? r.subjects.length : 6),
-  totalCredits: r.totalCredits || r.creditsEarned || 21,
-  creditsEarned: r.creditsEarned || r.totalCredits || 21,
-  sgpa: Number(r.sgpa) || 0,
-  cgpa: Number(r.cgpa || r.sgpa) || 0,
-  status: r.status || 'Good',
-  subjects: r.subjects || []
-}));
-
-/**
- * Data-access function - bridges to resultService or backend API
- */
-export function getStudentResults() {
-  if (typeof resultService !== 'undefined' && resultService.getStudentResults) {
-    return resultService.getStudentResults();
-  }
-  return demoResults;
-}
+import { useAppDispatch } from '../../hooks/useAppDispatch';
+import { useAppSelector } from '../../hooks/useAppSelector';
+import {
+  selectResults,
+  fetchResults,
+  updateSemesterResult,
+  deleteSemesterResult,
+} from '../../features/results/resultsSlice';
+import {
+  selectAcademicProfile,
+  fetchAcademicProfile,
+} from '../../features/academicProfile/academicProfileSlice';
+import { selectDecimalPrecision } from '../../features/settings/settingsSlice';
 
 export default function MyResults() {
-  const navigate = useNavigate();
+  const dispatch = useAppDispatch();
   const { showToast } = useToast();
+
+  const reduxResults = useAppSelector(selectResults);
+  const reduxProfile = useAppSelector(selectAcademicProfile);
+  const decimalPrecision = useAppSelector(selectDecimalPrecision);
+
+  // Sync fresh results and profile from store and storage events
+  useEffect(() => {
+    dispatch(fetchResults());
+    dispatch(fetchAcademicProfile());
+
+    const handleSync = () => {
+      dispatch(fetchResults());
+      dispatch(fetchAcademicProfile());
+    };
+
+    window.addEventListener('results_data_updated', handleSync);
+    window.addEventListener('storage', handleSync);
+    return () => {
+      window.removeEventListener('results_data_updated', handleSync);
+      window.removeEventListener('storage', handleSync);
+    };
+  }, [dispatch]);
+
+  const profile = useMemo(() => ({
+    ...studentService.getProfile(),
+    ...(reduxProfile || {}),
+  }), [reduxProfile]);
 
   // Filter & Search states
   const [searchQuery, setSearchQuery] = useState('');
   const [semesterFilter, setSemesterFilter] = useState('ALL');
   const [sortBy, setSortBy] = useState('LATEST');
 
-  // Load results from data-access layer
-  const [results, setResults] = useState(() => getStudentResults());
+  // Load results from Redux or data-access layer fallback
+  const results = reduxResults && reduxResults.length > 0 ? reduxResults : resultService.getAllResults();
 
-  // Modal states for Edit and Delete
-  const [editingResult, setEditingResult] = useState(null);
+  // Calculate real-time academic summaries (SGPA, CGPA, GPA, percentage, overall grade)
+  const summary = useMemo(() => {
+    return studentService.getAcademicSummary(profile, results);
+  }, [profile, results]);
+
+  // Modal state for Delete
   const [deletingResult, setDeletingResult] = useState(null);
-
-  // Dynamic Date Display matching the reference image ("Sunday, 04 Oct 2026")
-  const currentDate = useMemo(() => {
-    try {
-      return new Intl.DateTimeFormat('en-GB', {
-        weekday: 'long',
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric'
-      }).format(new Date());
-    } catch {
-      return 'Sunday, 04 Oct 2026';
-    }
-  }, []);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   // Filter & Sort Logic
   const filteredAndSortedResults = useMemo(() => {
@@ -121,36 +130,20 @@ export default function MyResults() {
     setSortBy('LATEST');
   };
 
-  // Save changes from Edit Modal
-  const handleSaveEdit = (e) => {
-    e.preventDefault();
-    if (!editingResult) return;
-
-    const updated = {
-      semesterTitle: editingResult.semesterTitle || editingResult.semesterLabel,
-      semesterLabel: editingResult.semesterLabel || editingResult.semesterTitle,
-      academicPeriod: editingResult.academicPeriod,
-      sgpa: Number(editingResult.sgpa) || 0,
-      cgpa: Number(editingResult.cgpa || editingResult.sgpa) || 0,
-      creditsEarned: Number(editingResult.creditsEarned) || 20,
-      totalCredits: Number(editingResult.totalCredits) || 20,
-      status: editingResult.status
-    };
-
-    resultService.updateResult(editingResult.id, updated);
-    setResults(getStudentResults());
-    showToast(`${updated.semesterLabel} updated successfully!`);
-    setEditingResult(null);
-  };
-
   // Confirm delete from Delete Dialog
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (!deletingResult) return;
     const title = deletingResult.semesterLabel || deletingResult.semesterTitle || 'Semester result';
-    resultService.deleteResult(deletingResult.id);
-    setResults(getStudentResults());
-    showToast(`${title} deleted from records.`);
-    setDeletingResult(null);
+    setIsProcessing(true);
+    try {
+      await dispatch(deleteSemesterResult(deletingResult.id)).unwrap();
+      showToast(`${title} deleted from records.`);
+      setDeletingResult(null);
+    } catch (err) {
+      showToast(typeof err === 'string' ? err : err?.message || 'Failed to delete result', 'error');
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   return (
@@ -176,9 +169,122 @@ export default function MyResults() {
           </div>
         </div>
 
-        {/* Right Side: Current Date Display */}
-        <div className="text-xs sm:text-[13px] font-medium text-slate-400 dark:text-slate-500 self-start sm:self-center">
-          {currentDate}
+        {/* Course & Regulation Badge */}
+        {profile.course && (
+          <div className="text-xs font-semibold px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 self-start sm:self-auto">
+            {profile.course} • {profile.regulation || 'Regulation'}
+          </div>
+        )}
+      </div>
+
+      {/* Dynamic Academic Summary Cards (CGPA, SGPA/GPA, Converted Percentage, Overall Grade, Degree Credits) */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3.5 sm:gap-4">
+        {/* Card 1: Cumulative CGPA */}
+        <div className="p-4 rounded-2xl bg-white dark:bg-[#111418] border border-slate-200/80 dark:border-[#1E2A35] shadow-xs relative overflow-hidden">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+              Cumulative CGPA
+            </span>
+            <div className="w-8 h-8 rounded-xl bg-orange-50 dark:bg-orange-950/40 text-orange-500 flex items-center justify-center">
+              <Award className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white">
+              {summary.currentCGPA}
+            </span>
+            <span className="text-xs text-slate-400 dark:text-slate-500 font-medium">/ 10.0</span>
+          </div>
+          <div className="mt-2 flex items-center gap-1.5 text-[11px]">
+            <span className="px-2 py-0.5 rounded-full font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 truncate">
+              {summary.performanceBadge}
+            </span>
+          </div>
+        </div>
+
+        {/* Card 2: Term SGPA / GPA */}
+        <div className="p-4 rounded-2xl bg-white dark:bg-[#111418] border border-slate-200/80 dark:border-[#1E2A35] shadow-xs relative overflow-hidden">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+              Latest SGPA / GPA
+            </span>
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-500 flex items-center justify-center">
+              <TrendingUp className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-2xl sm:text-3xl font-extrabold text-emerald-600 dark:text-emerald-400">
+              {summary.latestSGPA}
+            </span>
+            <span className="text-xs text-slate-400 dark:text-slate-500 font-medium">SGPA</span>
+          </div>
+          <div className="mt-2 text-[11px] text-slate-500 dark:text-slate-400 font-medium truncate">
+            {summary.diffText}
+          </div>
+        </div>
+
+        {/* Card 3: Converted Percentage */}
+        <div className="p-4 rounded-2xl bg-white dark:bg-[#111418] border border-slate-200/80 dark:border-[#1E2A35] shadow-xs relative overflow-hidden">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+              Percentage
+            </span>
+            <div className="w-8 h-8 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-500 flex items-center justify-center">
+              <Percent className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-2xl sm:text-3xl font-extrabold text-blue-600 dark:text-blue-400">
+              {summary.percentage}%
+            </span>
+          </div>
+          <div className="mt-2 text-[11px] text-slate-500 dark:text-slate-400 font-medium truncate" title={summary.formulaDescription}>
+            {summary.percentageFormula}
+          </div>
+        </div>
+
+        {/* Card 4: Overall Grade */}
+        <div className="p-4 rounded-2xl bg-white dark:bg-[#111418] border border-slate-200/80 dark:border-[#1E2A35] shadow-xs relative overflow-hidden">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+              Overall Grade
+            </span>
+            <div className="w-8 h-8 rounded-xl bg-purple-50 dark:bg-purple-950/40 text-purple-500 flex items-center justify-center">
+              <Sparkles className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <span className="text-2xl sm:text-3xl font-extrabold text-accent">
+              {summary.overallGrade}
+            </span>
+            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-accent/10 text-accent truncate">
+              {summary.overallGradeDesc}
+            </span>
+          </div>
+          <div className="mt-2 text-[11px] text-slate-500 dark:text-slate-400 font-medium truncate">
+            University Grading Rule
+          </div>
+        </div>
+
+        {/* Card 5: Degree Credits & Completion */}
+        <div className="p-4 rounded-2xl bg-white dark:bg-[#111418] border border-slate-200/80 dark:border-[#1E2A35] shadow-xs relative overflow-hidden col-span-2 sm:col-span-1">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+              Degree Credits
+            </span>
+            <div className="w-8 h-8 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-500 flex items-center justify-center">
+              <GraduationCap className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white">
+              {summary.totalCredits}
+            </span>
+            <span className="text-xs text-slate-400 dark:text-slate-500 font-medium">/ {summary.degreeCredits}</span>
+          </div>
+          <div className="mt-2 text-[11px] text-slate-500 dark:text-slate-400 font-medium truncate">
+            {summary.semestersCompleted} of {summary.totalSemesters} Semesters
+          </div>
         </div>
       </div>
 
@@ -255,7 +361,7 @@ export default function MyResults() {
                 <th className="py-3 px-4 font-semibold">Academic Period</th>
                 <th className="py-3 px-4 font-semibold">Subjects</th>
                 <th className="py-3 px-4 font-semibold">Credits</th>
-                <th className="py-3 px-4 font-semibold">SGPA</th>
+                <th className="py-3 px-4 font-semibold">SGPA / CGPA</th>
                 <th className="py-3 px-4 font-semibold">Status</th>
                 <th className="py-3 px-4 font-semibold text-center">Actions</th>
               </tr>
@@ -287,9 +393,14 @@ export default function MyResults() {
                       {result.totalCredits}
                     </td>
 
-                    {/* 5. SGPA */}
-                    <td className="py-4 px-4 font-bold text-[#16A34A] dark:text-[#22C55E]">
-                      {Number(result.sgpa).toFixed(2)}
+                    {/* 5. SGPA & Progressive CGPA */}
+                    <td className="py-4 px-4">
+                      <div className="font-bold text-[#16A34A] dark:text-[#22C55E]">
+                        {Number(result.sgpa).toFixed(decimalPrecision || 2)} <span className="text-[10px] font-semibold text-slate-400">SGPA</span>
+                      </div>
+                      <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                        CGPA: <strong className="text-slate-700 dark:text-slate-200">{Number(result.cgpa || result.sgpa).toFixed(decimalPrecision || 2)}</strong>
+                      </div>
                     </td>
 
                     {/* 6. Status Badge */}
@@ -313,15 +424,15 @@ export default function MyResults() {
                           <span>View</span>
                         </Link>
 
-                        {/* 2. Edit Button */}
-                        <button
-                          onClick={() => setEditingResult({ ...result })}
+                        {/* 2. Edit Button - Navigates to AddResult in edit mode */}
+                        <Link
+                          to={`/student/edit-result/${result.id}`}
                           title="Edit semester result"
                           className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 dark:hover:bg-amber-900/60 text-amber-700 dark:text-amber-300 transition-colors cursor-pointer"
                         >
                           <Pencil className="w-3.5 h-3.5" />
                           <span>Edit</span>
-                        </button>
+                        </Link>
 
                         {/* 3. Delete Button */}
                         <button
@@ -366,186 +477,7 @@ export default function MyResults() {
         </div>
       </div>
 
-      {/* ================= EDIT SEMESTER MODAL ================= */}
-      {editingResult && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="w-full max-w-lg bg-white dark:bg-[#111418] border border-slate-200 dark:border-[#1E2A35] rounded-2xl shadow-xl overflow-hidden">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-[#1E2A35]">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 flex items-center justify-center">
-                  <Pencil className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                    Edit Semester Result
-                  </h3>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                    Update score and performance details
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setEditingResult(null)}
-                className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
 
-            {/* Modal Form */}
-            <form onSubmit={handleSaveEdit} className="p-6 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Semester Title
-                  </label>
-                  <input
-                    type="text"
-                    value={editingResult.semesterLabel || editingResult.semesterTitle || ''}
-                    onChange={(e) =>
-                      setEditingResult({
-                        ...editingResult,
-                        semesterLabel: e.target.value,
-                        semesterTitle: e.target.value
-                      })
-                    }
-                    required
-                    className="w-full px-3 py-2 rounded-xl text-xs bg-slate-50 dark:bg-[#0D141F] border border-slate-200 dark:border-[#1E2A35] text-slate-900 dark:text-white focus:outline-none focus:border-orange-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Academic Period
-                  </label>
-                  <input
-                    type="text"
-                    value={editingResult.academicPeriod || ''}
-                    onChange={(e) =>
-                      setEditingResult({ ...editingResult, academicPeriod: e.target.value })
-                    }
-                    required
-                    placeholder="e.g. Sep 2026"
-                    className="w-full px-3 py-2 rounded-xl text-xs bg-slate-50 dark:bg-[#0D141F] border border-slate-200 dark:border-[#1E2A35] text-slate-900 dark:text-white focus:outline-none focus:border-orange-500"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    SGPA
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    max="10"
-                    value={editingResult.sgpa || ''}
-                    onChange={(e) =>
-                      setEditingResult({ ...editingResult, sgpa: e.target.value })
-                    }
-                    required
-                    className="w-full px-3 py-2 rounded-xl text-xs bg-slate-50 dark:bg-[#0D141F] border border-slate-200 dark:border-[#1E2A35] text-slate-900 dark:text-white focus:outline-none focus:border-orange-500 font-bold text-emerald-600 dark:text-emerald-400"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    CGPA
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    max="10"
-                    value={editingResult.cgpa || editingResult.sgpa || ''}
-                    onChange={(e) =>
-                      setEditingResult({ ...editingResult, cgpa: e.target.value })
-                    }
-                    required
-                    className="w-full px-3 py-2 rounded-xl text-xs bg-slate-50 dark:bg-[#0D141F] border border-slate-200 dark:border-[#1E2A35] text-slate-900 dark:text-white focus:outline-none focus:border-orange-500 font-bold text-orange-500"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Credits Earned
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="50"
-                    value={editingResult.creditsEarned || editingResult.totalCredits || ''}
-                    onChange={(e) =>
-                      setEditingResult({ ...editingResult, creditsEarned: e.target.value })
-                    }
-                    required
-                    className="w-full px-3 py-2 rounded-xl text-xs bg-slate-50 dark:bg-[#0D141F] border border-slate-200 dark:border-[#1E2A35] text-slate-900 dark:text-white focus:outline-none focus:border-orange-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Total Subject Credits
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="50"
-                    value={editingResult.totalCredits || ''}
-                    onChange={(e) =>
-                      setEditingResult({ ...editingResult, totalCredits: e.target.value })
-                    }
-                    required
-                    className="w-full px-3 py-2 rounded-xl text-xs bg-slate-50 dark:bg-[#0D141F] border border-slate-200 dark:border-[#1E2A35] text-slate-900 dark:text-white focus:outline-none focus:border-orange-500"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Result Status
-                </label>
-                <select
-                  value={editingResult.status || 'Good'}
-                  onChange={(e) =>
-                    setEditingResult({ ...editingResult, status: e.target.value })
-                  }
-                  className="w-full px-3 py-2 rounded-xl text-xs bg-slate-50 dark:bg-[#0D141F] border border-slate-200 dark:border-[#1E2A35] text-slate-900 dark:text-white focus:outline-none focus:border-orange-500 cursor-pointer"
-                >
-                  <option value="Excellent">Excellent</option>
-                  <option value="Very Good">Very Good</option>
-                  <option value="Good">Good</option>
-                  <option value="Passed">Passed</option>
-                  <option value="Failed">Failed</option>
-                </select>
-              </div>
-
-              {/* Modal Actions */}
-              <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-slate-100 dark:border-[#1E2A35]">
-                <button
-                  type="button"
-                  onClick={() => setEditingResult(null)}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white bg-accent hover:bg-accent-hover shadow-sm transition-all"
-                >
-                  <Check className="w-3.5 h-3.5" />
-                  <span>Save Changes</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* ================= DELETE CONFIRMATION MODAL ================= */}
       {deletingResult && (

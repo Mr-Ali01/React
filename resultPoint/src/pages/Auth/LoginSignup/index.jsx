@@ -23,8 +23,15 @@ import {
 import { useToast } from '../../../context/ToastContext';
 import { authService } from '../../../services/authService';
 import ThemeToggle from '../../../components/ThemeToggle';
+import PendingCalculationBanner from '../../../components/common/PendingCalculationBanner';
+import { useAppDispatch } from '../../../hooks/useAppDispatch';
+import { loginUser, registerUser } from '../../../features/auth/authSlice';
+import { fetchAcademicProfile } from '../../../features/academicProfile/academicProfileSlice';
+import { saveCalculationToHistory } from '../../../features/calculation/calculationSlice';
+import { calculationSaveService } from '../../../services/calculationSaveService';
 
 export default function LoginSignup() {
+  const dispatch = useAppDispatch();
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState('login');
   const [loginRole, setLoginRole] = useState('student'); // 'student' | 'admin'
@@ -86,41 +93,43 @@ export default function LoginSignup() {
     if (Object.keys(errors).length > 0) return;
 
     setIsLoggingIn(true);
-    setTimeout(() => {
-      setIsLoggingIn(false);
-      const res = authService.login({
+    dispatch(
+      loginUser({
         email: loginForm.email,
-        password: loginForm.password
-      });
-
-      if (res.success) {
-        if (loginRole === 'admin') {
-          if (res.user.role !== 'admin') {
-            setLoginErrors({ general: 'This account does not have administrator privileges. Please switch to Student Login.' });
-            showToast('Access denied: Administrator privileges required.');
-            return;
-          }
-          showToast(`Welcome to Admin Panel, ${res.user.fullName}!`);
+        password: loginForm.password,
+        expectedRole: loginRole === 'admin' ? 'admin' : 'student',
+      })
+    )
+      .unwrap()
+      .then((data) => {
+        setIsLoggingIn(false);
+        dispatch(fetchAcademicProfile());
+        const user = data.user;
+        if (user.role === 'admin') {
+          showToast(`Welcome to Admin Panel, ${user.fullName}!`);
           navigate('/admin/dashboard');
         } else {
-          // Student role flow
-          if (res.user.role === 'admin') {
-            showToast(`Administrator account authenticated. Navigating to Admin Dashboard...`);
-            navigate('/admin/dashboard');
+          // Check for and persist any pending calculation from visitor session
+          const pendingSave = calculationSaveService.savePendingCalculationForUser(user);
+          if (pendingSave && pendingSave.success && pendingSave.record) {
+            dispatch(saveCalculationToHistory(pendingSave.record));
+            showToast(`Welcome back, ${user.fullName}! Your ${pendingSave.record.calculatorType || 'calculation'} was saved.`);
           } else {
-            showToast(`Welcome back, ${res.user.fullName}!`);
-            if (!res.user.hasCompletedProfile) {
-              navigate('/student/profile-setup');
-            } else {
-              navigate('/student/dashboard');
-            }
+            showToast(`Welcome back, ${user.fullName}!`);
+          }
+
+          if (!user.hasCompletedProfile) {
+            navigate('/student/profile-setup');
+          } else {
+            navigate('/student/dashboard');
           }
         }
-      } else {
-        setLoginErrors({ general: res.error });
-        showToast(res.error);
-      }
-    }, 600);
+      })
+      .catch((err) => {
+        setIsLoggingIn(false);
+        setLoginErrors({ general: err });
+        showToast(err);
+      });
   };
 
   // Sign Up Submit Handler
@@ -158,36 +167,40 @@ export default function LoginSignup() {
     if (Object.keys(errors).length > 0) return;
 
     setIsSigningUp(true);
-    setTimeout(() => {
-      setIsSigningUp(false);
-      const res = authService.register({
+    dispatch(
+      registerUser({
         fullName: signupForm.fullName,
         email: signupForm.email,
-        password: signupForm.password
-      });
-
-      if (res.success) {
-        showToast(`Account successfully created! Please configure your academic profile.`);
-        if (!res.user.hasCompletedProfile) {
+        password: signupForm.password,
+      })
+    )
+      .unwrap()
+      .then((data) => {
+        setIsSigningUp(false);
+        dispatch(fetchAcademicProfile());
+        const user = data.user;
+        const pendingSave = calculationSaveService.savePendingCalculationForUser(user);
+        if (pendingSave && pendingSave.success && pendingSave.record) {
+          dispatch(saveCalculationToHistory(pendingSave.record));
+          showToast(`Account created! Your ${pendingSave.record.calculatorType || 'calculation'} was saved to your history.`);
+        } else {
+          showToast(`Account successfully created! Please configure your academic profile.`);
+        }
+        if (!data.user.hasCompletedProfile) {
           navigate('/student/profile-setup');
         } else {
           navigate('/student/dashboard');
         }
-      } else {
-        setSignupErrors({ email: res.error, general: res.error });
-        showToast(res.error);
-      }
-    }, 600);
+      })
+      .catch((err) => {
+        setIsSigningUp(false);
+        setSignupErrors({ email: err, general: err });
+        showToast(err);
+      });
   };
 
   const handleSocialLogin = (provider) => {
-    showToast(`Connecting to ${provider}...`);
-    setTimeout(() => {
-      authService.initialize();
-      const user = authService.getCurrentUser();
-      showToast(`${provider} authorization successful! Welcome, ${user?.fullName || 'Student'}!`);
-      navigate('/student/dashboard');
-    }, 700);
+    showToast(`OAuth provider ${provider} is not configured for local development. Please sign in with your credentials.`);
   };
 
   const handleForgotPasswordSubmit = (e) => {
@@ -341,6 +354,9 @@ export default function LoginSignup() {
         {/* ==================== RIGHT AUTHENTICATION PANEL ==================== */}
         <div className="lg:col-span-6 bg-card p-6 sm:p-10 lg:p-12 xl:p-14 flex flex-col justify-between text-left">
           <div>
+            <div className="mb-6">
+              <PendingCalculationBanner />
+            </div>
             {/* Tabs Toggle */}
             <div className="w-full grid grid-cols-2 rounded-2xl bg-bg-sec p-1.5 mb-7 sm:mb-9 border border-border">
               <button

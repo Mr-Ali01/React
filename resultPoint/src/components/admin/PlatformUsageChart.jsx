@@ -1,15 +1,35 @@
-import React, { useState } from 'react';
-import { BarChart3 } from 'lucide-react';
-import { USAGE_CHART_SERIES } from '../../services/adminDashboardService';
+import React, { useState, useEffect } from 'react';
+import { BarChart3, Info } from 'lucide-react';
+import { adminDashboardService } from '../../services/adminDashboardService';
 
 export default function PlatformUsageChart() {
   const [activeRange, setActiveRange] = useState('Last 30 Days');
   const [hoveredIndex, setHoveredIndex] = useState(null);
+  const [chartData, setChartData] = useState(() => adminDashboardService.getUsageChartData('Last 30 Days'));
 
   const ranges = ['Last 7 Days', 'Last 30 Days', 'Last 3 Months', 'Last 1 Year'];
-  const chartData = USAGE_CHART_SERIES[activeRange] || USAGE_CHART_SERIES['Last 30 Days'];
 
-  const { labels, calculations, activeUsers, newRegistrations } = chartData;
+  useEffect(() => {
+    const refreshData = () => {
+      setChartData(adminDashboardService.getUsageChartData(activeRange));
+    };
+
+    refreshData();
+
+    window.addEventListener('storage', refreshData);
+    window.addEventListener('activity_history_updated', refreshData);
+    window.addEventListener('rp_catalog_updated', refreshData);
+    window.addEventListener('focus', refreshData);
+
+    return () => {
+      window.removeEventListener('storage', refreshData);
+      window.removeEventListener('activity_history_updated', refreshData);
+      window.removeEventListener('rp_catalog_updated', refreshData);
+      window.removeEventListener('focus', refreshData);
+    };
+  }, [activeRange]);
+
+  const { labels, calculations, activeUsers, newRegistrations, hasData } = chartData;
 
   // Chart dimensions
   const width = 640;
@@ -19,10 +39,12 @@ export default function PlatformUsageChart() {
   const plotWidth = width - padding.left - padding.right;
   const plotHeight = height - padding.top - padding.bottom;
 
-  // Y-axis scale: 0 to 5 (in thousands, K)
+  // Dynamic Y-axis scale based on real counts
+  const allValues = [...calculations, ...activeUsers, ...newRegistrations];
+  const maxVal = Math.max(...allValues, 0);
+  const maxY = maxVal > 0 ? Math.max(5, Math.ceil(maxVal * 1.2)) : 5;
   const minY = 0;
-  const maxY = 5.0;
-  const yTicks = [0, 1, 2, 3, 4, 5];
+  const yTicks = [0, Math.round(maxY * 0.25), Math.round(maxY * 0.5), Math.round(maxY * 0.75), maxY];
 
   const getX = (index) => {
     if (labels.length <= 1) return padding.left + plotWidth / 2;
@@ -132,43 +154,27 @@ export default function PlatformUsageChart() {
                   y2={y}
                   stroke="currentColor"
                   className="text-slate-100 dark:text-[#1E2A35]"
-                  strokeDasharray={tick === 0 ? 'none' : '4 4'}
                   strokeWidth="1"
+                  strokeDasharray="3 3"
                 />
                 <text
                   x={padding.left - 8}
-                  y={y + 3.5}
+                  y={y + 3}
                   textAnchor="end"
-                  className="fill-slate-400 dark:fill-slate-500 text-[10px] font-medium"
+                  className="text-[10px] fill-slate-400 dark:fill-slate-500 font-medium"
                 >
-                  {tick === 0 ? '0' : `${tick}K`}
+                  {tick}
                 </text>
               </g>
             );
           })}
 
-          {/* X-axis Labels */}
-          {labels.map((lbl, idx) => {
-            const x = getX(idx);
-            return (
-              <text
-                key={lbl}
-                x={x}
-                y={padding.top + plotHeight + 20}
-                textAnchor="middle"
-                className="fill-slate-400 dark:fill-slate-500 text-[10px] font-medium"
-              >
-                {lbl}
-              </text>
-            );
-          })}
-
-          {/* Area Gradients */}
+          {/* Area Fills under curves */}
           <path d={buildAreaPath(calculations)} fill="url(#adminCalcGrad)" />
           <path d={buildAreaPath(activeUsers)} fill="url(#adminUserGrad)" />
           <path d={buildAreaPath(newRegistrations)} fill="url(#adminRegGrad)" />
 
-          {/* Lines */}
+          {/* Smooth Lines */}
           <path
             d={buildSmoothPath(calculations)}
             fill="none"
@@ -187,11 +193,27 @@ export default function PlatformUsageChart() {
             d={buildSmoothPath(newRegistrations)}
             fill="none"
             stroke="#10B981"
-            strokeWidth="2.2"
+            strokeWidth="2"
             strokeLinecap="round"
           />
 
-          {/* Interactive Hover Guides & Data Points */}
+          {/* X-axis Labels */}
+          {labels.map((lbl, idx) => {
+            const x = getX(idx);
+            return (
+              <text
+                key={idx}
+                x={x}
+                y={padding.top + plotHeight + 18}
+                textAnchor="middle"
+                className="text-[10px] fill-slate-400 dark:fill-slate-500 font-medium"
+              >
+                {lbl}
+              </text>
+            );
+          })}
+
+          {/* Interactive Hover Nodes */}
           {labels.map((_, idx) => {
             const x = getX(idx);
             const calcY = getY(calculations[idx]);
@@ -260,6 +282,16 @@ export default function PlatformUsageChart() {
           })}
         </svg>
 
+        {/* Empty State Banner when no records exist */}
+        {!hasData && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none pb-6">
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900/80 backdrop-blur-xs border border-slate-700/60 text-slate-300 text-[11px] font-medium shadow-md">
+              <Info className="w-3.5 h-3.5 text-amber-400" />
+              <span>No recorded events in this interval yet. Live calculations will appear here.</span>
+            </div>
+          </div>
+        )}
+
         {/* Floating Tooltip when Hovered */}
         {hoveredIndex !== null && (
           <div
@@ -272,15 +304,15 @@ export default function PlatformUsageChart() {
             <div className="space-y-0.5">
               <div className="flex items-center justify-between gap-3 text-orange-400">
                 <span>Calculations:</span>
-                <span className="font-bold">{(calculations[hoveredIndex] * 1000).toLocaleString()}</span>
+                <span className="font-bold">{calculations[hoveredIndex].toLocaleString()}</span>
               </div>
               <div className="flex items-center justify-between gap-3 text-blue-400">
                 <span>Active Users:</span>
-                <span className="font-bold">{(activeUsers[hoveredIndex] * 1000).toLocaleString()}</span>
+                <span className="font-bold">{activeUsers[hoveredIndex].toLocaleString()}</span>
               </div>
               <div className="flex items-center justify-between gap-3 text-emerald-400">
                 <span>Registrations:</span>
-                <span className="font-bold">{(newRegistrations[hoveredIndex] * 1000).toLocaleString()}</span>
+                <span className="font-bold">{newRegistrations[hoveredIndex].toLocaleString()}</span>
               </div>
             </div>
           </div>

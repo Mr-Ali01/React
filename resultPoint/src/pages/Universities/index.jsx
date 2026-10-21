@@ -1,150 +1,180 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Home,
   ChevronRight,
-  ShieldCheck,
-  Scale,
-  Compass,
-  GraduationCap,
   Search,
-  ChevronDown,
-  Building2,
   MapPin,
-  Map,
+  Building2,
   BookOpen,
-  SlidersHorizontal,
+  FileCheck,
+  Calculator,
+  Award,
   ArrowRight,
   SearchX,
-  ChevronLeft,
-  Heart,
+  RotateCcw,
+  Sparkles,
+  SlidersHorizontal,
+  ChevronDown,
   X
 } from 'lucide-react';
 import { UNIVERSITIES_DATA } from '../../data/universitiesDirectoryData';
-import { useToast } from '../../context/ToastContext';
-
-const STATES = ['All', 'Delhi', 'Maharashtra', 'Karnataka', 'Tamil Nadu', 'Uttar Pradesh', 'West Bengal', 'Telangana'];
-const TYPES = ['All', 'Public', 'Private', 'Deemed'];
-const NAAC_GRADES = ['All', 'A++', 'A+', 'A'];
-const NIRF_OPTIONS = [
-  { value: 'All', label: 'All Rankings' },
-  { value: 'top5', label: 'Top 5' },
-  { value: 'top10', label: 'Top 10' },
-  { value: 'top20', label: 'Top 20' }
-];
-const EST_OPTIONS = [
-  { value: 'All', label: 'All Years' },
-  { value: 'before1950', label: 'Before 1950' },
-  { value: '1950-1980', label: '1950 - 1980' },
-  { value: 'after1980', label: 'After 1980' }
-];
+import { academicCatalogService } from '../../services/academicCatalogService';
+import UniversityEmblem from './UniversityEmblem';
 
 export default function UniversitiesDirectory() {
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedState, setSelectedState] = useState('All');
-  const [selectedType, setSelectedType] = useState('All');
-  const [selectedNaac, setSelectedNaac] = useState('All');
-  const [selectedNirf, setSelectedNirf] = useState('All');
-  const [selectedEstablished, setSelectedEstablished] = useState('All');
-  const [sortOrder, setSortOrder] = useState('popular');
-  const [currentPage, setCurrentPage] = useState(1);
-  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
-
-  const [favorites, setFavorites] = useState(() => {
-    try {
-      return new Set(JSON.parse(localStorage.getItem('resultpoint_favs') || '[]'));
-    } catch {
-      return new Set();
-    }
-  });
+  const [selectedState, setSelectedState] = useState('All States');
+  const [selectedType, setSelectedType] = useState('All Types');
+  const [catalogVersion, setCatalogVersion] = useState(0);
 
   const navigate = useNavigate();
-  const { showToast } = useToast();
-  const ITEMS_PER_PAGE = 9;
 
-  // Toggle Favorite
-  const toggleFavorite = (id, e) => {
-    e.stopPropagation();
-    e.preventDefault();
-    setFavorites((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-        showToast('Removed from your favorites');
-      } else {
-        next.add(id);
-        showToast('Saved to your favorites');
+  // Live synchronization with catalog updates and storage events
+  useEffect(() => {
+    const handleUpdate = () => setCatalogVersion((v) => v + 1);
+    window.addEventListener('rp_catalog_updated', handleUpdate);
+    window.addEventListener('storage', handleUpdate);
+    window.addEventListener('focus', handleUpdate);
+    return () => {
+      window.removeEventListener('rp_catalog_updated', handleUpdate);
+      window.removeEventListener('storage', handleUpdate);
+      window.removeEventListener('focus', handleUpdate);
+    };
+  }, []);
+
+  // Centralized dataset merged from academic catalog and static directory metadata
+  const allUniversities = useMemo(() => {
+    const catalog = academicCatalogService.getCatalog();
+    const catalogUnivs = catalog?.universities || [];
+
+    const dirMap = new Map();
+    UNIVERSITIES_DATA.forEach((u) => {
+      dirMap.set(u.id.toLowerCase(), u);
+      if (u.abbreviation) dirMap.set(u.abbreviation.toLowerCase(), u);
+      if (Array.isArray(u.aliases)) {
+        u.aliases.forEach((a) => dirMap.set(a.toLowerCase(), u));
       }
-      localStorage.setItem('resultpoint_favs', JSON.stringify([...next]));
-      return next;
     });
-  };
 
-  // Filter & Sort Logic
+    const merged = [];
+    const seenIds = new Set();
+
+    // 1. Process all catalog universities (single source of truth for administrative mutations)
+    catalogUnivs.forEach((catUniv) => {
+      const match =
+        dirMap.get((catUniv.id || '').toLowerCase()) ||
+        dirMap.get((catUniv.shortName || '').toLowerCase());
+
+      const status = catUniv.status || 'active';
+      const isArchived = status === 'archived';
+      const isInactive = status === 'inactive';
+
+      const entry = {
+        id: catUniv.id,
+        slug: catUniv.id,
+        aliases: [catUniv.shortName.toLowerCase()],
+        name: catUniv.name || match?.name || catUniv.id,
+        abbreviation: catUniv.shortName || match?.abbreviation || 'UNI',
+        state: catUniv.state || match?.state || 'Telangana',
+        city: catUniv.city || match?.city || 'Hyderabad',
+        type: catUniv.type || match?.type || 'State University',
+        logo: catUniv.logo || match?.logo || null,
+        description:
+          catUniv.description ||
+          match?.description ||
+          `Explore supported courses, academic regulations, grading rules, and result calculators for ${catUniv.name}.`,
+        academicFocus:
+          match?.academicFocus ||
+          `Official ${catUniv.shortName} degree credit evaluation, regulation rules, and CGPA calculators.`,
+        detailsRoute: match?.detailsRoute || `/universities/${catUniv.id}`,
+        status: isArchived ? 'archived' : isInactive ? 'inactive' : 'available',
+        supportedRegulations:
+          match?.supportedRegulations ||
+          Array.from(new Set((catUniv.courses || []).flatMap((c) => (c.regulations || []).map((r) => r.code)))),
+        supportedCourses:
+          match?.supportedCourses || (catUniv.courses || []).map((c) => c.shortName || c.name),
+        calculationRules: match?.calculationRules || {
+          gradingSystem: '10-Point Scale',
+          percentageFormula: 'Standard Academic Conversion',
+          sgpaRule: 'Weighted Credit Sum'
+        }
+      };
+
+      merged.push(entry);
+      seenIds.add(entry.id.toLowerCase());
+      if (entry.abbreviation) seenIds.add(entry.abbreviation.toLowerCase());
+    });
+
+    // 2. Include any static directory items not yet represented in catalog
+    UNIVERSITIES_DATA.forEach((staticUni) => {
+      if (!seenIds.has(staticUni.id.toLowerCase()) && (!staticUni.abbreviation || !seenIds.has(staticUni.abbreviation.toLowerCase()))) {
+        merged.push(staticUni);
+      }
+    });
+
+    return merged;
+  }, [catalogVersion]);
+
+  // Dynamic filter lists derived from configured data
+  const availableStates = useMemo(() => {
+    const states = Array.from(new Set(allUniversities.map((u) => u.state).filter(Boolean)));
+    return ['All States', ...states];
+  }, [allUniversities]);
+
+  const availableTypes = useMemo(() => {
+    const types = Array.from(new Set(allUniversities.map((u) => u.type).filter(Boolean)));
+    return ['All Types', ...types];
+  }, [allUniversities]);
+
+  // Real-time search and filter logic
   const filteredUniversities = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
 
-    const list = UNIVERSITIES_DATA.filter((uni) => {
+    return allUniversities.filter((uni) => {
+      // 1. Text Search matching full name, abbreviation, city, or aliases
       if (query) {
-        const matchesQuery =
-          uni.name.toLowerCase().includes(query) ||
-          uni.city.toLowerCase().includes(query) ||
-          uni.state.toLowerCase().includes(query);
-        if (!matchesQuery) return false;
+        const matchesName = uni.name.toLowerCase().includes(query);
+        const matchesAbbr = uni.abbreviation.toLowerCase().includes(query);
+        const matchesCity = uni.city ? uni.city.toLowerCase().includes(query) : false;
+        const matchesState = uni.state ? uni.state.toLowerCase().includes(query) : false;
+        const matchesAlias = Array.isArray(uni.aliases)
+          ? uni.aliases.some((alias) => alias.toLowerCase().includes(query))
+          : false;
+
+        if (!matchesName && !matchesAbbr && !matchesCity && !matchesState && !matchesAlias) {
+          return false;
+        }
       }
 
-      if (selectedState !== 'All' && uni.state !== selectedState) return false;
-      if (selectedType !== 'All' && uni.type !== selectedType) return false;
-      if (selectedNaac !== 'All' && uni.accreditation !== selectedNaac) return false;
+      // 2. State Filter
+      if (selectedState !== 'All States' && uni.state !== selectedState) {
+        return false;
+      }
 
-      if (selectedNirf === 'top5' && uni.nirfRank > 5) return false;
-      if (selectedNirf === 'top10' && uni.nirfRank > 10) return false;
-      if (selectedNirf === 'top20' && uni.nirfRank > 20) return false;
-
-      if (selectedEstablished === 'before1950' && uni.established >= 1950) return false;
-      if (selectedEstablished === '1950-1980' && (uni.established < 1950 || uni.established > 1980)) return false;
-      if (selectedEstablished === 'after1980' && uni.established <= 1980) return false;
+      // 3. Type Filter
+      if (selectedType !== 'All Types' && uni.type !== selectedType) {
+        return false;
+      }
 
       return true;
     });
+  }, [allUniversities, searchTerm, selectedState, selectedType]);
 
-    if (sortOrder === 'nirf') {
-      return list.sort((a, b) => a.nirfRank - b.nirfRank);
-    } else if (sortOrder === 'established') {
-      return list.sort((a, b) => a.established - b.established);
-    } else if (sortOrder === 'name') {
-      return list.sort((a, b) => a.name.localeCompare(b.name));
-    }
-    return list.sort((a, b) => a.nirfRank - b.nirfRank);
-  }, [searchTerm, selectedState, selectedType, selectedNaac, selectedNirf, selectedEstablished, sortOrder]);
+  const hasActiveFilters = searchTerm.trim() !== '' || selectedState !== 'All States' || selectedType !== 'All Types';
 
-  // Pagination Slice
-  const totalCount = filteredUniversities.length;
-  const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE) || 1;
-  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-  const pageItems = filteredUniversities.slice(startIndex, startIndex + ITEMS_PER_PAGE);
-
-  const resetAllFilters = () => {
+  const handleClearFilters = () => {
     setSearchTerm('');
-    setSelectedState('All');
-    setSelectedType('All');
-    setSelectedNaac('All');
-    setSelectedNirf('All');
-    setSelectedEstablished('All');
-    setSortOrder('popular');
-    setCurrentPage(1);
-    setMobileDrawerOpen(false);
+    setSelectedState('All States');
+    setSelectedType('All Types');
   };
 
-//   const handleCardClick = (uniId) => {
-//     showToast(`Loading curriculum for ${uniId.replace('-', ' ').toUpperCase()}`);
-//     navigate(`/calculators/cgpa#${uniId}`);
-//   };
-const handleCardClick = (uniId) => {
-  // Navigate to the details route
-  navigate(`/universities/details`);
-  // Or dynamic: navigate(`/universities/${uniId}`);
-};
+  const handleCardClick = (route) => {
+    if (route) {
+      navigate(route);
+    }
+  };
+
   return (
     <>
       {/* Breadcrumb Navigation */}
@@ -156,724 +186,298 @@ const handleCardClick = (uniId) => {
               <Link to="/" className="hover:text-accent transition-colors">Home</Link>
             </li>
             <li><ChevronRight className="w-3 h-3 text-text-light" /></li>
-            <li className="font-semibold text-text-h" aria-current="page">Universities</li>
+            <li className="font-bold text-text-h" aria-current="page">Universities</li>
           </ol>
         </div>
       </nav>
 
-      <main className="flex-grow max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 w-full space-y-7">
-        {/* Hero Section */}
-        <section className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center pt-2 pb-1">
-          <div className="lg:col-span-7 space-y-4 text-left">
-            <h1 className="text-3xl sm:text-4xl lg:text-[44px] font-extrabold text-text-h tracking-tight leading-[1.18]">
+      <main className="flex-grow max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 w-full space-y-6">
+        {/* ========================================================= */}
+        {/* SECTION A: PAGE HEADER & ACADEMIC FEATURE HIGHLIGHTS     */}
+        {/* ========================================================= */}
+        <section aria-label="Universities Directory Header" className="space-y-5 pt-1">
+          <div className="space-y-2.5 text-left max-w-3xl">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold text-accent bg-accent-soft border border-accent/25">
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Official Academic Curricula & Calculation Rules</span>
+            </div>
+            <h1 className="text-3xl sm:text-4xl lg:text-4xl font-extrabold text-text-h tracking-tight leading-tight">
               Universities in <span className="text-accent">India</span>
             </h1>
-
-            <p className="text-sm sm:text-[15px] text-text-m leading-relaxed max-w-xl">
-              Find and explore top universities across India. Get details about courses, regulations, grading systems and more.
+            <p className="text-sm sm:text-base text-text-m leading-relaxed">
+              Explore university grading systems, regulations, supported courses, and calculation rules.
             </p>
-
-            {/* 3 Compact Benefit Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3">
-              <div className="flex items-center gap-3 p-2.5 rounded-xl bg-card border border-border shadow-subtle">
-                <div className="w-9 h-9 rounded-lg bg-orange-500/10 text-accent flex items-center justify-center shrink-0">
-                  <ShieldCheck className="w-4 h-4" />
-                </div>
-                <div>
-                  <div className="text-xs font-bold text-text-h">Verified Information</div>
-                  <div className="text-[10.5px] text-text-m">Accurate & up to date</div>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3 p-2.5 rounded-xl bg-card border border-border shadow-subtle">
-                <div className="w-9 h-9 rounded-lg bg-emerald-500/10 text-brandGreen flex items-center justify-center shrink-0">
-                  <Scale className="w-4 h-4" />
-                </div>
-                <div>
-                  <div className="text-xs font-bold text-text-h">Compare Easily</div>
-                  <div className="text-[10.5px] text-text-m">Make informed choices</div>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3 p-2.5 rounded-xl bg-card border border-border shadow-subtle">
-                <div className="w-9 h-9 rounded-lg bg-purple-500/10 text-brandPurple flex items-center justify-center shrink-0">
-                  <Compass className="w-4 h-4" />
-                </div>
-                <div>
-                  <div className="text-xs font-bold text-text-h">Plan Your Future</div>
-                  <div className="text-[10.5px] text-text-m">Find the right university</div>
-                </div>
-              </div>
-            </div>
           </div>
 
-          {/* Right Column: Campus Showcase Graphic */}
-          <div className="lg:col-span-5 relative flex items-center justify-center pt-3 lg:pt-0">
-            <div className="relative w-full max-w-[430px] rounded-3xl overflow-hidden shadow-theme border border-border bg-card p-2.5">
-              <div className="relative rounded-2xl overflow-hidden aspect-[16/9] bg-bg-sec">
-                <img
-                  src="https://images.unsplash.com/photo-1541339907198-e08756dedf3f?auto=format&fit=crop&w=800&q=80"
-                  alt="Indian University Campus Hall"
-                  className="w-full h-full object-cover"
-                  loading="eager"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent"></div>
+          {/* 4 Compact Academic Feature Highlights */}
+          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
+            <div className="flex items-center gap-3 p-3 rounded-2xl bg-card border border-border shadow-subtle hover:border-accent/30 transition-colors">
+              <div className="w-10 h-10 rounded-xl bg-orange-500/10 text-accent flex items-center justify-center shrink-0">
+                <Award className="w-5 h-5" />
               </div>
-
-              {/* Floating Badge */}
-              <div className="absolute -top-2 left-6 z-20 bg-card border border-border shadow-subtle px-3.5 py-1.5 rounded-full flex items-center gap-2">
-                <div className="w-5 h-5 rounded-md bg-accent text-white flex items-center justify-center text-[10px]">
-                  <GraduationCap className="w-3.5 h-3.5" />
-                </div>
-                <div className="text-left leading-none">
-                  <span className="text-xs font-extrabold text-text-h">100+</span>
-                  <span className="text-[9px] text-text-m block">Universities</span>
-                </div>
+              <div className="min-w-0 text-left">
+                <div className="text-xs font-bold text-text-h truncate">University Grading Systems</div>
+                <div className="text-[11px] text-text-m truncate">10-point, CBCS & scales</div>
               </div>
+            </div>
 
-              <div className="mt-2 text-right px-2">
-                <span className="text-text-h font-bold text-xs tracking-wide italic">
-                  “Better Education, Brighter Futures”
-                </span>
+            <div className="flex items-center gap-3 p-3 rounded-2xl bg-card border border-border shadow-subtle hover:border-accent/30 transition-colors">
+              <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-brandBlue flex items-center justify-center shrink-0">
+                <BookOpen className="w-5 h-5" />
+              </div>
+              <div className="min-w-0 text-left">
+                <div className="text-xs font-bold text-text-h truncate">Supported Courses</div>
+                <div className="text-[11px] text-text-m truncate">B.Tech, BCA, MCA programs</div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 p-3 rounded-2xl bg-card border border-border shadow-subtle hover:border-accent/30 transition-colors">
+              <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-brandGreen flex items-center justify-center shrink-0">
+                <FileCheck className="w-5 h-5" />
+              </div>
+              <div className="min-w-0 text-left">
+                <div className="text-xs font-bold text-text-h truncate">Academic Regulations</div>
+                <div className="text-[11px] text-text-m truncate">R22, R18, R16 & CBCS rules</div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 p-3 rounded-2xl bg-card border border-border shadow-subtle hover:border-accent/30 transition-colors">
+              <div className="w-10 h-10 rounded-xl bg-purple-500/10 text-brandPurple flex items-center justify-center shrink-0">
+                <Calculator className="w-5 h-5" />
+              </div>
+              <div className="min-w-0 text-left">
+                <div className="text-xs font-bold text-text-h truncate">Result Calculators</div>
+                <div className="text-[11px] text-text-m truncate">SGPA, CGPA & backlog tools</div>
               </div>
             </div>
           </div>
         </section>
 
-        {/* Quick Filter Bar */}
-        <section className="rounded-2xl bg-card border border-border p-3.5 sm:p-4 shadow-subtle">
-          <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
+        {/* ========================================================= */}
+        {/* SECTION B: SEARCH AND COMPACT FILTERS                    */}
+        {/* ========================================================= */}
+        <section aria-label="Search and Filter Universities" className="rounded-2xl bg-card border border-border p-3 sm:p-4 shadow-subtle">
+          <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3">
             {/* Search Input */}
-            <div className="sm:col-span-5 relative">
+            <div className="relative flex-1">
               <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-text-light">
                 <Search className="w-4 h-4" />
               </div>
               <input
                 type="text"
                 value={searchTerm}
-                onChange={(e) => {
-                  setSearchTerm(e.target.value);
-                  setCurrentPage(1);
-                }}
-                placeholder="Search universities by name, city or state..."
-                className="calc-input w-full pl-9 pr-4 py-2.5 rounded-xl border border-border bg-bg-sec text-xs text-text-h placeholder:text-text-light"
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search by university name or abbreviation (e.g. OU, JNTUH, Osmania)..."
+                className="w-full pl-10 pr-9 py-2.5 rounded-xl border border-border bg-bg-sec text-xs sm:text-sm text-text-h placeholder:text-text-light focus:outline-none focus:border-accent transition-colors"
+                aria-label="Search universities by name or abbreviation"
               />
-            </div>
-
-            {/* State Select */}
-            <div className="sm:col-span-3 relative">
-              <select
-                value={selectedState}
-                onChange={(e) => {
-                  setSelectedState(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className="calc-input w-full px-3 py-2.5 rounded-xl border border-border bg-bg-sec text-xs text-text-h cursor-pointer appearance-none pr-8 font-medium"
-              >
-                {STATES.map((s) => (
-                  <option key={s} value={s}>{s === 'All' ? 'All States' : s}</option>
-                ))}
-              </select>
-              <ChevronDown className="w-3.5 h-3.5 absolute right-3 top-3.5 pointer-events-none text-text-light" />
-            </div>
-
-            {/* Type Select */}
-            <div className="sm:col-span-2 relative">
-              <select
-                value={selectedType}
-                onChange={(e) => {
-                  setSelectedType(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className="calc-input w-full px-3 py-2.5 rounded-xl border border-border bg-bg-sec text-xs text-text-h cursor-pointer appearance-none pr-8 font-medium"
-              >
-                {TYPES.map((t) => (
-                  <option key={t} value={t}>{t === 'All' ? 'All Types' : t}</option>
-                ))}
-              </select>
-              <ChevronDown className="w-3.5 h-3.5 absolute right-3 top-3.5 pointer-events-none text-text-light" />
-            </div>
-
-            {/* Sort Order */}
-            <div className="sm:col-span-2 relative">
-              <select
-                value={sortOrder}
-                onChange={(e) => setSortOrder(e.target.value)}
-                className="calc-input w-full px-3 py-2.5 rounded-xl border border-border bg-bg-sec text-xs text-text-h cursor-pointer appearance-none pr-8 font-medium"
-              >
-                <option value="popular">Popular</option>
-                <option value="nirf">NIRF Rank</option>
-                <option value="established">Established</option>
-                <option value="name">Name (A–Z)</option>
-              </select>
-              <ChevronDown className="w-3.5 h-3.5 absolute right-3 top-3.5 pointer-events-none text-text-light" />
-            </div>
-          </div>
-        </section>
-
-        {/* 4 Statistics Cards */}
-        <section className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
-          <div className="flex items-center gap-3.5 p-3.5 rounded-2xl bg-card border border-border shadow-subtle">
-            <div className="w-11 h-11 rounded-xl bg-blue-500/10 text-brandBlue flex items-center justify-center shrink-0">
-              <Building2 className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="text-xs font-bold text-text-m">Total Universities</div>
-              <div className="text-xl sm:text-2xl font-extrabold text-text-h tracking-tight">100+</div>
-              <div className="text-[10.5px] text-text-light">Across India</div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3.5 p-3.5 rounded-2xl bg-card border border-border shadow-subtle">
-            <div className="w-11 h-11 rounded-xl bg-emerald-500/10 text-brandGreen flex items-center justify-center shrink-0">
-              <Map className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="text-xs font-bold text-text-m">States Covered</div>
-              <div className="text-xl sm:text-2xl font-extrabold text-text-h tracking-tight">28</div>
-              <div className="text-[10.5px] text-text-light">States & UTs</div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3.5 p-3.5 rounded-2xl bg-card border border-border shadow-subtle">
-            <div className="w-11 h-11 rounded-xl bg-purple-500/10 text-brandPurple flex items-center justify-center shrink-0">
-              <GraduationCap className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="text-xs font-bold text-text-m">Top Rated</div>
-              <div className="text-xl sm:text-2xl font-extrabold text-text-h tracking-tight">50+</div>
-              <div className="text-[10.5px] text-text-light">NAAC A+ / A++</div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3.5 p-3.5 rounded-2xl bg-card border border-border shadow-subtle">
-            <div className="w-11 h-11 rounded-xl bg-orange-500/10 text-accent flex items-center justify-center shrink-0">
-              <BookOpen className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="text-xs font-bold text-text-m">Curricula & Rules</div>
-              <div className="text-xl sm:text-2xl font-extrabold text-text-h tracking-tight">1000+</div>
-              <div className="text-[10.5px] text-text-light">UG & PG Regulations</div>
-            </div>
-          </div>
-        </section>
-
-        {/* Directory Workspace (Grid + Sidebar) */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          {/* Main Grid Column */}
-          <section className="lg:col-span-8 xl:col-span-9 space-y-4" aria-label="Universities List">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-1">
-              <div>
-                <h2 className="text-lg sm:text-xl font-extrabold text-text-h tracking-tight">
-                  Popular Universities
-                </h2>
-                <p className="text-xs text-text-m mt-0.5">
-                  Explore top universities based on NIRF rankings and verified grading matrices.
-                </p>
-              </div>
-
-              <div className="flex items-center gap-3">
+              {searchTerm && (
                 <button
                   type="button"
-                  onClick={() => setMobileDrawerOpen(true)}
-                  className="lg:hidden inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-border bg-card text-xs font-bold text-text-h hover:border-accent"
+                  onClick={() => setSearchTerm('')}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-text-light hover:text-text-h"
+                  aria-label="Clear search text"
                 >
-                  <SlidersHorizontal className="w-3.5 h-3.5 text-accent" />
-                  <span>Filters</span>
+                  <X className="w-3.5 h-3.5" />
                 </button>
-
-                <button
-                  type="button"
-                  onClick={resetAllFilters}
-                  className="text-xs font-semibold text-accent hover:underline flex items-center gap-1"
-                >
-                  <span>View All</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
+              )}
             </div>
 
-            {/* Active Filters Chips Bar */}
-            {(searchTerm || selectedState !== 'All' || selectedType !== 'All' || selectedNaac !== 'All' || selectedNirf !== 'All' || selectedEstablished !== 'All') && (
-              <div className="flex flex-wrap items-center gap-2 pt-1 pb-1">
-                {searchTerm && (
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-accent-soft text-accent border border-accent/25">
-                    <span>"{searchTerm}"</span>
-                    <button type="button" onClick={() => setSearchTerm('')}>×</button>
-                  </span>
-                )}
-                {selectedState !== 'All' && (
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-accent-soft text-accent border border-accent/25">
-                    <span>State: {selectedState}</span>
-                    <button type="button" onClick={() => setSelectedState('All')}>×</button>
-                  </span>
-                )}
-                {selectedType !== 'All' && (
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-accent-soft text-accent border border-accent/25">
-                    <span>Type: {selectedType}</span>
-                    <button type="button" onClick={() => setSelectedType('All')}>×</button>
-                  </span>
-                )}
-                {selectedNaac !== 'All' && (
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-accent-soft text-accent border border-accent/25">
-                    <span>NAAC: {selectedNaac}</span>
-                    <button type="button" onClick={() => setSelectedNaac('All')}>×</button>
-                  </span>
-                )}
-                {selectedNirf !== 'All' && (
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-accent-soft text-accent border border-accent/25">
-                    <span>Rank: {selectedNirf.replace('top', 'Top ')}</span>
-                    <button type="button" onClick={() => setSelectedNirf('All')}>×</button>
-                  </span>
-                )}
-                {selectedEstablished !== 'All' && (
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-accent-soft text-accent border border-accent/25">
-                    <span>Est: {selectedEstablished}</span>
-                    <button type="button" onClick={() => setSelectedEstablished('All')}>×</button>
-                  </span>
-                )}
-                <button
-                  type="button"
-                  onClick={resetAllFilters}
-                  className="text-[11px] font-semibold text-accent hover:underline ml-1"
-                >
-                  Clear All
-                </button>
-              </div>
-            )}
-
-            {/* Empty State */}
-            {totalCount === 0 ? (
-              <div className="rounded-2xl bg-card border border-border p-12 text-center space-y-3 shadow-subtle">
-                <div className="w-12 h-12 rounded-xl bg-orange-500/10 text-accent mx-auto flex items-center justify-center">
-                  <SearchX className="w-6 h-6" />
-                </div>
-                <h3 className="text-base font-bold text-text-h">No universities found</h3>
-                <p className="text-xs text-text-m max-w-sm mx-auto">
-                  Try adjusting your search query, state criteria, or clear the applied filters.
-                </p>
-                <button
-                  type="button"
-                  onClick={resetAllFilters}
-                  className="px-4 py-2 rounded-xl bg-accent text-white text-xs font-semibold hover:bg-accent-hover shadow-accent"
-                >
-                  Clear All Filters
-                </button>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                {pageItems.map((uni) => {
-                  const isFav = favorites.has(uni.id);
-
-                  return (
-                    <div
-                      key={uni.id}
-                      onClick={() => handleCardClick(uni.id)}
-                      className="group rounded-2xl bg-card border border-border shadow-subtle hover:border-accent hover:shadow-theme transition-all duration-200 flex flex-col justify-between overflow-hidden cursor-pointer"
-                    >
-                      <div>
-                        {/* Image Banner */}
-                        <div className="relative aspect-[16/8] sm:aspect-[16/7.5] w-full overflow-hidden bg-bg-sec">
-                          <img
-                            src={uni.image}
-                            alt={uni.name}
-                            className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-300"
-                            loading="lazy"
-                          />
-                          <div className="absolute top-2.5 left-2.5 z-10">
-                            <span className="px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wide bg-[#0B0D10]/90 text-white backdrop-blur-sm border border-white/20">
-                              NAAC {uni.accreditation}
-                            </span>
-                          </div>
-
-                          <button
-                            type="button"
-                            aria-label={`Favorite ${uni.name}`}
-                            onClick={(e) => toggleFavorite(uni.id, e)}
-                            className={`absolute top-2.5 right-2.5 z-10 w-7 h-7 rounded-full bg-card/90 backdrop-blur-sm border border-border flex items-center justify-center transition-transform active:scale-90 hover:scale-105 ${
-                              isFav ? 'text-rose-500' : 'text-text-m'
-                            }`}
-                          >
-                            <Heart className={`w-4 h-4 ${isFav ? 'fill-rose-500 text-rose-500' : ''}`} />
-                          </button>
-                        </div>
-
-                        {/* Card Content */}
-                        <div className="p-3.5 space-y-2 text-left">
-                          <h3 className="text-sm font-bold text-text-h group-hover:text-accent transition-colors leading-snug line-clamp-1" title={uni.name}>
-                            {uni.name}
-                          </h3>
-
-                          <div className="flex items-center justify-between gap-1 text-[11px]">
-                            <div className="flex items-center gap-1 text-text-m truncate">
-                              <MapPin className="w-3.5 h-3.5 text-accent shrink-0" />
-                              <span className="truncate">{uni.city}, {uni.state}</span>
-                            </div>
-                            <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-blue-500/10 text-brandBlue shrink-0 border border-brandBlue/20">
-                              {uni.type}
-                            </span>
-                          </div>
-
-                          <p className="text-[11px] text-text-m leading-relaxed line-clamp-2 min-h-[32px]">
-                            {uni.description}
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* Footer Stats */}
-                      <div className="px-3.5 py-2.5 border-t border-border/80 bg-bg-sec/40 grid grid-cols-3 text-center divide-x divide-border text-xs">
-                        <div>
-                          <span className="text-[9.5px] uppercase font-bold text-text-light block">Courses</span>
-                          <span className="font-extrabold text-text-h text-[11.5px]">{uni.courses}</span>
-                        </div>
-                        <div>
-                          <span className="text-[9.5px] uppercase font-bold text-text-light block">Established</span>
-                          <span className="font-extrabold text-text-h text-[11.5px]">{uni.established}</span>
-                        </div>
-                        <div>
-                          <span className="text-[9.5px] uppercase font-bold text-text-light block">NIRF Rank</span>
-                          <span className="font-extrabold text-text-h text-[11.5px]">#{uni.nirfRank}</span>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* Pagination Controls */}
-            {totalCount > 0 && (
-              <div className="pt-5 border-t border-border flex flex-col sm:flex-row items-center justify-between gap-4">
-                <div className="text-xs text-text-m">
-                  Showing <span className="font-bold text-text-h">{startIndex + 1} to {Math.min(startIndex + ITEMS_PER_PAGE, totalCount)}</span> of <span className="font-bold text-text-h">{totalCount}</span> universities
-                </div>
-
-                <nav aria-label="Universities pagination" className="flex items-center gap-1.5 text-xs">
-                  <button
-                    type="button"
-                    disabled={currentPage <= 1}
-                    onClick={() => {
-                      setCurrentPage((p) => Math.max(1, p - 1));
-                      window.scrollTo({ top: 380, behavior: 'smooth' });
-                    }}
-                    className="w-8 h-8 rounded-lg border border-border bg-card flex items-center justify-center text-text-m hover:text-accent hover:border-accent disabled:opacity-40 disabled:pointer-events-none transition-colors"
-                  >
-                    <ChevronLeft className="w-3.5 h-3.5" />
-                  </button>
-
-                  {[...Array(totalPages)].map((_, i) => {
-                    const p = i + 1;
-                    return (
-                      <button
-                        key={p}
-                        type="button"
-                        onClick={() => {
-                          setCurrentPage(p);
-                          window.scrollTo({ top: 380, behavior: 'smooth' });
-                        }}
-                        className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs transition-colors ${
-                          p === currentPage
-                            ? 'bg-accent text-white shadow-accent'
-                            : 'border border-border bg-card text-text-m hover:text-accent hover:border-accent'
-                        }`}
-                      >
-                        {p}
-                      </button>
-                    );
-                  })}
-
-                  <button
-                    type="button"
-                    disabled={currentPage >= totalPages}
-                    onClick={() => {
-                      setCurrentPage((p) => Math.min(totalPages, p + 1));
-                      window.scrollTo({ top: 380, behavior: 'smooth' });
-                    }}
-                    className="w-8 h-8 rounded-lg border border-border bg-card flex items-center justify-center text-text-m hover:text-accent hover:border-accent disabled:opacity-40 disabled:pointer-events-none transition-colors"
-                  >
-                    <ChevronRight className="w-3.5 h-3.5" />
-                  </button>
-                </nav>
-              </div>
-            )}
-          </section>
-
-          {/* Right Sidebar: Filters & States */}
-          <aside className="hidden lg:block lg:col-span-4 xl:col-span-3 space-y-4" aria-label="Sidebar Filters">
-            <div className="rounded-2xl bg-card border border-border p-4 shadow-subtle text-left">
-              <div className="flex items-center justify-between pb-3 mb-3 border-b border-border">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-text-h">
-                  Filter Universities
-                </h3>
-                <button
-                  type="button"
-                  onClick={resetAllFilters}
-                  className="text-[11px] font-semibold text-accent hover:underline"
-                >
-                  Reset
-                </button>
-              </div>
-
-              <div className="space-y-3 text-xs">
-                <div>
-                  <label className="block text-text-m font-medium mb-1">State / UT</label>
-                  <select
-                    value={selectedState}
-                    onChange={(e) => {
-                      setSelectedState(e.target.value);
-                      setCurrentPage(1);
-                    }}
-                    className="calc-input w-full px-2.5 py-2 rounded-xl border border-border bg-bg-sec text-text-h cursor-pointer"
-                  >
-                    {STATES.map((s) => (
-                      <option key={s} value={s}>{s === 'All' ? 'All States' : s}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-text-m font-medium mb-1">University Type</label>
-                  <select
-                    value={selectedType}
-                    onChange={(e) => {
-                      setSelectedType(e.target.value);
-                      setCurrentPage(1);
-                    }}
-                    className="calc-input w-full px-2.5 py-2 rounded-xl border border-border bg-bg-sec text-text-h cursor-pointer"
-                  >
-                    {TYPES.map((t) => (
-                      <option key={t} value={t}>{t === 'All' ? 'All Types' : t}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-text-m font-medium mb-1">NAAC Accreditation</label>
-                  <select
-                    value={selectedNaac}
-                    onChange={(e) => {
-                      setSelectedNaac(e.target.value);
-                      setCurrentPage(1);
-                    }}
-                    className="calc-input w-full px-2.5 py-2 rounded-xl border border-border bg-bg-sec text-text-h cursor-pointer"
-                  >
-                    {NAAC_GRADES.map((g) => (
-                      <option key={g} value={g}>{g === 'All' ? 'All Grades' : g}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-text-m font-medium mb-1">NIRF Ranking</label>
-                  <select
-                    value={selectedNirf}
-                    onChange={(e) => {
-                      setSelectedNirf(e.target.value);
-                      setCurrentPage(1);
-                    }}
-                    className="calc-input w-full px-2.5 py-2 rounded-xl border border-border bg-bg-sec text-text-h cursor-pointer"
-                  >
-                    {NIRF_OPTIONS.map((n) => (
-                      <option key={n.value} value={n.value}>{n.label}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-text-m font-medium mb-1">Established Year</label>
-                  <select
-                    value={selectedEstablished}
-                    onChange={(e) => {
-                      setSelectedEstablished(e.target.value);
-                      setCurrentPage(1);
-                    }}
-                    className="calc-input w-full px-2.5 py-2 rounded-xl border border-border bg-bg-sec text-text-h cursor-pointer"
-                  >
-                    {EST_OPTIONS.map((o) => (
-                      <option key={o.value} value={o.value}>{o.label}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="pt-2 space-y-2">
-                  <button
-                    type="button"
-                    onClick={resetAllFilters}
-                    className="w-full py-2 px-3 rounded-xl border border-border bg-card hover:bg-bg-sec text-text-m hover:text-text-h text-xs font-semibold transition-all"
-                  >
-                    Clear All
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Popular States Shortcuts */}
-            <div className="rounded-2xl bg-card border border-border p-4 shadow-subtle text-left">
-              <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-border">
-                <h3 className="text-xs font-bold text-text-h">Popular States</h3>
-                <button type="button" onClick={() => setSelectedState('All')} className="text-[11px] font-semibold text-accent hover:underline">
-                  View All
-                </button>
-              </div>
-
-              <div className="space-y-1 text-xs">
-                {['Maharashtra', 'Delhi', 'Uttar Pradesh', 'Karnataka', 'Tamil Nadu'].map((st) => (
-                  <button
-                    key={st}
-                    type="button"
-                    onClick={() => {
-                      setSelectedState(st);
-                      setCurrentPage(1);
-                      window.scrollTo({ top: 380, behavior: 'smooth' });
-                    }}
-                    className={`w-full p-2 rounded-xl flex items-center justify-between text-left transition-colors ${
-                      selectedState === st
-                        ? 'bg-accent-soft text-accent font-bold'
-                        : 'text-text-m hover:text-text-h hover:bg-bg-sec'
-                    }`}
-                  >
-                    <span>{st}</span>
-                    <ArrowRight className="w-3.5 h-3.5 opacity-70" />
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Why Choose ResultPoint Card */}
-            <div className="rounded-2xl bg-card border border-border p-4 shadow-subtle space-y-3.5 text-left">
-              <h3 className="text-xs font-bold text-text-h">Why Choose ResultPoint?</h3>
-              <div className="space-y-3 text-xs">
-                <div className="flex items-start gap-2.5">
-                  <div className="w-7 h-7 rounded-lg bg-emerald-500/10 text-brandGreen flex items-center justify-center shrink-0">
-                    <ShieldCheck className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <span className="font-bold text-text-h block">Accurate Information</span>
-                    <p className="text-[11px] text-text-m mt-0.5 leading-snug">
-                      All university data is verified against UGC and university circulars.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-2.5">
-                  <div className="w-7 h-7 rounded-lg bg-blue-500/10 text-brandBlue flex items-center justify-center shrink-0">
-                    <BookOpen className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <span className="font-bold text-text-h block">Easy Comparison</span>
-                    <p className="text-[11px] text-text-m mt-0.5 leading-snug">
-                      Compare courses, credit requirements, and grading systems easily.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <Link
-                to="/calculators"
-                className="w-full py-2 px-3 rounded-xl border border-border bg-card hover:bg-bg-sec text-accent hover:border-accent text-xs font-bold transition-all flex items-center justify-center gap-1.5"
-              >
-                <span>Explore Calculators</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </Link>
-            </div>
-          </aside>
-        </div>
-      </main>
-
-      {/* Mobile Filters Drawer Modal */}
-      {mobileDrawerOpen && (
-        <div
-          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4"
-          onClick={() => setMobileDrawerOpen(false)}
-        >
-          <div
-            className="bg-card border border-border rounded-t-2xl sm:rounded-2xl p-5 max-w-lg w-full shadow-theme max-h-[90vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between pb-3 border-b border-border">
-              <h3 className="text-sm font-bold text-text-h">Filter Universities</h3>
-              <button
-                type="button"
-                onClick={() => setMobileDrawerOpen(false)}
-                className="p-1.5 rounded-lg text-text-m hover:text-text-h"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="mt-4 space-y-3.5 text-xs text-left">
-              <div>
-                <label className="block font-semibold text-text-h mb-1">State / UT</label>
+            {/* Compact Filters & Controls */}
+            <div className="flex flex-wrap sm:flex-nowrap items-center gap-2.5">
+              {/* State Filter */}
+              <div className="relative flex-1 sm:flex-initial">
                 <select
                   value={selectedState}
                   onChange={(e) => setSelectedState(e.target.value)}
-                  className="calc-input w-full px-3 py-2.5 rounded-xl border border-border bg-bg-sec text-text-h"
+                  className="w-full sm:w-auto appearance-none pl-3.5 pr-8 py-2.5 rounded-xl border border-border bg-bg-sec text-xs sm:text-sm font-medium text-text-h focus:outline-none focus:border-accent cursor-pointer transition-colors"
+                  aria-label="Filter universities by state"
                 >
-                  {STATES.map((s) => (
-                    <option key={s} value={s}>{s === 'All' ? 'All States' : s}</option>
+                  {availableStates.map((state) => (
+                    <option key={state} value={state} className="bg-card text-text-h">
+                      {state}
+                    </option>
                   ))}
                 </select>
+                <div className="absolute inset-y-0 right-0 pr-2.5 flex items-center pointer-events-none text-text-light">
+                  <ChevronDown className="w-3.5 h-3.5" />
+                </div>
               </div>
 
-              <div>
-                <label className="block font-semibold text-text-h mb-1">University Type</label>
+              {/* Type Filter */}
+              <div className="relative flex-1 sm:flex-initial">
                 <select
                   value={selectedType}
                   onChange={(e) => setSelectedType(e.target.value)}
-                  className="calc-input w-full px-3 py-2.5 rounded-xl border border-border bg-bg-sec text-text-h"
+                  className="w-full sm:w-auto appearance-none pl-3.5 pr-8 py-2.5 rounded-xl border border-border bg-bg-sec text-xs sm:text-sm font-medium text-text-h focus:outline-none focus:border-accent cursor-pointer transition-colors"
+                  aria-label="Filter universities by type"
                 >
-                  {TYPES.map((t) => (
-                    <option key={t} value={t}>{t === 'All' ? 'All Types' : t}</option>
+                  {availableTypes.map((type) => (
+                    <option key={type} value={type} className="bg-card text-text-h">
+                      {type}
+                    </option>
                   ))}
                 </select>
+                <div className="absolute inset-y-0 right-0 pr-2.5 flex items-center pointer-events-none text-text-light">
+                  <ChevronDown className="w-3.5 h-3.5" />
+                </div>
               </div>
 
-              <div>
-                <label className="block font-semibold text-text-h mb-1">NAAC Accreditation</label>
-                <select
-                  value={selectedNaac}
-                  onChange={(e) => setSelectedNaac(e.target.value)}
-                  className="calc-input w-full px-3 py-2.5 rounded-xl border border-border bg-bg-sec text-text-h"
-                >
-                  {NAAC_GRADES.map((g) => (
-                    <option key={g} value={g}>{g === 'All' ? 'All Grades' : g}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-text-h mb-1">NIRF Ranking</label>
-                <select
-                  value={selectedNirf}
-                  onChange={(e) => setSelectedNirf(e.target.value)}
-                  className="calc-input w-full px-3 py-2.5 rounded-xl border border-border bg-bg-sec text-text-h"
-                >
-                  {NIRF_OPTIONS.map((n) => (
-                    <option key={n.value} value={n.value}>{n.label}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="pt-3 border-t border-border flex items-center gap-2">
+              {/* Clear Filters Action */}
+              {hasActiveFilters && (
                 <button
                   type="button"
-                  onClick={resetAllFilters}
-                  className="w-1/2 py-2.5 rounded-xl border border-border text-xs font-semibold text-text-h hover:bg-bg-sec"
+                  onClick={handleClearFilters}
+                  className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl border border-border bg-bg-sec text-xs font-semibold text-accent hover:bg-accent/10 hover:border-accent/40 active:scale-95 transition-all"
+                  aria-label="Clear all applied filters"
                 >
-                  Clear All
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Clear</span>
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setMobileDrawerOpen(false)}
-                  className="w-1/2 py-2.5 rounded-xl bg-accent text-white text-xs font-bold shadow-accent hover:bg-accent-hover"
-                >
-                  Apply Filters
-                </button>
-              </div>
+              )}
             </div>
           </div>
-        </div>
-      )}
+
+          {/* Results Counter Bar */}
+          <div className="mt-3 pt-3 border-t border-border/70 flex items-center justify-between text-xs text-text-m">
+            <span>
+              Showing <strong className="text-text-h font-bold">{filteredUniversities.length}</strong> {filteredUniversities.length === 1 ? 'university' : 'universities'}
+              {hasActiveFilters && ` (filtered from ${allUniversities.length})`}
+            </span>
+            {hasActiveFilters && (
+              <span className="text-[11px] text-accent">Filters applied</span>
+            )}
+          </div>
+        </section>
+
+        {/* ========================================================= */}
+        {/* SECTION C & D: UNIVERSITY CARDS & INTERACTION            */}
+        {/* ========================================================= */}
+        {filteredUniversities.length > 0 ? (
+          <section aria-label="Configured Universities" className="grid grid-cols-1 md:grid-cols-2 gap-5 lg:gap-6">
+            {filteredUniversities.map((uni) => {
+              const locationText = [uni.city, uni.state].filter(Boolean).join(', ');
+
+              return (
+                <article
+                  key={uni.id}
+                  onClick={() => handleCardClick(uni.detailsRoute)}
+                  className="group rounded-2xl bg-card border border-border hover:border-accent/50 p-5 sm:p-6 shadow-subtle hover:shadow-theme transition-all duration-200 flex flex-col justify-between cursor-pointer relative overflow-hidden"
+                >
+                  <div className="space-y-4">
+                    {/* Header Row: Emblem + Names + Abbr Badge */}
+                    <div className="flex items-start gap-4">
+                      <UniversityEmblem university={uni} className="w-16 h-16 sm:w-20 sm:h-20" />
+
+                      <div className="flex-1 min-w-0 space-y-1 text-left">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-black uppercase tracking-wider text-accent bg-accent-soft border border-accent/25">
+                            {uni.abbreviation}
+                          </span>
+                          {uni.type && (
+                            <span className="text-[11px] font-medium text-text-m">
+                              {uni.type}
+                            </span>
+                          )}
+                        </div>
+
+                        <h2 className="text-lg sm:text-xl font-bold text-text-h group-hover:text-accent transition-colors leading-snug">
+                          {uni.name}
+                        </h2>
+
+                        {locationText && (
+                          <div className="flex items-center gap-1.5 text-xs text-text-m">
+                            <MapPin className="w-3.5 h-3.5 text-accent shrink-0" />
+                            <span>{locationText}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Academic Description Focused on Calculation & Grading */}
+                    <p className="text-xs sm:text-sm text-text-m leading-relaxed text-left">
+                      {uni.academicFocus || uni.description}
+                    </p>
+
+                    {/* Configured Courses & Regulations Tags */}
+                    <div className="space-y-2 pt-1 border-t border-border/70 text-left">
+                      {Array.isArray(uni.supportedRegulations) && uni.supportedRegulations.length > 0 && (
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-[11px] font-semibold text-text-m">Regulations:</span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {uni.supportedRegulations.map((reg) => (
+                              <span
+                                key={reg}
+                                className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-bg-sec border border-border text-text-h"
+                              >
+                                {reg}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {Array.isArray(uni.supportedCourses) && uni.supportedCourses.length > 0 && (
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-[11px] font-semibold text-text-m">Supported Courses:</span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {uni.supportedCourses.map((course) => (
+                              <span
+                                key={course}
+                                className="px-2 py-0.5 rounded-md text-[11px] font-semibold bg-bg-sec border border-border text-text-m"
+                              >
+                                {course}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Card Footer: CTA Action */}
+                  <div className="mt-5 pt-4 border-t border-border/70 flex items-center justify-between">
+                    <span className="text-xs font-semibold text-text-m group-hover:text-text-h transition-colors">
+                      Grading & Calculators
+                    </span>
+
+                    <Link
+                      to={uni.detailsRoute}
+                      onClick={(e) => e.stopPropagation()}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold text-white bg-accent hover:bg-accent-hover shadow-accent active:scale-95 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                      aria-label={`View details for ${uni.name}`}
+                    >
+                      <span>View University Details</span>
+                      <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
+                    </Link>
+                  </div>
+                </article>
+              );
+            })}
+          </section>
+        ) : (
+          /* Empty State when no university matches filters */
+          <div className="rounded-2xl bg-card border border-border p-8 sm:p-12 text-center space-y-4 shadow-subtle">
+            <div className="w-14 h-14 rounded-2xl bg-bg-sec border border-border flex items-center justify-center mx-auto text-text-light">
+              <SearchX className="w-7 h-7 text-accent" />
+            </div>
+            <div className="space-y-1.5 max-w-md mx-auto">
+              <h3 className="text-base sm:text-lg font-bold text-text-h">No universities found</h3>
+              <p className="text-xs sm:text-sm text-text-m leading-relaxed">
+                We couldn't find any universities matching &ldquo;{searchTerm || selectedState || selectedType}&rdquo;. Try adjusting your search term or reset all filters.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleClearFilters}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-white bg-accent hover:bg-accent-hover shadow-accent transition-all"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Restore Configured Universities</span>
+            </button>
+          </div>
+        )}
+      </main>
     </>
   );
 }

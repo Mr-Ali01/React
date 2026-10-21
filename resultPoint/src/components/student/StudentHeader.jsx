@@ -16,6 +16,15 @@ import { useToast } from '../../context/ToastContext';
 import { studentService } from '../../services/studentService';
 import { notificationService } from '../../services/notificationService';
 import { academicCatalogService } from '../../services/academicCatalogService';
+import { useAppSelector } from '../../hooks/useAppSelector';
+import { useAppDispatch } from '../../hooks/useAppDispatch';
+import { selectUserProfile } from '../../features/user/userSlice';
+import { selectAcademicProfile } from '../../features/academicProfile/academicProfileSlice';
+import {
+  selectNotifications,
+  selectUnreadNotificationsCount,
+  markAllNotificationsRead,
+} from '../../features/notifications/notificationSlice';
 
 function getShortCourse(student) {
   if (!student) return '';
@@ -55,30 +64,31 @@ function getUnivAbbr(student) {
 }
 
 export default function StudentHeader({ onToggleSidebar, onLogoutRequest }) {
+  const dispatch = useAppDispatch();
   const { theme, toggleTheme } = useTheme();
   const { showToast } = useToast();
 
-  const [student, setStudent] = useState(() => studentService.getProfile());
-  const [unreadCount, setUnreadCount] = useState(() => notificationService.getUnreadCount());
-  const [notifications, setNotifications] = useState(() => notificationService.getNotifications());
+  const reduxProfile = useAppSelector(selectUserProfile);
+  const reduxAcademicProfile = useAppSelector(selectAcademicProfile);
+  const reduxNotifications = useAppSelector(selectNotifications);
+  const reduxUnreadCount = useAppSelector(selectUnreadNotificationsCount);
+
+  const student = {
+    ...studentService.getProfile(),
+    ...(reduxProfile || {}),
+    ...(reduxAcademicProfile || {}),
+  };
+
+  const notifications = reduxNotifications && reduxNotifications.length > 0
+    ? reduxNotifications
+    : notificationService.getNotifications();
+  const unreadCount = reduxUnreadCount ?? notificationService.getUnreadCount();
+
   const [notifDropdownOpen, setNotifDropdownOpen] = useState(false);
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
 
   const notifRef = useRef(null);
   const profileRef = useRef(null);
-
-  // Listen to profile updates
-  useEffect(() => {
-    const refreshProfile = () => {
-      setStudent(studentService.getProfile());
-    };
-    window.addEventListener('storage', refreshProfile);
-    window.addEventListener('academic_profile_updated', refreshProfile);
-    return () => {
-      window.removeEventListener('storage', refreshProfile);
-      window.removeEventListener('academic_profile_updated', refreshProfile);
-    };
-  }, []);
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -95,9 +105,7 @@ export default function StudentHeader({ onToggleSidebar, onLogoutRequest }) {
   }, []);
 
   const handleMarkAllRead = () => {
-    notificationService.markAllAsRead();
-    setUnreadCount(0);
-    setNotifications(notificationService.getNotifications());
+    dispatch(markAllNotificationsRead());
     showToast('All notifications marked as read.');
   };
 
@@ -114,8 +122,10 @@ export default function StudentHeader({ onToggleSidebar, onLogoutRequest }) {
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           <Link
             to="/"
-            className="flex items-center gap-2.5 group focus:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-xl"
+            id="student-header-logo-link"
+            className="flex items-center gap-2.5 group focus:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-xl cursor-pointer"
             aria-label="ResultPoint Home"
+            title="Navigate to ResultPoint Public Homepage"
           >
             <div className="w-9 h-9 rounded-xl bg-accent flex items-center justify-center text-white shadow-accent transition-transform duration-300 group-hover:scale-105 shrink-0">
               <GraduationCap className="w-5 h-5" />

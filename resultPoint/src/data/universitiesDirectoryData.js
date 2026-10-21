@@ -1,145 +1,82 @@
+/**
+ * ResultPoint Universities Directory Configuration
+ * 
+ * Central data source for the Universities Listing Page.
+ * Data-driven and extensible: To add a new university in the future,
+ * append a new configuration entry to UNIVERSITIES_DATA below and configure
+ * its corresponding route. No changes to the listing JSX are required.
+ */
+
 export const UNIVERSITIES_DATA = [
   {
-    id: 'iit-delhi',
-    name: 'Indian Institute of Technology Delhi',
-    city: 'New Delhi',
-    state: 'Delhi',
-    type: 'Public',
-    accreditation: 'A++',
-    nirfRank: 2,
-    established: 1961,
-    courses: '120+',
-    image: 'https://images.unsplash.com/photo-1562774053-701939374585?auto=format&fit=crop&w=700&q=80',
-    description: 'IIT Delhi is one of the premier engineering institutions in India, known for academic excellence and research.'
-  },
-  {
-    id: 'jnu',
-    name: 'Jawaharlal Nehru University',
-    city: 'New Delhi',
-    state: 'Delhi',
-    type: 'Public',
-    accreditation: 'A++',
-    nirfRank: 9,
-    established: 1969,
-    courses: '80+',
-    image: 'https://images.unsplash.com/photo-1541339907198-e08756dedf3f?auto=format&fit=crop&w=700&q=80',
-    description: 'JNU is a central university known for humanities, social sciences, and advanced multidisciplinary research.'
-  },
-  {
-    id: 'du',
-    name: 'University of Delhi',
-    city: 'New Delhi',
-    state: 'Delhi',
-    type: 'Public',
-    accreditation: 'A++',
-    nirfRank: 1,
-    established: 1922,
-    courses: '400+',
-    image: 'https://images.unsplash.com/photo-1592280771190-3e2e4d571952?auto=format&fit=crop&w=700&q=80',
-    description: "DU is one of India's largest universities with a rich legacy of academic excellence across colleges."
-  },
-  {
-    id: 'bhu',
-    name: 'Banaras Hindu University',
-    city: 'Varanasi',
-    state: 'Uttar Pradesh',
-    type: 'Public',
-    accreditation: 'A+',
-    nirfRank: 5,
-    established: 1916,
-    courses: '350+',
-    image: 'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?auto=format&fit=crop&w=700&q=80',
-    description: 'BHU is a historic central university known for diverse curricula and premier engineering & medical wings.'
-  },
-  {
-    id: 'iisc-bangalore',
-    name: 'Indian Institute of Science',
-    city: 'Bengaluru',
-    state: 'Karnataka',
-    type: 'Public',
-    accreditation: 'A++',
-    nirfRank: 3,
-    established: 1909,
-    courses: '60+',
-    image: 'https://images.unsplash.com/photo-1509062522246-3755977927d7?auto=format&fit=crop&w=700&q=80',
-    description: 'IISc Bangalore is a premier research institute renowned for foundational science and advanced engineering.'
-  },
-  {
-    id: 'anna-university',
-    name: 'Anna University',
-    city: 'Chennai',
-    state: 'Tamil Nadu',
-    type: 'Public',
-    accreditation: 'A+',
-    nirfRank: 6,
-    established: 1978,
-    courses: '200+',
-    image: 'https://images.unsplash.com/photo-1498243691581-b145c3f54a5a?auto=format&fit=crop&w=700&q=80',
-    description: 'Anna University is a leading state technical university known for engineering regulations and affiliations.'
-  },
-  {
-    id: 'jadavpur-university',
-    name: 'Jadavpur University',
-    city: 'Kolkata',
-    state: 'West Bengal',
-    type: 'Public',
-    accreditation: 'A+',
-    nirfRank: 8,
-    established: 1955,
-    courses: '90+',
-    image: 'https://images.unsplash.com/photo-1519452635265-7b1fbfd1e4e0?auto=format&fit=crop&w=700&q=80',
-    description: 'JU is a prestigious state public university celebrated for engineering, science, and arts departments.'
-  },
-  {
-    id: 'amu',
-    name: 'Aligarh Muslim University',
-    city: 'Aligarh',
-    state: 'Uttar Pradesh',
-    type: 'Public',
-    accreditation: 'A',
-    nirfRank: 10,
-    established: 1920,
-    courses: '300+',
-    image: 'https://images.unsplash.com/photo-1576267423445-b2e0074d68a4?auto=format&fit=crop&w=700&q=80',
-    description: 'AMU is a leading central university with long-standing excellence across professional and research programs.'
-  },
-  {
-    id: 'mumbai-university',
-    name: 'University of Mumbai',
-    city: 'Mumbai',
-    state: 'Maharashtra',
-    type: 'Public',
-    accreditation: 'A+',
-    nirfRank: 12,
-    established: 1857,
-    courses: '500+',
-    image: 'https://images.unsplash.com/photo-1590012314607-cda9d9b699ae?auto=format&fit=crop&w=700&q=80',
-    description: 'One of the oldest universities in India, offering extensive undergraduate and postgraduate curricula.'
-  },
-  {
-    id: 'jntu-hyderabad',
-    name: 'JNTU Hyderabad',
-    city: 'Hyderabad',
-    state: 'Telangana',
-    type: 'Public',
-    accreditation: 'A+',
-    nirfRank: 21,
-    established: 1972,
-    courses: '140+',
-    image: 'https://images.unsplash.com/photo-1562774053-701939374585?auto=format&fit=crop&w=700&q=80',
-    description: 'Premier technological university renowned for B.Tech curricula, autonomous regulations, and engineering excellence.'
-  },
-  {
     id: 'osmania-university',
+    slug: 'osmania-university',
+    aliases: ['ou', 'osmania'],
     name: 'Osmania University',
-    city: 'Hyderabad',
+    abbreviation: 'OU',
     state: 'Telangana',
-    type: 'Public',
-    accreditation: 'A+',
-    nirfRank: 22,
-    established: 1918,
-    courses: '280+',
-    image: 'https://images.unsplash.com/photo-1541339907198-e08756dedf3f?auto=format&fit=crop&w=700&q=80',
-    description: 'One of the historic institutions in South India offering comprehensive CBCS and postgraduate research programs.'
+    city: 'Hyderabad',
+    type: 'State University',
+    logo: null,
+    description: 'Explore supported courses, academic regulations, grading rules, and result calculators.',
+    academicFocus: 'Verified CBCS 10-point S-Grade scale, degree credit evaluation, and CGPA to percentage conversion formula (CGPA × 9.32).',
+    detailsRoute: '/universities/osmania-university',
+    status: 'available',
+    supportedRegulations: ['CBCS'],
+    supportedCourses: ['BCA', 'MCA', 'B.Com', 'B.Sc'],
+    calculationRules: {
+      gradingSystem: '10-Point (S-Grade Scheme)',
+      percentageFormula: 'Percentage = CGPA × 9.32',
+      sgpaRule: 'Weighted Credit Sum'
+    }
+  },
+  {
+    id: 'jntuh',
+    slug: 'jntuh',
+    aliases: ['jntu-hyderabad', 'jntu'],
+    name: 'Jawaharlal Nehru Technological University Hyderabad',
+    abbreviation: 'JNTUH',
+    state: 'Telangana',
+    city: 'Hyderabad',
+    type: 'State University',
+    logo: null,
+    description: 'Explore supported courses, academic regulations, grading rules, and result calculators.',
+    academicFocus: 'Official R22, R18, and R16 B.Tech/M.Tech grading matrices, credit distribution guidelines, and backlog planning tools.',
+    detailsRoute: '/universities/jntuh',
+    status: 'available',
+    supportedRegulations: ['R22', 'R18', 'R16'],
+    supportedCourses: ['B.Tech (CSE)', 'M.Tech', 'MBA', 'MCA'],
+    calculationRules: {
+      gradingSystem: '10-Point Scale (O to F)',
+      percentageFormula: 'Percentage = (CGPA - 0.5) × 10',
+      sgpaRule: 'Weighted Credit Sum'
+    }
   }
 ];
+
+/**
+ * Helper to fetch a university by its unique ID or alias slug.
+ * @param {string} idOrSlug - The university ID or alias (e.g. 'jntuh', 'osmania-university', 'ou')
+ * @returns {object|null}
+ */
+export function getUniversityById(idOrSlug) {
+  if (!idOrSlug) return null;
+  const normalized = String(idOrSlug).trim().toLowerCase();
+  return (
+    UNIVERSITIES_DATA.find(
+      (uni) =>
+        uni.id.toLowerCase() === normalized ||
+        uni.slug.toLowerCase() === normalized ||
+        uni.abbreviation.toLowerCase() === normalized ||
+        (Array.isArray(uni.aliases) && uni.aliases.some((alias) => alias.toLowerCase() === normalized))
+    ) || null
+  );
+}
+
+/**
+ * Helper to retrieve all active universities.
+ * @returns {Array<object>}
+ */
+export function getAllUniversities() {
+  return UNIVERSITIES_DATA.filter((uni) => uni.status === 'available');
+}

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useTheme } from '../../context/ThemeContext';
 import {
   GraduationCap,
@@ -21,11 +21,26 @@ import {
   Menu,
   LayoutDashboard
 } from 'lucide-react';
+import { useAppSelector } from '../../hooks/useAppSelector';
+import { selectCurrentUser, selectIsAuthenticated } from '../../features/auth/authSlice';
 import { authService } from '../../services/authService';
 
 export default function Header({ onOpenMobileMenu }) {
   const { theme, toggleTheme } = useTheme();
-  const isAuthenticated = authService.isAuthenticated();
+  const location = useLocation();
+  const reduxIsAuth = useAppSelector(selectIsAuthenticated);
+  const reduxUser = useAppSelector(selectCurrentUser);
+  const serviceUser = authService.getCurrentUser();
+  const currentUser = reduxUser || serviceUser;
+  const isAuthenticated = Boolean((reduxIsAuth && currentUser) || authService.isAuthenticated());
+
+  const isStudent = isAuthenticated && currentUser?.role === 'student';
+  const isAdmin = isAuthenticated && currentUser?.role === 'admin';
+
+  const isActive = (path) => {
+    if (path === '/') return location.pathname === '/';
+    return location.pathname === path || location.pathname.startsWith(`${path}/`);
+  };
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border bg-bg/85 backdrop-blur-md transition-colors">
@@ -53,7 +68,14 @@ export default function Header({ onOpenMobileMenu }) {
         {/* Desktop Nav */}
         <nav className="hidden lg:flex items-center gap-6 text-[13.5px] font-medium" aria-label="Primary Navigation">
           <div className="relative group">
-            <Link to="/calculators" className="text-text-m hover:text-text-h flex items-center gap-1 py-1.5 transition-colors">
+            <Link
+              to="/calculators"
+              className={`flex items-center gap-1 py-1.5 transition-colors ${
+                isActive('/calculators')
+                  ? 'text-accent font-bold border-b-2 border-accent'
+                  : 'text-text-m hover:text-text-h'
+              }`}
+            >
               <span>Calculators</span>
               <ChevronDown className="w-3.5 h-3.5 transition-transform group-hover:rotate-180" />
             </Link>
@@ -85,48 +107,33 @@ export default function Header({ onOpenMobileMenu }) {
             </div>
           </div>
 
-          <Link to="/universities" className="text-text-m hover:text-text-h transition-colors">
+          <Link
+            to="/universities"
+            className={`py-1.5 transition-colors ${
+              isActive('/universities')
+                ? 'text-accent font-bold border-b-2 border-accent'
+                : 'text-text-m hover:text-text-h'
+            }`}
+          >
             Universities
           </Link>
 
-          {/* <div className="relative group">
-            <Link to="/tools" className="text-text-m hover:text-text-h flex items-center gap-1 py-1.5 transition-colors">
-              <span>Tools</span>
-              <ChevronDown className="w-3.5 h-3.5 transition-transform group-hover:rotate-180" />
-            </Link>
-            <div className="absolute left-0 top-full mt-1.5 w-52 rounded-2xl bg-card border border-border p-2 shadow-theme opacity-0 translate-y-1 pointer-events-none group-hover:opacity-100 group-hover:translate-y-0 group-hover:pointer-events-auto transition-all duration-200 z-50">
-              <Link to="/calculators/result-analysis" className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-text-m hover:text-accent hover:bg-bg-sec transition-colors">
-                <PieChart className="w-4 h-4 text-brandAmber" />
-                <span>Result Analyzer</span>
-              </Link>
-              <Link to="/calculators/backlog" className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-text-m hover:text-accent hover:bg-bg-sec transition-colors">
-                <AlertTriangle className="w-4 h-4 text-brandPink" />
-                <span>Backlog Calculator</span>
-              </Link>
-              <Link to="/calculators/credite-calculate" className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-text-m hover:text-accent hover:bg-bg-sec transition-colors">
-                <Layers className="w-4 h-4 text-brandBlue" />
-                <span>Credits Calculator</span>
-              </Link>
-              <Link to="/calculators/marks-grade" className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-text-m hover:text-accent hover:bg-bg-sec transition-colors">
-                <Award className="w-4 h-4 text-brandGreen" />
-                <span>Marks to Grade</span>
-              </Link>
-            </div>
-          </div> */}
-
           <div className="relative group">
-            <Link to="/resources" className="text-text-m hover:text-text-h flex items-center gap-1 py-1.5 transition-colors">
+            <Link
+              to="/resources"
+              className={`flex items-center gap-1 py-1.5 transition-colors ${
+                isActive('/resources')
+                  ? 'text-accent font-bold border-b-2 border-accent'
+                  : 'text-text-m hover:text-text-h'
+              }`}
+            >
               <span>Resources</span>
               <ChevronDown className="w-3.5 h-3.5 transition-transform group-hover:rotate-180" />
             </Link>
             <div className="absolute left-0 top-full mt-1.5 w-52 rounded-2xl bg-card border border-border p-2 shadow-theme opacity-0 translate-y-1 pointer-events-none group-hover:opacity-100 group-hover:translate-y-0 group-hover:pointer-events-auto transition-all duration-200 z-50">
-              <Link to="/resources/previous-year" className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-text-m hover:text-accent hover:bg-bg-sec transition-colors">
+              <Link to="/resources" className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-text-m hover:text-accent hover:bg-bg-sec transition-colors">
                 <FileText className="w-4 h-4 text-accent" />
-                <span>Previous Papers</span>
-              </Link>
-              <Link to="/resources#study-materials" className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-text-m hover:text-accent hover:bg-bg-sec transition-colors">
-                <BookOpen className="w-4 h-4 text-brandBlue" />
-                <span>Study Materials</span>
+                <span>All Resources</span>
               </Link>
               <Link to="/resources/details" className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-text-m hover:text-accent hover:bg-bg-sec transition-colors">
                 <BookOpen className="w-4 h-4 text-brandBlue" />
@@ -135,8 +142,27 @@ export default function Header({ onOpenMobileMenu }) {
             </div>
           </div>
 
-          <Link to="/about" className="text-text-m hover:text-text-h transition-colors">About</Link>
-          <Link to="/contact" className="text-text-m hover:text-text-h transition-colors">Contact</Link>
+          <Link
+            to="/about"
+            className={`py-1.5 transition-colors ${
+              isActive('/about')
+                ? 'text-accent font-bold border-b-2 border-accent'
+                : 'text-text-m hover:text-text-h'
+            }`}
+          >
+            About
+          </Link>
+
+          <Link
+            to="/contact"
+            className={`py-1.5 transition-colors ${
+              isActive('/contact')
+                ? 'text-accent font-bold border-b-2 border-accent'
+                : 'text-text-m hover:text-text-h'
+            }`}
+          >
+            Contact
+          </Link>
         </nav>
 
         {/* Right Action Items */}
@@ -150,13 +176,21 @@ export default function Header({ onOpenMobileMenu }) {
             {theme === 'dark' ? <Sun className="w-4 h-4 text-accent" /> : <Moon className="w-4 h-4 text-accent" />}
           </button>
 
-          {isAuthenticated ? (
+          {isStudent ? (
             <Link
               to="/student/dashboard"
               className="inline-flex items-center gap-1.5 px-3.5 sm:px-4.5 py-2 rounded-xl text-xs sm:text-[13px] font-bold text-white bg-accent hover:bg-accent-hover shadow-accent active:scale-95 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             >
               <LayoutDashboard className="w-3.5 h-3.5" />
-              <span>Student Dashboard</span>
+              <span>Go to Dashboard</span>
+            </Link>
+          ) : isAdmin ? (
+            <Link
+              to="/admin/dashboard"
+              className="inline-flex items-center gap-1.5 px-3.5 sm:px-4.5 py-2 rounded-xl text-xs sm:text-[13px] font-bold text-white bg-accent hover:bg-accent-hover shadow-accent active:scale-95 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >
+              <LayoutDashboard className="w-3.5 h-3.5" />
+              <span>Go to Admin</span>
             </Link>
           ) : (
             <>

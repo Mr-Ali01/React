@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink, Link, useLocation } from 'react-router-dom';
 import {
   Home,
   FileSpreadsheet,
@@ -15,9 +15,11 @@ import {
   Settings,
   LogOut,
   X,
-  Shield
+  GraduationCap
 } from 'lucide-react';
 import { notificationService } from '../../services/notificationService';
+import { useAppSelector } from '../../hooks/useAppSelector';
+import { selectUnreadNotificationsCount } from '../../features/notifications/notificationSlice';
 
 export const SIDEBAR_ITEMS = [
   { name: 'Dashboard', path: '/student/dashboard', icon: Home },
@@ -29,8 +31,8 @@ export const SIDEBAR_ITEMS = [
   { name: 'Backlog Tracker', path: '/student/backlogs', icon: Layers },
   { name: 'Calculation History', path: '/student/calculation-history', icon: Calculator },
   { name: 'Academic Profile', path: '/student/profile', icon: UserCheck },
-  { name: 'Resources', path: '/resources', icon: BookOpen },
-  { name: 'Registry Admin', path: '/admin/catalog', icon: Shield },
+  { name: 'Education Records', path: '/student/education-records', icon: BookOpen },
+  { name: 'Resources', path: '/resources', icon: Layers },
   { name: 'Notifications', path: '/student/notifications', icon: Bell, badge: 3 },
   { name: 'Settings', path: '/student/settings', icon: Settings },
 ];
@@ -42,7 +44,8 @@ export default function StudentSidebar({
   onLogoutRequest
 }) {
   const location = useLocation();
-  const unreadCount = notificationService.getUnreadCount();
+  const reduxUnreadCount = useAppSelector(selectUnreadNotificationsCount);
+  const unreadCount = reduxUnreadCount ?? notificationService.getUnreadCount();
 
   // Handle ESC key to close mobile sidebar
   useEffect(() => {
@@ -73,42 +76,67 @@ export default function StudentSidebar({
       <nav className="space-y-1 px-3" aria-label="Student Sidebar Navigation">
         {SIDEBAR_ITEMS.map((item) => {
           const Icon = item.icon;
+          const isEditResult =
+            location.pathname.startsWith('/student/edit-result') ||
+            location.pathname.includes('/edit-result') ||
+            location.pathname.startsWith('/student/results/edit') ||
+            (location.pathname.includes('edit') && location.pathname.includes('result')) ||
+            Boolean(location.state?.isEditing) ||
+            Boolean(location.state?.editMode) ||
+            Boolean(location.state?.editTargetResult) ||
+            Boolean(location.state?.resultId);
+
           const isDashboard = item.path === '/student/dashboard' && (location.pathname === '/student' || location.pathname === '/student/dashboard');
-          const isResults = item.path === '/student/results' && location.pathname.startsWith('/student/results');
+          const isResults = item.path === '/student/results' && (
+            (location.pathname === '/student/results' || location.pathname.startsWith('/student/results/')) &&
+            !isEditResult
+          );
+          const isAddResult = item.path === '/student/add-result' && (
+            location.pathname === '/student/add-result' ||
+            location.pathname.startsWith('/student/add-result') ||
+            isEditResult
+          );
           const isAcademicProfile = item.path === '/student/profile' && (
             location.pathname === '/student/profile' ||
             location.pathname === '/student/profile-setup' ||
             location.pathname.startsWith('/student/profile')
           );
-          const isActive = location.pathname === item.path || isDashboard || isResults || isAcademicProfile;
+          const isEducationRecords = item.path === '/student/education-records' && (
+            location.pathname === '/student/education-records' ||
+            location.pathname.startsWith('/student/education')
+          );
+          const isActive = location.pathname === item.path || isDashboard || isResults || isAddResult || isAcademicProfile || isEducationRecords;
 
           return (
             <div key={item.name} className="relative group">
               <NavLink
                 to={item.path}
                 onClick={onCloseMobile}
-                className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all ${
-                  isActive
+                className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all ${isActive
                     ? 'bg-gradient-to-r from-accent to-[#FF8A1A] text-white shadow-accent shadow-sm'
                     : 'text-text-m hover:text-text-h hover:bg-bg-sec/80 dark:hover:bg-[#15202D]'
-                } ${isCollapsed ? 'justify-center px-0' : ''}`}
+                  } ${isCollapsed ? 'justify-center px-0' : ''}`}
               >
                 <Icon className={`w-4 h-4 shrink-0 transition-transform ${isActive ? 'scale-110 text-white' : 'text-text-m group-hover:text-accent'}`} />
-                
+
                 {!isCollapsed && (
                   <span className="truncate">{item.name}</span>
                 )}
 
                 {/* Notification Badge */}
                 {!isCollapsed && item.badge && unreadCount > 0 && (
-                  <span className="ml-auto px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-brandPink text-white">
+                  <span className={`ml-auto px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                    isActive ? 'bg-black/20 text-white' : 'bg-accent text-white'
+                  }`}>
                     {unreadCount}
                   </span>
                 )}
 
                 {/* Collapsed Badge Dot */}
                 {isCollapsed && item.badge && unreadCount > 0 && (
-                  <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-brandPink ring-2 ring-card" />
+                  <span className={`absolute top-2 right-2 w-2 h-2 rounded-full ${
+                    isActive ? 'bg-white ring-2 ring-accent' : 'bg-accent ring-2 ring-card'
+                  }`} />
                 )}
               </NavLink>
 
@@ -137,9 +165,8 @@ export default function StudentSidebar({
               onLogoutRequest();
             }}
             type="button"
-            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold text-brandPink hover:bg-brandPink/10 transition-colors ${
-              isCollapsed ? 'justify-center px-0' : ''
-            }`}
+            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold text-brandPink hover:bg-brandPink/10 transition-colors ${isCollapsed ? 'justify-center px-0' : ''
+              }`}
           >
             <LogOut className="w-4 h-4 shrink-0" />
             {!isCollapsed && <span>Logout</span>}
@@ -159,9 +186,8 @@ export default function StudentSidebar({
     <>
       {/* Desktop Persistent Sidebar */}
       <aside
-        className={`hidden lg:block shrink-0 border-r border-border bg-card/60 dark:bg-[#0B0F17]/95 backdrop-blur-md transition-all duration-300 sticky top-16 h-[calc(100vh-4rem)] overflow-y-auto ${
-          isCollapsed ? 'w-[72px]' : 'w-60'
-        }`}
+        className={`hidden lg:block shrink-0 border-r border-border bg-card/60 dark:bg-[#0B0F17]/95 backdrop-blur-md transition-all duration-300 sticky top-16 h-[calc(100vh-4rem)] overflow-y-auto ${isCollapsed ? 'w-[72px]' : 'w-60'
+          }`}
         aria-label="Desktop Student Sidebar"
       >
         {navContent}
@@ -169,32 +195,37 @@ export default function StudentSidebar({
 
       {/* Mobile Off-Canvas Drawer Overlay */}
       <div
-        className={`fixed inset-0 bg-black/60 backdrop-blur-xs z-50 lg:hidden transition-opacity duration-300 ${
-          isMobileOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
-        }`}
+        className={`fixed inset-0 bg-black/60 backdrop-blur-xs z-50 lg:hidden transition-opacity duration-300 ${isMobileOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+          }`}
         onClick={onCloseMobile}
         aria-hidden={!isMobileOpen}
       />
 
       {/* Mobile Off-Canvas Drawer Container */}
       <div
-        className={`fixed inset-y-0 left-0 w-72 max-w-[85vw] bg-card dark:bg-[#0B0F17] z-50 lg:hidden shadow-2xl border-r border-border flex flex-col transition-transform duration-300 ease-out ${
-          isMobileOpen ? 'translate-x-0' : '-translate-x-full'
-        }`}
+        className={`fixed inset-y-0 left-0 w-72 max-w-[85vw] bg-card dark:bg-[#0B0F17] z-50 lg:hidden shadow-2xl border-r border-border flex flex-col transition-transform duration-300 ease-out ${isMobileOpen ? 'translate-x-0' : '-translate-x-full'
+          }`}
         role="dialog"
         aria-modal="true"
         aria-label="Mobile Navigation Menu"
       >
         {/* Drawer Header */}
         <div className="flex items-center justify-between px-4 h-16 border-b border-border">
-          <div className="flex items-center gap-2">
+          <Link
+            to="/"
+            onClick={onCloseMobile}
+            id="mobile-sidebar-logo-link"
+            className="flex items-center gap-2 group cursor-pointer focus:outline-none"
+            aria-label="ResultPoint Home"
+            title="Navigate to ResultPoint Public Homepage"
+          >
             <div className="w-8 h-8 rounded-xl bg-accent flex items-center justify-center text-white">
-              <Home className="w-4 h-4" />
+              <GraduationCap className="w-4 h-4" />
             </div>
             <span className="font-extrabold text-sm text-text-h">
-              Student <span className="text-accent">Portal</span>
+              Result<span className="text-accent">Point</span>
             </span>
-          </div>
+          </Link>
 
           <button
             onClick={onCloseMobile}

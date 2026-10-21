@@ -3,11 +3,13 @@ import { Outlet, useNavigate } from 'react-router-dom';
 import { LogOut, AlertTriangle } from 'lucide-react';
 import AdminSidebar from '../../components/admin/AdminSidebar';
 import AdminHeader from '../../components/admin/AdminHeader';
-import { authService } from '../../services/authService';
+import { useAppDispatch } from '../../hooks/useAppDispatch';
+import { logoutUser } from '../../features/auth/authSlice';
 import { useToast } from '../../context/ToastContext';
 
 export default function AdminLayout() {
   const navigate = useNavigate();
+  const dispatch = useAppDispatch();
   const { showToast } = useToast();
 
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -25,10 +27,10 @@ export default function AdminLayout() {
   };
 
   const handleConfirmLogout = () => {
-    authService.logout();
     setIsLogoutModalOpen(false);
+    dispatch(logoutUser());
     showToast('Administrator session ended.');
-    navigate('/login');
+    navigate('/login?role=admin');
   };
 
   return (

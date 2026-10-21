@@ -20,6 +20,10 @@ import ResultGaugeCard from '../ResultGaugeCard';
 import CalculatorPageHeader from '../CalculatorPageHeader';
 import SaveModal from '../CGPA/components/SaveModal';
 import { useToast } from '../../../context/ToastContext';
+import { useAuth } from '../../../hooks/useAuth';
+import { useAppDispatch } from '../../../hooks/useAppDispatch';
+import { saveCalculationToHistory } from '../../../features/calculation/calculationSlice';
+import { calculationSaveService } from '../../../services/calculationSaveService';
 
 const DEFAULT_SUBJECTS = [
   { id: '1', name: 'Mathematics - I', credits: 4, category: 'Core' },
@@ -41,15 +45,19 @@ const CREDIT_REFERENCE_TABLE = [
 ];
 
 export default function CreditsCalculator() {
+  const { user, isAuthenticated } = useAuth();
+  const dispatch = useAppDispatch();
+  const { showToast } = useToast();
+
   const [subjects, setSubjects] = useState(DEFAULT_SUBJECTS);
   const [university, setUniversity] = useState('jntuh');
   const [regulation, setRegulation] = useState('r18');
   const [course, setCourse] = useState('btech-cse');
   const [semester, setSemester] = useState('sem1');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isResultModalOpen, setIsResultModalOpen] = useState(false);
+  const [pendingCalc, setPendingCalc] = useState(null);
   const [validationError, setValidationError] = useState('');
-
-  const { showToast } = useToast();
 
   const handleAddSubject = () => {
     if (subjects.length >= 20) return;
@@ -142,6 +150,59 @@ export default function CreditsCalculator() {
     { label: 'Elective Credits', value: metrics.electiveCredits },
     { label: 'Audit Credits', value: metrics.auditCredits }
   ];
+
+  const handleSaveResult = () => {
+    const calcRecord = {
+      calculatorType: 'Credits Calculator',
+      title: 'Credits Evaluation',
+      score: `${metrics.numericTotal} Credits`,
+      scale: '24',
+      result: `${metrics.numericTotal} Total Credits`,
+      standing: standing?.text || 'Standard Load',
+      summary: `Total: ${metrics.numericTotal} Cr | Core: ${metrics.coreCredits} | Elective: ${metrics.electiveCredits} | Audit: ${metrics.auditCredits}`,
+      data: {
+        totalCredits: metrics.numericTotal,
+        coreCredits: metrics.coreCredits,
+        electiveCredits: metrics.electiveCredits,
+        auditCredits: metrics.auditCredits,
+        university,
+        regulation,
+        course,
+        semester,
+        subjects,
+      },
+    };
+
+    if (isAuthenticated) {
+      const res = calculationSaveService.saveCalculation(calcRecord, user);
+      if (res.success) {
+        dispatch(saveCalculationToHistory(res.record));
+        showToast('Credits calculation saved to your history!');
+      } else {
+        showToast(res.error || 'Failed to save calculation');
+      }
+    } else {
+      setPendingCalc(calcRecord);
+      calculationSaveService.setPendingCalculation(calcRecord);
+      setIsModalOpen(true);
+    }
+  };
+
+  const handleCalculate = () => {
+    if (!subjects || subjects.length === 0) {
+      setValidationError('At least one subject is required for credit calculation.');
+      return;
+    }
+    const invalid = subjects.some(
+      (s) => !s.credits || isNaN(parseFloat(s.credits)) || parseFloat(s.credits) <= 0
+    );
+    if (invalid) {
+      setValidationError('Please enter valid positive credits for all subjects.');
+      return;
+    }
+    setValidationError('');
+    setIsResultModalOpen(true);
+  };
 
   return (
     <>
@@ -406,11 +467,11 @@ export default function CreditsCalculator() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setIsModalOpen(true)}
-                  className="px-6 py-2.5 rounded-xl bg-accent hover:bg-accent-hover text-white text-xs font-bold shadow-accent transition-all active:scale-95 flex items-center justify-center gap-1.5"
+                  onClick={handleCalculate}
+                  className="px-6 py-2.5 rounded-xl bg-accent hover:bg-accent-hover text-white text-xs font-bold shadow-accent transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
                 >
                   <Layers className="w-3.5 h-3.5" />
-                  <span>Calculate & Save</span>
+                  <span>Calculate Credits</span>
                   <ArrowRight className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -459,15 +520,78 @@ export default function CreditsCalculator() {
             </div>
           </div>
 
-          {/* Right Column: Result Gauge & History */}
-          <aside className="lg:col-span-3 xl:col-span-3 space-y-3.5 lg:sticky lg:top-20" aria-label="Credits Evaluation Results">
+          {/* Right Column: Result Gauge & History (Desktop / Tablet Only) */}
+          <aside className="hidden lg:block lg:col-span-3 xl:col-span-3 space-y-3.5 lg:sticky lg:top-20" aria-label="Credits Evaluation Results">
             <ResultGaugeCard
               score={metrics.numericTotal}
               maxScale={24}
               title="YOUR CREDITS RESULT"
               metrics={resultCardsData}
               standing={standing}
-              onSave={() => setIsModalOpen(true)}
+              isMobileModalOpen={isResultModalOpen}
+              onCloseMobileModal={() => setIsResultModalOpen(false)}
+              metadata={{
+                university: university.toUpperCase(),
+                regulation: regulation.toUpperCase(),
+                course: course.toUpperCase(),
+                semester: semester.toUpperCase(),
+                calculationMethod: 'Curriculum Credit Distribution',
+                totalSubjects: subjects.length
+              }}
+              subjectRows={subjects.map((s, idx) => ({
+                num: idx + 1,
+                category: s.category || 'Core',
+                name: s.name || `Subject ${idx + 1}`,
+                credits: s.credits
+              }))}
+              pdfData={{
+                calculatorName: 'Credits Distribution Result Card',
+                subtitle: 'Calculated based on your registered course credits',
+                filename: 'ResultPoint_Credits_Result.pdf',
+                score: `${metrics.totalCredits}`,
+                maxScale: '24 Target Credits',
+                standing: standing?.text,
+                metadata: {
+                  university: university.toUpperCase(),
+                  regulation: regulation.toUpperCase(),
+                  course: course.toUpperCase(),
+                  semester: semester.toUpperCase(),
+                  calculationMethod: 'Curriculum Credit Distribution',
+                  totalSubjects: subjects.length
+                },
+                metrics: [
+                  { label: 'Total Credits', value: metrics.totalCredits },
+                  { label: 'Core Credits', value: metrics.coreCredits },
+                  { label: 'Elective Credits', value: metrics.electiveCredits },
+                  { label: 'Audit Credits', value: metrics.auditCredits }
+                ],
+                subjectRows: subjects.map((s, idx) => ({
+                  num: idx + 1,
+                  category: s.category || 'Core',
+                  name: s.name || `Subject ${idx + 1}`,
+                  credits: s.credits
+                }))
+              }}
+              shareData={{
+                toolName: 'Credits Calculator',
+                score: `${metrics.totalCredits} Credits`,
+                scaleText: '(Target: 16–24 Credits)',
+                metrics: [
+                  { label: 'Total Credits', value: metrics.totalCredits },
+                  { label: 'Core', value: metrics.coreCredits },
+                  { label: 'Elective', value: metrics.electiveCredits },
+                  { label: 'Audit', value: metrics.auditCredits }
+                ],
+                metadata: {
+                  university: university.toUpperCase(),
+                  regulation: regulation.toUpperCase(),
+                  semester: semester.toUpperCase()
+                }
+              }}
+              onSave={(record) => {
+                setPendingCalc(record);
+                setIsModalOpen(true);
+              }}
             />
 
             {/* Semester Credit History */}
@@ -543,8 +667,8 @@ export default function CreditsCalculator() {
           </aside>
         </div>
 
-        {/* Dynamic Subject-wise Credit Distribution Chart */}
-        <section className="rounded-2xl bg-card border border-border p-4 sm:p-5 shadow-subtle space-y-3" aria-label="Subject-wise Credit Distribution Chart">
+        {/* Dynamic Subject-wise Credit Distribution Chart (Desktop / Tablet Only) */}
+        <section className="hidden lg:block rounded-2xl bg-card border border-border p-4 sm:p-5 shadow-subtle space-y-3" aria-label="Subject-wise Credit Distribution Chart">
           <div className="flex items-center justify-between pb-2 border-b border-border">
             <div>
               <h3 className="text-sm font-bold text-text-h">Subject-wise Credit Distribution</h3>
@@ -598,7 +722,16 @@ export default function CreditsCalculator() {
         <ExploreMoreTools />
       </main>
 
-      <SaveModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+      <SaveModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        calculationData={pendingCalc}
+        onSaveSuccess={(saved) => {
+          if (saved) {
+            dispatch(saveCalculationToHistory(saved));
+          }
+        }}
+      />
     </>
   );
 }

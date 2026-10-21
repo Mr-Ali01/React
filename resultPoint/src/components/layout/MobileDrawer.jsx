@@ -1,8 +1,22 @@
 import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { X } from 'lucide-react';
+import { X, LayoutDashboard } from 'lucide-react';
+import { useAppSelector } from '../../hooks/useAppSelector';
+import { selectCurrentUser, selectIsAuthenticated } from '../../features/auth/authSlice';
+import { authService } from '../../services/authService';
 
 export default function MobileDrawer({ isOpen, onClose }) {
+  const reduxIsAuth = useAppSelector(selectIsAuthenticated);
+  const reduxUser = useAppSelector(selectCurrentUser);
+  const serviceUser = authService.getCurrentUser();
+  const currentUser = reduxUser || serviceUser;
+  const isAuthenticated = Boolean((reduxIsAuth && currentUser) || authService.isAuthenticated());
+
+  const isStudent = isAuthenticated && currentUser?.role === 'student';
+  const isAdmin = isAuthenticated && currentUser?.role === 'admin';
+  const dashboardPath = isAdmin ? '/admin/dashboard' : '/student/dashboard';
+  const dashboardLabel = isAdmin ? 'Go to Admin' : 'Go to Dashboard';
+
   useEffect(() => {
     if (isOpen) {
       document.body.classList.add('overflow-hidden');
@@ -69,20 +83,33 @@ export default function MobileDrawer({ isOpen, onClose }) {
         </div>
 
         <div className="mx-4 mb-6 pt-5 border-t border-border flex flex-col gap-2.5">
-          <Link
-            onClick={onClose}
-            to="/login"
-            className="w-full py-2.5 text-center text-sm font-semibold rounded-xl border border-border text-text-h hover:bg-bg-sec transition-colors"
-          >
-            Login
-          </Link>
-          <Link
-            onClick={onClose}
-            to="/signup"
-            className="w-full py-2.5 text-center text-sm font-bold rounded-xl bg-accent text-white shadow-accent hover:bg-accent-hover transition-colors"
-          >
-            Sign Up Free →
-          </Link>
+          {isStudent || isAdmin ? (
+            <Link
+              onClick={onClose}
+              to={dashboardPath}
+              className="w-full py-2.5 text-center text-sm font-bold rounded-xl bg-accent text-white shadow-accent hover:bg-accent-hover transition-colors flex items-center justify-center gap-2"
+            >
+              <LayoutDashboard className="w-4 h-4" />
+              <span>{dashboardLabel}</span>
+            </Link>
+          ) : (
+            <>
+              <Link
+                onClick={onClose}
+                to="/login"
+                className="w-full py-2.5 text-center text-sm font-semibold rounded-xl border border-border text-text-h hover:bg-bg-sec transition-colors"
+              >
+                Login
+              </Link>
+              <Link
+                onClick={onClose}
+                to="/signup"
+                className="w-full py-2.5 text-center text-sm font-bold rounded-xl bg-accent text-white shadow-accent hover:bg-accent-hover transition-colors"
+              >
+                Sign Up Free →
+              </Link>
+            </>
+          )}
         </div>
       </div>
     </>

@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useState, useEffect, useMemo } from 'react';
+import { useNavigate, useParams, useSearchParams, Link } from 'react-router-dom';
 import {
   PlusCircle,
   Trash2,
@@ -8,7 +8,6 @@ import {
   AlertCircle,
   Sparkles,
   BookOpen,
-  Info,
   Layers,
   GraduationCap
 } from 'lucide-react';
@@ -18,13 +17,37 @@ import { academicCatalogService } from '../../services/academicCatalogService';
 import { academicCalculationEngine } from '../../services/academicCalculationEngine';
 import AcademicProfileGate from '../../components/student/AcademicProfileGate';
 import { useToast } from '../../context/ToastContext';
+import { useAppDispatch } from '../../hooks/useAppDispatch';
+import { useAppSelector } from '../../hooks/useAppSelector';
+import {
+  selectResults,
+  addSemesterResult,
+  updateSemesterResult,
+  fetchResults
+} from '../../features/results/resultsSlice';
+import { selectAcademicProfile, fetchAcademicProfile } from '../../features/academicProfile/academicProfileSlice';
+import { selectMarksInputPreference } from '../../features/settings/settingsSlice';
 
 export default function AddResult() {
   const navigate = useNavigate();
+  const dispatch = useAppDispatch();
   const { showToast } = useToast();
 
-  const [profile, setProfile] = useState(() => studentService.getProfile());
-  const [existingResults, setExistingResults] = useState(() => resultService.getAllResults());
+  const reduxProfile = useAppSelector(selectAcademicProfile);
+  const reduxResults = useAppSelector(selectResults);
+  const marksInputPreference = useAppSelector(selectMarksInputPreference);
+
+  useEffect(() => {
+    dispatch(fetchResults());
+    dispatch(fetchAcademicProfile());
+  }, [dispatch]);
+
+  const profile = useMemo(() => ({
+    ...studentService.getProfile(),
+    ...(reduxProfile || {}),
+  }), [reduxProfile]);
+
+  const existingResults = reduxResults && reduxResults.length > 0 ? reduxResults : resultService.getAllResults();
 
   // Load catalog configuration
   const catalogConfig = useMemo(() => {
@@ -52,24 +75,91 @@ export default function AddResult() {
     return new Set(existingResults.map((r) => Number(r.semesterNumber)));
   }, [existingResults]);
 
-  // Determine default eligible semester: first semester not yet saved, or 1
-  const defaultEligibleSemester = useMemo(() => {
+  const { resultId } = useParams();
+  const [searchParams] = useSearchParams();
+  const editParamId = resultId || searchParams.get('edit') || searchParams.get('id');
+
+  const editTargetResult = useMemo(() => {
+    if (!editParamId) return null;
+    const clean = String(editParamId).replace('semester-', '').replace('res_sem_', '');
+    const match = existingResults.find(
+      (r) =>
+        r.id === editParamId ||
+        String(r.semesterNumber) === String(editParamId) ||
+        String(r.semesterNumber) === clean ||
+        r.id === `semester-${editParamId}` ||
+        r.id === `semester-${clean}`
+    );
+    return match || resultService.getResultById(editParamId);
+  }, [editParamId, existingResults]);
+
+  const isEditMode = Boolean(editTargetResult);
+
+  // Determine available (unsaved) semesters
+  const availableSemesters = useMemo(() => {
+    const list = [];
     for (let i = 1; i <= maxSemesters; i++) {
-      if (!existingSemesterNumbers.has(i)) return i;
+      if (!existingSemesterNumbers.has(i)) {
+        list.push(i);
+      }
     }
-    return 1;
+    return list;
   }, [maxSemesters, existingSemesterNumbers]);
 
+  const defaultEligibleSemester = editTargetResult
+    ? Number(editTargetResult.semesterNumber)
+    : availableSemesters.length > 0
+    ? availableSemesters[0]
+    : 1;
+
   const [semesterNumber, setSemesterNumber] = useState(defaultEligibleSemester);
-  const [academicPeriod, setAcademicPeriod] = useState(`Semester ${defaultEligibleSemester} Exam`);
-  const [useMarksInput, setUseMarksInput] = useState(false);
+  const [academicPeriod, setAcademicPeriod] = useState(
+    editTargetResult?.academicPeriod || `Semester ${defaultEligibleSemester} Exam`
+  );
   const [subjects, setSubjects] = useState([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // When editTargetResult loads or updates, prefill all form fields with saved data
+  useEffect(() => {
+    if (editTargetResult) {
+      setSemesterNumber(Number(editTargetResult.semesterNumber));
+      setAcademicPeriod(editTargetResult.academicPeriod || `Semester ${editTargetResult.semesterNumber} Exam`);
+      if (Array.isArray(editTargetResult.subjects) && editTargetResult.subjects.length > 0) {
+        setSubjects(
+          editTargetResult.subjects.map((s, idx) => ({
+            id: s.id || `edit_sub_${idx}_${Date.now()}`,
+            code: s.code || '',
+            name: s.name || '',
+            credits: Number(s.credits) || 4,
+            defaultCredits: Number(s.defaultCredits || s.credits) || 4,
+            marksObtained: Number(s.marksObtained) || 0,
+            maxMarks: Number(s.maxMarks) || 100,
+            grade: s.grade || 'A',
+            isElective: Boolean(s.isElective)
+          }))
+        );
+      }
+    }
+  }, [editTargetResult]);
+
+  // Keep semesterNumber pointing to valid available semester (only in add mode)
+  useEffect(() => {
+    if (isEditMode) return;
+    if (availableSemesters.length > 0) {
+      if (!semesterNumber || existingSemesterNumbers.has(Number(semesterNumber))) {
+        setSemesterNumber(availableSemesters[0]);
+      }
+    }
+  }, [isEditMode, availableSemesters, existingSemesterNumbers, semesterNumber]);
 
   // Check if chosen semester is already recorded
-  const isDuplicateSemester = existingSemesterNumbers.has(Number(semesterNumber));
+  const isDuplicateSemester = !isEditMode && existingSemesterNumbers.has(Number(semesterNumber));
+  const allSemestersCompleted = !isEditMode && availableSemesters.length === 0;
 
-  // Initialize/Load subjects when semesterNumber changes or when catalogConfig loads
+  // Initialize/Load subjects when semesterNumber changes or when catalogConfig loads (only in add mode)
   useEffect(() => {
+    if (isEditMode || !semesterNumber) return;
+
     const configuredSubjects = academicCatalogService.getSemesterSubjects(
       profile.universityId,
       profile.courseId,
@@ -83,28 +173,29 @@ export default function AddResult() {
           id: s.id || `sub_${idx}_${Date.now()}`,
           code: s.code,
           name: s.name,
-          credits: s.credits,
-          defaultCredits: s.credits,
+          credits: Number(s.credits || s.defaultCredits) || 4,
+          defaultCredits: Number(s.defaultCredits || s.credits) || 4,
           marksObtained: 85,
           maxMarks: 100,
-          grade: s.credits >= 4 ? 'A+' : 'A',
+          grade: (s.credits || s.defaultCredits || 4) >= 4 ? 'A+' : 'A',
           isElective: Boolean(s.isElective)
         }))
       );
     } else {
-      // Default fallback subjects for this semester if catalog has no specific list
+      // Default subjects for this semester if catalog has no specific list
       setSubjects([
         { id: '1', code: `CS${semesterNumber}01`, name: `Core Subject 1`, credits: 4, defaultCredits: 4, marksObtained: 85, maxMarks: 100, grade: 'A+' },
         { id: '2', code: `CS${semesterNumber}02`, name: `Core Subject 2`, credits: 4, defaultCredits: 4, marksObtained: 80, maxMarks: 100, grade: 'A' },
-        { id: '3', code: `CS${semesterNumber}03`, name: `Core Subject 3`, credits: 3, defaultCredits: 3, marksObtained: 78, maxMarks: 100, grade: 'B+' },
-        { id: '4', code: `CS${semesterNumber}04`, name: `Department Elective`, credits: 3, defaultCredits: 3, marksObtained: 90, maxMarks: 100, grade: 'O' },
+        { id: '3', code: `CS${semesterNumber}03`, name: `Core Subject 3`, credits: 4, defaultCredits: 4, marksObtained: 78, maxMarks: 100, grade: 'B+' },
+        { id: '4', code: `CS${semesterNumber}04`, name: `Department Elective`, credits: 4, defaultCredits: 4, marksObtained: 90, maxMarks: 100, grade: 'O' },
         { id: '5', code: `CS${semesterNumber}05`, name: `Laboratory / Practical`, credits: 2, defaultCredits: 2, marksObtained: 92, maxMarks: 100, grade: 'O' }
       ]);
     }
 
-    setAcademicPeriod(`Semester ${semesterNumber} - 202${semesterNumber + 2}`);
-  }, [semesterNumber, profile.universityId, profile.courseId, profile.regulationId]);
+    setAcademicPeriod(`Semester ${semesterNumber} - 202${Number(semesterNumber) + 2}`);
+  }, [isEditMode, semesterNumber, profile.universityId, profile.courseId, profile.regulationId]);
 
+  // Set default subject credit value to 4 credits when adding an elective/subject (Requirement 3)
   const handleAddSubject = () => {
     const newIdx = subjects.length + 1;
     setSubjects([
@@ -113,8 +204,8 @@ export default function AddResult() {
         id: String(Date.now()),
         code: `EL${semesterNumber}0${newIdx}`,
         name: `Professional Elective ${newIdx}`,
-        credits: 3,
-        defaultCredits: 3,
+        credits: 4,
+        defaultCredits: 4,
         marksObtained: 75,
         maxMarks: 100,
         grade: 'A',
@@ -135,11 +226,24 @@ export default function AddResult() {
         const updated = { ...s, [field]: value };
 
         // If marks changed, automatically derive the letter grade using catalog grading scale
-        if (field === 'marksObtained' || field === 'maxMarks') {
-          const obt = field === 'marksObtained' ? Number(value) : s.marksObtained;
-          const max = field === 'maxMarks' ? Number(value) : s.maxMarks;
-          const derived = academicCalculationEngine.getGradeFromMarks(obt, max, gradeScale);
-          updated.grade = derived.grade;
+        if (field === 'marksObtained') {
+          const rawVal = value === '' ? '' : Number(value);
+          updated.marksObtained = rawVal;
+          if (value !== '' && !isNaN(rawVal) && rawVal >= 0) {
+            const derived = academicCalculationEngine.getGradeFromMarks(rawVal, s.maxMarks || 100, gradeScale);
+            updated.grade = derived.grade;
+            updated.points = derived.points;
+            updated.isPass = derived.isPass;
+          }
+        }
+
+        // If user manually changes grade, resolve points and pass status
+        if (field === 'grade') {
+          const matched = gradeScale.find((g) => g.grade.toUpperCase() === String(value).toUpperCase());
+          if (matched) {
+            updated.points = matched.points;
+            updated.isPass = matched.isPass;
+          }
         }
 
         return updated;
@@ -169,29 +273,47 @@ export default function AddResult() {
     return academicCalculationEngine.calculateCGPA(simulatedSemesters).cgpa;
   }, [existingResults, semesterNumber, calculationResult]);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
+    if (allSemestersCompleted) {
+      showToast('All semesters for this course have already been saved.', 'error');
+      return;
+    }
+
     if (isDuplicateSemester) {
-      showToast(`Semester ${semesterNumber} already exists in your records. Please choose another semester or edit the existing result.`);
+      showToast(`Semester ${semesterNumber} already exists in your records. Please choose another semester or edit the existing result.`, 'error');
       return;
     }
 
     if (Number(semesterNumber) < 1 || Number(semesterNumber) > maxSemesters) {
-      showToast(`Invalid semester. Allowed semesters for ${catalogConfig?.course?.name || 'this course'} are 1 to ${maxSemesters}.`);
+      showToast(`Invalid semester. Allowed semesters for ${catalogConfig?.course?.name || 'this course'} are 1 to ${maxSemesters}.`, 'error');
+      return;
+    }
+
+    if (!subjects || subjects.length === 0) {
+      showToast('Please add at least one subject to save semester results.', 'error');
+      return;
+    }
+
+    const hasInvalidSubject = subjects.some(s => !s.name || !s.name.trim() || Number(s.credits) <= 0);
+    if (hasInvalidSubject) {
+      showToast('Please provide valid subject names and positive credits for all subjects.', 'error');
       return;
     }
 
     if (calculationResult.totalCredits <= 0) {
-      showToast('Total credits must be greater than zero.');
+      showToast('Total credits must be greater than zero.', 'error');
       return;
     }
 
+    setIsSubmitting(true);
+
     const formattedSubjects = calculationResult.subjects.map((s) => ({
-      code: s.code || `SUB-${Date.now()}`,
-      name: s.name,
-      credits: Number(s.credits) || 3,
-      defaultCredits: s.defaultCredits || Number(s.credits) || 3,
+      code: (s.code || `SUB-${Date.now()}`).trim(),
+      name: s.name.trim(),
+      credits: Number(s.credits) || 4,
+      defaultCredits: s.defaultCredits || Number(s.credits) || 4,
       grade: s.grade,
       points: s.points,
       marksObtained: Number(s.marksObtained) || 0,
@@ -200,11 +322,11 @@ export default function AddResult() {
     }));
 
     const resultRecord = {
-      id: `semester-${semesterNumber}`,
+      id: isEditMode ? editTargetResult.id : `semester-${semesterNumber}`,
       semesterNumber: Number(semesterNumber),
       semesterLabel: `Semester ${semesterNumber}`,
       semesterTitle: `Semester ${semesterNumber}`,
-      academicPeriod,
+      academicPeriod: academicPeriod.trim() || `Semester ${semesterNumber} Exam`,
       sgpa: calculationResult.sgpa,
       cgpa: projectedCGPA,
       creditsEarned: calculationResult.earnedCredits,
@@ -213,18 +335,29 @@ export default function AddResult() {
       status: calculationResult.status,
       badgeColor: calculationResult.sgpa >= 8.5 ? 'purple' : calculationResult.sgpa >= 7.5 ? 'blue' : 'emerald',
       subjects: formattedSubjects,
-      // Traceability and rule versioning
       universityId: profile.universityId,
       courseId: profile.courseId,
       regulationId: profile.regulationId,
       ruleVersion: catalogConfig?.regulation?.ruleVersion || '1.0',
       academicBatch: profile.batch,
-      savedAt: new Date().toISOString()
+      savedAt: isEditMode ? (editTargetResult.savedAt || new Date().toISOString()) : new Date().toISOString(),
+      updatedAt: isEditMode ? new Date().toISOString() : undefined
     };
 
-    resultService.addResult(resultRecord);
-    showToast(`Semester ${semesterNumber} result saved with SGPA: ${calculationResult.sgpa} and CGPA: ${projectedCGPA}!`);
-    navigate('/student/my-results');
+    try {
+      if (isEditMode) {
+        await dispatch(updateSemesterResult({ id: editTargetResult.id, updates: resultRecord })).unwrap();
+        showToast(`Semester ${semesterNumber} result updated with SGPA: ${calculationResult.sgpa.toFixed(2)} and CGPA: ${projectedCGPA.toFixed(2)}!`);
+      } else {
+        await dispatch(addSemesterResult(resultRecord)).unwrap();
+        showToast(`Semester ${semesterNumber} result saved with SGPA: ${calculationResult.sgpa.toFixed(2)} and CGPA: ${projectedCGPA.toFixed(2)}!`);
+      }
+      navigate('/student/results');
+    } catch (err) {
+      showToast(typeof err === 'string' ? err : err?.message || 'Failed to save semester result', 'error');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // If profile is incomplete, display AcademicProfileGate
@@ -251,13 +384,15 @@ export default function AddResult() {
             <span>Back to Dashboard</span>
           </button>
           <h1 className="text-xl sm:text-2xl font-extrabold text-text-h flex items-center gap-2">
-            <span>Add Semester Result</span>
+            <span>{isEditMode ? 'Edit Semester Result' : 'Add Semester Result'}</span>
             <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-accent/15 text-accent border border-accent/20">
               {catalogConfig?.course?.code || 'Course'} • {catalogConfig?.regulation?.code || 'Regulation'}
             </span>
           </h1>
           <p className="text-xs text-text-light">
-            {catalogConfig?.university?.name} ({catalogConfig?.course?.name})
+            {isEditMode
+              ? `Editing verified scorecard and subject grades for Semester ${semesterNumber} (${catalogConfig?.university?.name || profile.university || ''})`
+              : `${catalogConfig?.university?.name} (${catalogConfig?.course?.name})`}
           </p>
         </div>
 
@@ -289,42 +424,39 @@ export default function AddResult() {
         </div>
       </div>
 
+      {/* All Semesters Completed Banner */}
+      {allSemestersCompleted && (
+        <div className="p-4 rounded-2xl bg-brandGreen/10 border border-brandGreen/30 flex items-start gap-3 text-brandGreen">
+          <CheckCircle className="w-5 h-5 shrink-0 mt-0.5" />
+          <div className="text-xs space-y-1">
+            <p className="font-bold">All {maxSemesters} Semesters Recorded!</p>
+            <p className="text-text-light dark:text-slate-300">
+              You have already saved scorecards for all {maxSemesters} semesters in your curriculum.
+              You can review, print, or update any semester result in{' '}
+              <Link to="/student/results" className="text-accent underline font-semibold">
+                My Results
+              </Link>.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Duplicate Warning Alert */}
-      {isDuplicateSemester && (
+      {!allSemestersCompleted && isDuplicateSemester && (
         <div className="p-4 rounded-2xl bg-brandPink/10 border border-brandPink/30 flex items-start gap-3 text-brandPink">
           <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
           <div className="text-xs space-y-1">
             <p className="font-bold">Semester {semesterNumber} has already been saved!</p>
             <p className="text-text-light dark:text-slate-300">
               You already have a verified scorecard for Semester {semesterNumber}. To update subjects or marks,
-              go to <Link to="/student/my-results" className="text-accent underline font-semibold">My Results</Link> and select Edit.
+              go to <Link to="/student/results" className="text-accent underline font-semibold">My Results</Link> and select Edit.
               Or choose an unsaved semester number below.
             </p>
           </div>
         </div>
       )}
 
-      {/* Catalog Context Banner */}
-      <div className="p-3.5 rounded-2xl bg-bg-sec border border-border flex flex-wrap items-center justify-between gap-3 text-xs">
-        <div className="flex items-center gap-2 text-text-h">
-          <Info className="w-4 h-4 text-accent shrink-0" />
-          <span>
-            Grading Rule: <strong className="text-accent">{catalogConfig?.regulation?.gradingSystem}</strong> ({catalogConfig?.gradeScale?.length || 8}-level scale)
-          </span>
-          <span className="text-text-light">• Max Semesters: {maxSemesters}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <label className="text-xs text-text-light font-medium cursor-pointer flex items-center gap-1.5">
-            <input
-              type="checkbox"
-              checked={useMarksInput}
-              onChange={(e) => setUseMarksInput(e.target.checked)}
-              className="rounded text-accent focus:ring-accent"
-            />
-            <span>Enable Marks Input Mode</span>
-          </label>
-        </div>
-      </div>
+
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Semester Configuration Selectors */}
@@ -336,20 +468,30 @@ export default function AddResult() {
             <select
               value={semesterNumber}
               onChange={(e) => setSemesterNumber(Number(e.target.value))}
-              className="calc-input w-full px-3 py-2 rounded-xl text-xs font-semibold cursor-pointer"
+              disabled={isEditMode || allSemestersCompleted}
+              className="calc-input w-full px-3 py-2 rounded-xl text-xs font-semibold cursor-pointer disabled:opacity-50"
               required
             >
-              {Array.from({ length: maxSemesters }, (_, i) => i + 1).map((num) => {
-                const isSaved = existingSemesterNumbers.has(num);
-                return (
+              {isEditMode ? (
+                <option value={semesterNumber}>
+                  Semester {semesterNumber} (Editing Saved Result)
+                </option>
+              ) : availableSemesters.length > 0 ? (
+                availableSemesters.map((num, idx) => (
                   <option key={num} value={num}>
-                    Semester {num} {isSaved ? '(Already Saved)' : '(Available)'}
+                    Semester {num} {idx === 0 ? '(Next Eligible Semester)' : ''}
                   </option>
-                );
-              })}
+                ))
+              ) : (
+                <option value="">No More Semesters Available</option>
+              )}
             </select>
             <p className="text-[11px] text-text-light mt-1">
-              Capped to {maxSemesters} semesters per {catalogConfig?.course?.name || 'course'} structure.
+              {isEditMode
+                ? `Updating saved records for Semester ${semesterNumber}. Modifying will recalculate all dependent SGPA and CGPAs.`
+                : availableSemesters.length > 0
+                ? `${availableSemesters.length} of ${maxSemesters} semesters remaining to be recorded.`
+                : `All ${maxSemesters} semesters completed for this degree program.`}
             </p>
           </div>
 
@@ -412,7 +554,7 @@ export default function AddResult() {
                 </div>
 
                 {/* Subject Name */}
-                <div className="col-span-9 sm:col-span-4">
+                <div className="col-span-9 sm:col-span-3">
                   <label className="text-[10px] text-text-light uppercase font-bold block mb-0.5">Subject Title</label>
                   <input
                     type="text"
@@ -440,46 +582,74 @@ export default function AddResult() {
                   </select>
                 </div>
 
-                {/* Marks or Grade Input */}
-                {useMarksInput ? (
-                  <div className="col-span-5 sm:col-span-3 grid grid-cols-2 gap-1.5">
-                    <div>
-                      <label className="text-[10px] text-text-light uppercase font-bold block mb-0.5">Marks</label>
+                {marksInputPreference === 'marks-first' ? (
+                  <>
+                    {/* Marks Input (Primary in marks-first mode) */}
+                    <div className="col-span-4 sm:col-span-2">
+                      <label className="text-[10px] text-accent uppercase font-bold block mb-0.5">Marks (0-100)</label>
                       <input
                         type="number"
                         min="0"
                         max={sub.maxMarks || 100}
-                        value={sub.marksObtained}
+                        value={sub.marksObtained !== undefined && sub.marksObtained !== null ? sub.marksObtained : ''}
                         onChange={(e) => handleSubjectChange(sub.id, 'marksObtained', e.target.value)}
-                        className="calc-input w-full px-2 py-1.5 rounded-lg text-xs font-bold text-center text-accent"
+                        placeholder="Marks"
+                        className="calc-input w-full px-2 py-1.5 rounded-lg text-xs font-bold text-center text-accent border-accent/40"
                       />
                     </div>
-                    <div>
-                      <label className="text-[10px] text-text-light uppercase font-bold block mb-0.5">Grade</label>
-                      <span className="w-full inline-block px-2 py-1.5 rounded-lg text-xs font-bold text-center bg-bg-sec border border-border text-accent">
-                        {sub.grade}
-                      </span>
+
+                    {/* Grade Dropdown (Auto-derived from Marks) */}
+                    <div className="col-span-3 sm:col-span-2">
+                      <label className="text-[10px] text-text-light uppercase font-bold block mb-0.5">Grade (Scale)</label>
+                      <select
+                        value={sub.grade}
+                        onChange={(e) => handleSubjectChange(sub.id, 'grade', e.target.value)}
+                        className="calc-input w-full px-2 py-1.5 rounded-lg text-xs font-bold text-accent cursor-pointer"
+                      >
+                        {gradeScale.map((g) => (
+                          <option key={g.grade} value={g.grade}>
+                            {g.grade} ({g.points} pts{g.isPass ? '' : ' - Fail'})
+                          </option>
+                        ))}
+                      </select>
                     </div>
-                  </div>
+                  </>
                 ) : (
-                  <div className="col-span-5 sm:col-span-3">
-                    <label className="text-[10px] text-text-light uppercase font-bold block mb-0.5">Letter Grade</label>
-                    <select
-                      value={sub.grade}
-                      onChange={(e) => handleSubjectChange(sub.id, 'grade', e.target.value)}
-                      className="calc-input w-full px-2 py-1.5 rounded-lg text-xs font-bold text-accent cursor-pointer"
-                    >
-                      {gradeScale.map((g) => (
-                        <option key={g.grade} value={g.grade}>
-                          {g.grade} ({g.points} pts{g.isPass ? '' : ' - Fail'})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  <>
+                    {/* Grade Dropdown (Primary in grade-first mode) */}
+                    <div className="col-span-3 sm:col-span-2">
+                      <label className="text-[10px] text-accent uppercase font-bold block mb-0.5">Grade</label>
+                      <select
+                        value={sub.grade}
+                        onChange={(e) => handleSubjectChange(sub.id, 'grade', e.target.value)}
+                        className="calc-input w-full px-2 py-1.5 rounded-lg text-xs font-bold text-accent cursor-pointer border-accent/40"
+                      >
+                        {gradeScale.map((g) => (
+                          <option key={g.grade} value={g.grade}>
+                            {g.grade} ({g.points} pts{g.isPass ? '' : ' - Fail'})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Marks Input (Optional in grade-first mode) */}
+                    <div className="col-span-4 sm:col-span-2">
+                      <label className="text-[10px] text-text-light uppercase font-bold block mb-0.5">Marks (0-100)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max={sub.maxMarks || 100}
+                        value={sub.marksObtained !== undefined && sub.marksObtained !== null ? sub.marksObtained : ''}
+                        onChange={(e) => handleSubjectChange(sub.id, 'marksObtained', e.target.value)}
+                        placeholder="Marks"
+                        className="calc-input w-full px-2 py-1.5 rounded-lg text-xs font-semibold text-center text-text-h"
+                      />
+                    </div>
+                  </>
                 )}
 
                 {/* Delete Button */}
-                <div className="col-span-3 sm:col-span-1 text-right pt-4 sm:pt-3">
+                <div className="col-span-1 sm:col-span-1 text-right pt-4 sm:pt-3">
                   <button
                     type="button"
                     onClick={() => handleRemoveSubject(sub.id)}
@@ -522,11 +692,19 @@ export default function AddResult() {
 
             <button
               type="submit"
-              disabled={isDuplicateSemester}
+              disabled={(!isEditMode && (isDuplicateSemester || allSemestersCompleted)) || isSubmitting}
               className="px-6 py-2.5 rounded-xl text-xs font-bold text-white bg-accent hover:bg-accent-hover shadow-accent transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <CheckCircle className="w-4 h-4" />
-              <span>Save Semester Result</span>
+              <span>
+                {isSubmitting
+                  ? isEditMode
+                    ? 'Updating Result...'
+                    : 'Saving Result...'
+                  : isEditMode
+                  ? 'Update Semester Result'
+                  : 'Save Semester Result'}
+              </span>
             </button>
           </div>
         </div>

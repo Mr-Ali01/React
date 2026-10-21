@@ -1,8 +1,22 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Sparkles, ArrowRight } from 'lucide-react';
+import { Sparkles, ArrowRight, LayoutDashboard } from 'lucide-react';
+import { useAppSelector } from '../../../hooks/useAppSelector';
+import { selectCurrentUser, selectIsAuthenticated } from '../../../features/auth/authSlice';
+import { authService } from '../../../services/authService';
 
 export default function FinalCtaSection() {
+  const reduxIsAuth = useAppSelector(selectIsAuthenticated);
+  const reduxUser = useAppSelector(selectCurrentUser);
+  const serviceUser = authService.getCurrentUser();
+  const currentUser = reduxUser || serviceUser;
+  const isAuthenticated = Boolean((reduxIsAuth && currentUser) || authService.isAuthenticated());
+
+  const isStudent = isAuthenticated && currentUser?.role === 'student';
+  const isAdmin = isAuthenticated && currentUser?.role === 'admin';
+  const dashboardPath = isAdmin ? '/admin/dashboard' : '/student/dashboard';
+  const dashboardLabel = isAdmin ? 'Go to Admin' : 'Go to Dashboard';
+
   return (
     <section id="final-cta" className="py-12 sm:py-16 bg-bg transition-colors">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -24,20 +38,43 @@ export default function FinalCtaSection() {
             </div>
 
             <div className="shrink-0 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-              <Link
-                to="/calculators"
-                className="px-6 py-3.5 rounded-xl font-bold text-xs sm:text-sm text-text-h bg-white hover:bg-slate-50 shadow-md active:scale-95 transition-all flex items-center justify-center gap-2"
-              >
-                <span>Calculate Your Result</span>
-                <ArrowRight className="w-4 h-4 text-accent" />
-              </Link>
+              {isStudent || isAdmin ? (
+                <>
+                  <Link
+                    to={dashboardPath}
+                    id="cta-go-to-dashboard-btn"
+                    className="px-6 py-3.5 rounded-xl font-bold text-xs sm:text-sm text-text-h bg-white hover:bg-slate-50 shadow-md active:scale-95 transition-all flex items-center justify-center gap-2"
+                  >
+                    <LayoutDashboard className="w-4 h-4 text-accent" />
+                    <span>{dashboardLabel}</span>
+                  </Link>
 
-              <Link
-                to="/tools"
-                className="px-5 py-3.5 rounded-xl font-semibold text-xs sm:text-sm text-white border border-white/40 hover:bg-white/10 active:scale-95 transition-all flex items-center justify-center gap-2"
-              >
-                <span>Explore Tools →</span>
-              </Link>
+                  <Link
+                    to="/calculators"
+                    className="px-5 py-3.5 rounded-xl font-semibold text-xs sm:text-sm text-white border border-white/40 hover:bg-white/10 active:scale-95 transition-all flex items-center justify-center gap-2"
+                  >
+                    <span>Calculate Results →</span>
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <Link
+                    to="/calculators"
+                    className="px-6 py-3.5 rounded-xl font-bold text-xs sm:text-sm text-text-h bg-white hover:bg-slate-50 shadow-md active:scale-95 transition-all flex items-center justify-center gap-2"
+                  >
+                    <span>Calculate Your Result</span>
+                    <ArrowRight className="w-4 h-4 text-accent" />
+                  </Link>
+
+                  <Link
+                    to="/signup?tab=signup"
+                    id="cta-signup-btn"
+                    className="px-5 py-3.5 rounded-xl font-semibold text-xs sm:text-sm text-white border border-white/40 hover:bg-white/10 active:scale-95 transition-all flex items-center justify-center gap-2"
+                  >
+                    <span>Sign Up Free →</span>
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         </div>

@@ -10,7 +10,11 @@ import {
   Sparkles,
   ArrowUpRight,
   Quote,
+  LayoutDashboard
 } from 'lucide-react';
+import { useAppSelector } from '../../../hooks/useAppSelector';
+import { selectCurrentUser, selectIsAuthenticated } from '../../../features/auth/authSlice';
+import { authService } from '../../../services/authService';
 
 function Counter({ target, decimals = 0, duration = 1500 }) {
   const [val, setVal] = useState(0);
@@ -37,16 +41,34 @@ function Counter({ target, decimals = 0, duration = 1500 }) {
 }
 
 export default function Hero() {
+  const reduxIsAuth = useAppSelector(selectIsAuthenticated);
+  const reduxUser = useAppSelector(selectCurrentUser);
+  const serviceUser = authService.getCurrentUser();
+  const currentUser = reduxUser || serviceUser;
+  const isAuthenticated = Boolean((reduxIsAuth && currentUser) || authService.isAuthenticated());
+
+  const isStudent = isAuthenticated && currentUser?.role === 'student';
+  const isAdmin = isAuthenticated && currentUser?.role === 'admin';
+  const dashboardPath = isAdmin ? '/admin/dashboard' : '/student/dashboard';
+  const dashboardLabel = isAdmin ? 'Go to Admin' : 'Go to Dashboard';
+
   return (
     <section id="hero" className="relative pt-10 pb-16 sm:pt-14 sm:pb-20 lg:pt-16 lg:pb-24 overflow-hidden">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-8 items-center">
           
           <div className="lg:col-span-7 flex flex-col items-start text-left">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider text-accent bg-accent-soft border border-accent/25 shadow-xs mb-5">
-              <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
-              <span>ACADEMIC PERFORMANCE PLATFORM</span>
-            </div>
+            {isStudent || isAdmin ? (
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[11px] font-bold text-text-h bg-accent/10 border border-accent/30 shadow-xs mb-5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                <span>Logged in as {currentUser.fullName || (isAdmin ? 'Administrator' : 'Student')} • {isAdmin ? 'Admin' : 'Student'} Session</span>
+              </div>
+            ) : (
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider text-accent bg-accent-soft border border-accent/25 shadow-xs mb-5">
+                <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
+                <span>ACADEMIC PERFORMANCE PLATFORM</span>
+              </div>
+            )}
 
             <h1 className="text-3xl sm:text-4xl lg:text-[44px] xl:text-[48px] font-black text-text-h tracking-tight leading-[1.14]">
               Calculate Your <span className="text-accent">Results.</span><br />
@@ -60,20 +82,44 @@ export default function Hero() {
             </p>
 
             <div className="mt-7 flex flex-col sm:flex-row items-stretch sm:items-center gap-3.5 w-full sm:w-auto">
-              <Link
-                to="/calculators"
-                className="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl font-bold text-white bg-accent hover:bg-accent-hover shadow-accent active:scale-95 transition-all text-xs sm:text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-              >
-                <span>Calculate Your Result</span>
-                <ArrowRight className="w-4 h-4" />
-              </Link>
+              {isStudent || isAdmin ? (
+                <>
+                  <Link
+                    to={dashboardPath}
+                    id="hero-go-to-dashboard-btn"
+                    className="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl font-bold text-white bg-accent hover:bg-accent-hover shadow-accent active:scale-95 transition-all text-xs sm:text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                  >
+                    <LayoutDashboard className="w-4 h-4" />
+                    <span>{dashboardLabel}</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </Link>
 
-              <Link
-                to="/tools"
-                className="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl font-semibold text-text-h border border-border bg-card hover:bg-bg-sec active:scale-95 transition-all text-xs sm:text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-              >
-                <span>Explore Tools</span>
-              </Link>
+                  <Link
+                    to="/calculators"
+                    className="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl font-semibold text-text-h border border-border bg-card hover:bg-bg-sec active:scale-95 transition-all text-xs sm:text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                  >
+                    <span>Calculate Your Result</span>
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <Link
+                    to="/calculators"
+                    className="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl font-bold text-white bg-accent hover:bg-accent-hover shadow-accent active:scale-95 transition-all text-xs sm:text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                  >
+                    <span>Calculate Your Result</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </Link>
+
+                  <Link
+                    to="/login"
+                    id="hero-login-btn"
+                    className="inline-flex items-center justify-center gap-2 px-5 py-3.5 rounded-xl font-semibold text-text-h border border-border bg-card hover:bg-bg-sec active:scale-95 transition-all text-xs sm:text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                  >
+                    <span>Login / Sign Up</span>
+                  </Link>
+                </>
+              )}
             </div>
 
             <div className="mt-10 pt-6 border-t border-border/80 grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-6 w-full max-w-xl">

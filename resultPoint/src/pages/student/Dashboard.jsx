@@ -1,11 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import { useEffect } from 'react';
 import {
-  Calendar,
   GraduationCap,
   Building2,
   CalendarDays,
   Layers,
-  Sparkles
 } from 'lucide-react';
 import { studentService } from '../../services/studentService';
 import { resultService } from '../../services/resultService';
@@ -15,64 +13,68 @@ import PerformanceChart from '../../components/student/PerformanceChart';
 import RecentResults from '../../components/student/RecentResults';
 import AcademicGoalCard from '../../components/student/AcademicGoalCard';
 import PerformanceInsights from '../../components/student/PerformanceInsights';
-import QuickActions from '../../components/student/QuickActions';
-import RecommendedForYou from '../../components/student/RecommendedForYou';
 import AcademicProfileGate from '../../components/student/AcademicProfileGate';
+import { useAppSelector } from '../../hooks/useAppSelector';
+import { useAppDispatch } from '../../hooks/useAppDispatch';
+import { selectAcademicProfile, fetchAcademicProfile } from '../../features/academicProfile/academicProfileSlice';
+import { selectResults, fetchResults } from '../../features/results/resultsSlice';
+import {
+  selectPerformanceAnalytics,
+  fetchPerformanceData,
+} from '../../features/performance/performanceSlice';
+import { selectGoalMetrics, fetchAcademicGoal } from '../../features/academicGoals/academicGoalsSlice';
+import { selectDashboardView } from '../../features/settings/settingsSlice';
 
 export default function StudentDashboard() {
-  const [profile, setProfile] = useState(() => studentService.getProfile());
-  const [summary, setSummary] = useState(() => studentService.getAcademicSummary());
-  const [results, setResults] = useState(() => resultService.getAllResults());
-  const [goalMetrics, setGoalMetrics] = useState(() =>
+  const dispatch = useAppDispatch();
+  const reduxProfile = useAppSelector(selectAcademicProfile);
+  const reduxResults = useAppSelector(selectResults);
+  const reduxGoalMetrics = useAppSelector(selectGoalMetrics);
+  const dashboardView = useAppSelector(selectDashboardView);
+
+  useEffect(() => {
+    const syncDashboardData = () => {
+      dispatch(fetchAcademicProfile());
+      dispatch(fetchResults());
+      dispatch(fetchPerformanceData());
+      dispatch(fetchAcademicGoal());
+    };
+
+    // Initial load
+    syncDashboardData();
+
+    // Dynamically synchronize across tabs and components via localStorage and custom events
+    window.addEventListener('storage', syncDashboardData);
+    window.addEventListener('results_data_updated', syncDashboardData);
+    window.addEventListener('academic_profile_updated', syncDashboardData);
+    window.addEventListener('academic_goals_updated', syncDashboardData);
+
+    return () => {
+      window.removeEventListener('storage', syncDashboardData);
+      window.removeEventListener('results_data_updated', syncDashboardData);
+      window.removeEventListener('academic_profile_updated', syncDashboardData);
+      window.removeEventListener('academic_goals_updated', syncDashboardData);
+    };
+  }, [dispatch]);
+
+  const profile = { ...studentService.getProfile(), ...(reduxProfile || {}) };
+  const results = reduxResults && reduxResults.length > 0 ? reduxResults : resultService.getAllResults();
+  const summary = studentService.getAcademicSummary(profile, results);
+  const goalMetrics =
+    reduxGoalMetrics ||
     goalService.calculateGoalMetrics(
       Number(summary.currentCGPA),
       summary.semestersCompleted,
       summary.totalSemesters
-    )
-  );
-  const [insights, setInsights] = useState(() => studentService.getPerformanceInsights());
-
-  // Refresh data on mount or when storage updates
-  useEffect(() => {
-    const prof = studentService.getProfile();
-    const sum = studentService.getAcademicSummary();
-    const res = resultService.getAllResults();
-    const goals = goalService.calculateGoalMetrics(
-      Number(sum.currentCGPA),
-      sum.semestersCompleted,
-      sum.totalSemesters
     );
-    const ins = studentService.getPerformanceInsights();
-
-    setProfile(prof);
-    setSummary(sum);
-    setResults(res);
-    setGoalMetrics(goals);
-    setInsights(ins);
-  }, []);
-
-  // Format current date nicely e.g., "Monday, 06 Oct 2026"
-  const formattedDate = new Intl.DateTimeFormat('en-US', {
-    weekday: 'long',
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric'
-  }).format(new Date());
+  const insights = studentService.getPerformanceInsights(profile, results);
 
   return (
     <AcademicProfileGate
       title="Academic Profile Setup Required"
       description="Before accessing your student dashboard and academic metrics, please configure your University, Course, and Regulation so ResultPoint can calculate your SGPA, CGPA, and degree credits accurately."
     >
-      <div className="space-y-5 sm:space-y-6 max-w-7xl mx-auto">
-      {/* Top Bar with Date (No breadcrumbs as explicitly instructed) */}
-      <div className="flex items-center justify-end">
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-card border border-border text-xs font-semibold text-text-light shadow-2xs">
-          <Calendar className="w-3.5 h-3.5 text-accent" />
-          <span>{formattedDate}</span>
-        </div>
-      </div>
-
+      <div className={`${dashboardView === 'compact' ? 'space-y-3.5 sm:space-y-4' : dashboardView === 'expanded' ? 'space-y-7 sm:space-y-8' : 'space-y-5 sm:space-y-6'} max-w-7xl mx-auto w-full min-w-0 transition-all duration-200`}>
       {/* Wide Welcome Banner */}
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-card via-card to-accent/10 dark:from-[#0D141F] dark:via-[#111A26] dark:to-[#1f1915] border border-border p-4 sm:p-6 shadow-subtle">
         
@@ -82,7 +84,7 @@ export default function StudentDashboard() {
         <div className="relative z-10 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-5">
           
           {/* Left Student Info & Welcome */}
-          <div className="flex items-start sm:items-center gap-3.5 sm:gap-4">
+          <div className="flex items-start sm:items-center gap-3.5 sm:gap-4 min-w-0 flex-1">
             <div className="relative shrink-0">
               <img
                 src={profile.avatar}
@@ -92,8 +94,8 @@ export default function StudentDashboard() {
               <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-brandGreen ring-2 ring-card" />
             </div>
 
-            <div className="space-y-1">
-              <h1 className="text-lg sm:text-xl md:text-2xl font-extrabold text-text-h tracking-tight">
+            <div className="space-y-1 min-w-0 flex-1">
+              <h1 className="text-lg sm:text-xl md:text-2xl font-extrabold text-text-h tracking-tight truncate">
                 Good morning, {profile.fullName} <span className="inline-block animate-bounce">👋</span>
               </h1>
               <p className="text-xs sm:text-[13px] text-text-light">
@@ -103,22 +105,22 @@ export default function StudentDashboard() {
               {/* Compact Academic Info Chips */}
               <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 pt-1.5">
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-bg-sec border border-border text-text-h">
-                  <GraduationCap className="w-3.5 h-3.5 text-accent" />
-                  <span>{profile.course}</span>
+                  <GraduationCap className="w-3.5 h-3.5 text-accent shrink-0" />
+                  <span className="truncate max-w-[150px] sm:max-w-none">{profile.course}</span>
                 </span>
 
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-bg-sec border border-border text-text-h">
-                  <Building2 className="w-3.5 h-3.5 text-brandBlue" />
-                  <span>{profile.university}</span>
+                  <Building2 className="w-3.5 h-3.5 text-brandBlue shrink-0" />
+                  <span className="truncate max-w-[150px] sm:max-w-none">{profile.university}</span>
                 </span>
 
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-bg-sec border border-border text-text-h">
-                  <CalendarDays className="w-3.5 h-3.5 text-brandGreen" />
+                  <CalendarDays className="w-3.5 h-3.5 text-brandGreen shrink-0" />
                   <span>Current Semester: {profile.currentSemester}</span>
                 </span>
 
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-bg-sec border border-border text-text-h">
-                  <Layers className="w-3.5 h-3.5 text-brandPurple" />
+                  <Layers className="w-3.5 h-3.5 text-brandPurple shrink-0" />
                   <span>Regulation: {profile.regulation}</span>
                 </span>
               </div>
@@ -205,30 +207,28 @@ export default function StudentDashboard() {
       </div>
 
       {/* Middle Row: Performance Chart, Recent Results, Academic Goal */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-5 min-w-0">
         
         {/* Academic Performance Chart (Large, 6 cols on xl) */}
-        <div className="lg:col-span-12 xl:col-span-6 flex flex-col">
+        <div className="lg:col-span-12 xl:col-span-6 flex flex-col min-w-0">
           <PerformanceChart results={results} />
         </div>
 
         {/* Recent Results (3 cols on xl) */}
-        <div className="lg:col-span-6 xl:col-span-3 flex flex-col">
+        <div className="lg:col-span-6 xl:col-span-3 flex flex-col min-w-0">
           <RecentResults results={results} />
         </div>
 
         {/* Your Academic Goal (3 cols on xl) */}
-        <div className="lg:col-span-6 xl:col-span-3 flex flex-col">
+        <div className="lg:col-span-6 xl:col-span-3 flex flex-col min-w-0">
           <AcademicGoalCard metrics={goalMetrics} />
         </div>
 
       </div>
 
-      {/* Bottom Row: Insights, Quick Actions, Recommended Tools */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
+      {/* Bottom Section: Performance Insights (Quick Actions and Recommended sections completely removed) */}
+      <div className="w-full min-w-0">
         <PerformanceInsights insights={insights} />
-        <QuickActions />
-        <RecommendedForYou />
       </div>
 
       </div>

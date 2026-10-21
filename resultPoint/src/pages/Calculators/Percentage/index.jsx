@@ -18,6 +18,10 @@ import ResultGaugeCard from '../ResultGaugeCard';
 import CalculatorPageHeader from '../CalculatorPageHeader';
 import SaveModal from '../CGPA/components/SaveModal';
 import { useToast } from '../../../context/ToastContext';
+import { useAuth } from '../../../hooks/useAuth';
+import { useAppDispatch } from '../../../hooks/useAppDispatch';
+import { saveCalculationToHistory } from '../../../features/calculation/calculationSlice';
+import { calculationSaveService } from '../../../services/calculationSaveService';
 
 const DEFAULT_SUBJECTS = [
   { id: '1', name: 'Mathematics - I', maxMarks: 100, obtainedMarks: 85 },
@@ -38,15 +42,19 @@ const GRADE_RANGES = [
 ];
 
 export default function PercentageCalculator() {
+  const { user, isAuthenticated } = useAuth();
+  const dispatch = useAppDispatch();
+  const { showToast } = useToast();
+
   const [subjects, setSubjects] = useState(DEFAULT_SUBJECTS);
   const [university, setUniversity] = useState('jntuh');
   const [course, setCourse] = useState('btech-cse');
   const [regulation, setRegulation] = useState('r18');
   const [semester, setSemester] = useState('sem1');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isResultModalOpen, setIsResultModalOpen] = useState(false);
+  const [pendingCalc, setPendingCalc] = useState(null);
   const [validationError, setValidationError] = useState('');
-
-  const { showToast } = useToast();
 
   const handleAddSubject = () => {
     if (subjects.length >= 12) return;
@@ -145,6 +153,60 @@ export default function PercentageCalculator() {
     { label: 'Percentage', value: `${metrics.percent.toFixed(2)}%`, highlight: true },
     { label: 'Grade', value: metrics.letterGrade }
   ];
+
+  const handleSaveResult = () => {
+    const calcRecord = {
+      calculatorType: 'Percentage Calculator',
+      title: 'Percentage Evaluation',
+      score: `${metrics.percent.toFixed(2)}%`,
+      scale: '100%',
+      result: `${metrics.percent.toFixed(2)}% (Grade ${metrics.letterGrade})`,
+      standing: standing?.text || 'Good',
+      summary: `Total Obtained: ${Math.round(metrics.totalObtained)}/${Math.round(metrics.totalMax)} | Grade: ${metrics.letterGrade} | ${metrics.percent.toFixed(2)}%`,
+      data: {
+        percent: metrics.percent,
+        totalMax: metrics.totalMax,
+        totalObtained: metrics.totalObtained,
+        letterGrade: metrics.letterGrade,
+        totalSubjects: metrics.totalSubjects,
+        university,
+        course,
+        regulation,
+        semester,
+        subjects,
+      },
+    };
+
+    if (isAuthenticated) {
+      const res = calculationSaveService.saveCalculation(calcRecord, user);
+      if (res.success) {
+        dispatch(saveCalculationToHistory(res.record));
+        showToast('Percentage calculation saved to your history!');
+      } else {
+        showToast(res.error || 'Failed to save calculation');
+      }
+    } else {
+      setPendingCalc(calcRecord);
+      calculationSaveService.setPendingCalculation(calcRecord);
+      setIsModalOpen(true);
+    }
+  };
+
+  const handleCalculate = () => {
+    if (!subjects || subjects.length === 0) {
+      setValidationError('At least one subject is required for calculation.');
+      return;
+    }
+    const invalid = subjects.some(
+      (s) => !s.maxMarks || parseFloat(s.maxMarks) <= 0 || s.obtainedMarks === '' || parseFloat(s.obtainedMarks) < 0 || parseFloat(s.obtainedMarks) > parseFloat(s.maxMarks)
+    );
+    if (invalid) {
+      setValidationError('Please enter valid marks. Obtained marks cannot exceed maximum marks.');
+      return;
+    }
+    setValidationError('');
+    setIsResultModalOpen(true);
+  };
 
   return (
     <>
@@ -439,8 +501,8 @@ export default function PercentageCalculator() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setIsModalOpen(true)}
-                  className="px-6 py-2.5 rounded-xl bg-accent hover:bg-accent-hover text-white text-xs font-bold shadow-accent transition-all active:scale-95 flex items-center justify-center gap-1.5"
+                  onClick={handleCalculate}
+                  className="px-6 py-2.5 rounded-xl bg-accent hover:bg-accent-hover text-white text-xs font-bold shadow-accent transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
                 >
                   <BarChart2 className="w-3.5 h-3.5" />
                   <span>Calculate Percentage</span>
@@ -457,12 +519,86 @@ export default function PercentageCalculator() {
             title="YOUR PERCENTAGE RESULT"
             metrics={resultCardsData}
             standing={standing}
-            onSave={() => setIsModalOpen(true)}
+            isMobileModalOpen={isResultModalOpen}
+            onCloseMobileModal={() => setIsResultModalOpen(false)}
+            metadata={{
+              university: university.toUpperCase(),
+              regulation: regulation.toUpperCase(),
+              course: course.toUpperCase(),
+              semester: semester.toUpperCase(),
+              calculationMethod: 'Sum of Obtained / Sum of Maximum Marks',
+              totalSubjects: subjects.length
+            }}
+            subjectRows={subjects.map((s, idx) => {
+              const max = parseFloat(s.maxMarks) || 100;
+              const obt = parseFloat(s.obtainedMarks) || 0;
+              const pct = max > 0 ? ((obt / max) * 100).toFixed(1) : '0.0';
+              return {
+                num: idx + 1,
+                name: s.name || `Subject ${idx + 1}`,
+                maxMarks: Math.round(max),
+                obtainedMarks: Math.round(obt),
+                percentage: `${pct}%`
+              };
+            })}
+            pdfData={{
+              calculatorName: 'Percentage Result Card',
+              subtitle: 'Calculated using your subject-wise marks distribution',
+              filename: 'ResultPoint_Percentage_Result.pdf',
+              score: `${metrics.percent.toFixed(2)}%`,
+              maxScale: '100%',
+              standing: standing?.text,
+              metadata: {
+                university: university.toUpperCase(),
+                regulation: regulation.toUpperCase(),
+                course: course.toUpperCase(),
+                semester: semester.toUpperCase(),
+                calculationMethod: 'Percentage Calculation',
+                totalMarks: `${metrics.totalObtained} / ${metrics.totalMax}`
+              },
+              subjectRows: subjects.map((s, idx) => {
+                const max = parseFloat(s.maxMarks) || 100;
+                const obt = parseFloat(s.obtainedMarks) || 0;
+                const pct = max > 0 ? ((obt / max) * 100).toFixed(1) : '0.0';
+                return {
+                  num: idx + 1,
+                  name: s.name || `Subject ${idx + 1}`,
+                  maxMarks: Math.round(max),
+                  obtainedMarks: Math.round(obt),
+                  percentage: `${pct}%`
+                };
+              }),
+              metrics: [
+                { label: 'Total Obtained', value: metrics.totalObtained },
+                { label: 'Maximum Marks', value: metrics.totalMax },
+                { label: 'Percentage', value: `${metrics.percent.toFixed(2)}%` },
+                { label: 'Equivalent Grade', value: metrics.letterGrade }
+              ]
+            }}
+            shareData={{
+              toolName: 'Percentage Calculator',
+              score: `${metrics.percent.toFixed(2)}%`,
+              scaleText: `(${metrics.totalObtained} / ${metrics.totalMax} marks)`,
+              metrics: [
+                { label: 'Total Marks', value: `${metrics.totalObtained} / ${metrics.totalMax}` },
+                { label: 'Percentage', value: `${metrics.percent.toFixed(2)}%` },
+                { label: 'Equivalent Grade', value: metrics.letterGrade }
+              ],
+              metadata: {
+                university: university.toUpperCase(),
+                regulation: regulation.toUpperCase(),
+                semester: semester.toUpperCase()
+              }
+            }}
+            onSave={(record) => {
+              setPendingCalc(record);
+              setIsModalOpen(true);
+            }}
           />
         </div>
 
-        {/* Grouped Bar Chart (Obtained vs Maximum Marks) */}
-        <section className="rounded-2xl bg-card border border-border p-4 sm:p-5 shadow-subtle space-y-4" aria-label="Subject-wise Marks Analysis">
+        {/* Grouped Bar Chart (Desktop / Tablet Only) */}
+        <section className="hidden lg:block rounded-2xl bg-card border border-border p-4 sm:p-5 shadow-subtle space-y-4" aria-label="Subject-wise Marks Analysis">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-border">
             <div>
               <h3 className="text-sm font-bold text-text-h">Subject-wise Marks Analysis</h3>
@@ -550,7 +686,16 @@ export default function PercentageCalculator() {
         <ExploreMoreTools />
       </main>
 
-      <SaveModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+      <SaveModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        calculationData={pendingCalc}
+        onSaveSuccess={(saved) => {
+          if (saved) {
+            dispatch(saveCalculationToHistory(saved));
+          }
+        }}
+      />
     </>
   );
 }

@@ -23,16 +23,37 @@ import {
   Target,
   AlertTriangle,
   PieChart,
+  Download,
+  Share2,
+  Loader2,
 } from 'lucide-react';
 import { UNIVERSITY_DATA } from '../../../data/universityData';
+import SaveModal from './components/SaveModal';
+import CalculatorDirectorySidebar from '../CalculatorDirectorySidebar';
+import ResultGaugeCard from '../ResultGaugeCard';
+import { useAuth } from '../../../hooks/useAuth';
+import { useAppDispatch } from '../../../hooks/useAppDispatch';
+import { saveCalculationToHistory } from '../../../features/calculation/calculationSlice';
+import { calculationSaveService } from '../../../services/calculationSaveService';
+import { downloadCalculatorPdf } from '../../../services/calculatorPdfService';
+import { shareCalculationResult } from '../../../services/calculatorShareService';
+import { useToast } from '../../../context/ToastContext';
 
 export default function CGPACalculator() {
+  const { user, isAuthenticated } = useAuth();
+  const dispatch = useAppDispatch();
+  const { showToast } = useToast();
+
   const [selectedUni, setSelectedUni] = useState('jntuh');
   const [selectedCourse, setSelectedCourse] = useState('btech-cse');
   const [selectedRegulation, setSelectedRegulation] = useState('r18');
   const [selectedSem, setSelectedSem] = useState('sem4');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isResultModalOpen, setIsResultModalOpen] = useState(false);
+  const [pendingCalc, setPendingCalc] = useState(null);
   const [validationError, setValidationError] = useState('');
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const [isSharing, setIsSharing] = useState(false);
 
   // Active Regulation Data
   const activeReg = useMemo(() => {
@@ -121,6 +142,143 @@ export default function CGPACalculator() {
 
     return { totalCredits, totalPoints, cgpa, percentage, letterGrade };
   }, [subjects, activeReg]);
+
+  const handleSaveResult = () => {
+    const calcRecord = {
+      calculatorType: 'CGPA',
+      title: 'CGPA Calculation',
+      university: UNIVERSITY_DATA[selectedUni]?.name || selectedUni,
+      regulation: activeReg?.name || selectedRegulation,
+      course: selectedCourse,
+      semester: selectedSem,
+      result: `${metrics.cgpa.toFixed(2)} CGPA`,
+      score: metrics.cgpa.toFixed(2),
+      scale: '10.0',
+      summary: `Credits: ${metrics.totalCredits} | Points: ${Math.round(metrics.totalPoints)} | Grade: ${metrics.letterGrade} | ${metrics.percentage.toFixed(1)}%`,
+      data: {
+        cgpa: metrics.cgpa,
+        percentage: metrics.percentage,
+        totalCredits: metrics.totalCredits,
+        totalPoints: metrics.totalPoints,
+        letterGrade: metrics.letterGrade,
+        subjects,
+      },
+    };
+
+    if (isAuthenticated) {
+      const res = calculationSaveService.saveCalculation(calcRecord, user);
+      if (res.success) {
+        dispatch(saveCalculationToHistory(res.record));
+        showToast('CGPA calculation saved to your history!');
+      } else {
+        showToast(res.error || 'Failed to save calculation');
+      }
+    } else {
+      setPendingCalc(calcRecord);
+      calculationSaveService.setPendingCalculation(calcRecord);
+      setIsModalOpen(true);
+    }
+  };
+
+  const handleDownloadPdf = async () => {
+    if (isGeneratingPdf) return;
+    setIsGeneratingPdf(true);
+    try {
+      const pdfData = {
+        calculatorName: 'CGPA Result Card',
+        subtitle: 'Calculated using your subject credits and grades',
+        filename: 'ResultPoint_CGPA_Result.pdf',
+        score: metrics.cgpa.toFixed(2),
+        maxScale: 10,
+        standing: standing?.text,
+        metadata: {
+          university: UNIVERSITY_DATA[selectedUni]?.name || selectedUni,
+          regulation: activeReg?.name || selectedRegulation.toUpperCase(),
+          course: UNIVERSITY_DATA[selectedUni]?.courses[selectedCourse]?.name || selectedCourse,
+          semester: selectedSem.toUpperCase(),
+          calculationMethod: 'Weighted Average (Credit Based)',
+          totalSubjects: subjects.length
+        },
+        subjectRows: subjects.map((s, idx) => ({
+          num: idx + 1,
+          name: s.name || `Subject ${idx + 1}`,
+          credits: s.credits,
+          grade: s.grade,
+          gradePoints: getPointsForGrade(s.grade),
+          creditPoints: (parseFloat(s.credits) || 0) * getPointsForGrade(s.grade)
+        })),
+        metrics: [
+          { label: 'Total Credits', value: metrics.totalCredits },
+          { label: 'Total Grade Points', value: Math.round(metrics.totalPoints) },
+          { label: 'Percentage Equivalent', value: `${metrics.percentage.toFixed(2)}%` },
+          { label: 'Letter Grade', value: metrics.letterGrade }
+        ]
+      };
+      downloadCalculatorPdf(pdfData);
+      showToast('PDF downloaded successfully!');
+    } catch (err) {
+      console.error('PDF error:', err);
+      showToast('Failed to download PDF. Please try again.', 'error');
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  };
+
+  const handleShareResult = async () => {
+    if (isSharing) return;
+    setIsSharing(true);
+    try {
+      const shareData = {
+        toolName: 'CGPA',
+        score: metrics.cgpa.toFixed(2),
+        scaleText: 'out of 10',
+        metrics: [
+          { label: 'Total Credits', value: metrics.totalCredits },
+          { label: 'Total Grade Points', value: Math.round(metrics.totalPoints) },
+          { label: 'Percentage Equivalent', value: `${metrics.percentage.toFixed(2)}%` },
+          { label: 'Letter Grade', value: metrics.letterGrade }
+        ],
+        metadata: {
+          university: UNIVERSITY_DATA[selectedUni]?.name || selectedUni,
+          regulation: activeReg?.name || selectedRegulation.toUpperCase(),
+          semester: selectedSem.toUpperCase()
+        }
+      };
+      const result = await shareCalculationResult(shareData);
+      if (result.success) {
+        showToast(result.message);
+      } else if (!result.cancelled) {
+        showToast(result.message || 'Unable to share result.', 'error');
+      }
+    } catch (err) {
+      console.error('Share error:', err);
+      showToast('Failed to share result.', 'error');
+    } finally {
+      setIsSharing(false);
+    }
+  };
+
+  const handleCalculate = () => {
+    if (!subjects || subjects.length === 0) {
+      setValidationError('At least one subject is required for CGPA calculation.');
+      return;
+    }
+    const invalid = subjects.some((s) => !s.credits || parseFloat(s.credits) <= 0);
+    if (invalid) {
+      setValidationError('Please enter valid positive credits for all subjects.');
+      return;
+    }
+    setValidationError('');
+    setIsResultModalOpen(true);
+  };
+
+  const resultCardsData = useMemo(() => [
+    { label: 'Total Credits', value: metrics.totalCredits },
+    { label: 'Total Grade Points', value: Math.round(metrics.totalPoints) },
+    { label: 'CGPA', value: metrics.cgpa.toFixed(2), highlight: true },
+    { label: 'Percentage Equivalent', value: `${metrics.percentage.toFixed(2)}%` },
+    { label: 'Letter Grade', value: metrics.letterGrade },
+  ], [metrics]);
 
   // Standing Narrative & Status
   const standing = useMemo(() => {
@@ -213,129 +371,8 @@ export default function CGPACalculator() {
 
         {/* 3-Column Calculator Workspace */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
-          {/* Left Column: Tools Directory Sidebar */}
-          <aside className="lg:col-span-2 xl:col-span-2 space-y-3.5" aria-label="Calculators Directory">
-            <div className="rounded-2xl bg-card border border-border p-3.5 shadow-subtle">
-              <div className="pb-2.5 mb-2.5 border-b border-border">
-                <h2 className="text-xs font-bold uppercase tracking-wider text-text-h">Calculators</h2>
-              </div>
-
-              <div className="space-y-0.5 mb-3">
-                <span className="text-[10px] font-bold text-text-light uppercase tracking-wider block px-2 mb-1">
-                  Academic Performance
-                </span>
-                <Link
-                  to="/calculators/cgpa"
-                  className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-accent-soft text-accent border border-accent/25 transition-all"
-                >
-                  <Calculator className="w-3.5 h-3.5" />
-                  <span>CGPA Calculator</span>
-                </Link>
-                <Link
-                  to="/calculators/sgpa"
-                  className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-xs font-medium text-text-m hover:text-text-h hover:bg-bg-sec transition-all"
-                >
-                  <Table className="w-3.5 h-3.5 text-brandGreen" />
-                  <span>SGPA Calculator</span>
-                </Link>
-                <Link
-                  to="/calculators/gpa"
-                  className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-xs font-medium text-text-m hover:text-text-h hover:bg-bg-sec transition-all"
-                >
-                  <Binary className="w-3.5 h-3.5 text-brandBlue" />
-                  <span>GPA Calculator</span>
-                </Link>
-                <Link
-                  to="/calculators/percentage"
-                  className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-xs font-medium text-text-m hover:text-text-h hover:bg-bg-sec transition-all"
-                >
-                  <Percent className="w-3.5 h-3.5 text-brandPink" />
-                  <span>Percentage Calculator</span>
-                </Link>
-              </div>
-
-              <div className="space-y-0.5 mb-3">
-                <span className="text-[10px] font-bold text-text-light uppercase tracking-wider block px-2 mb-1">
-                  Grade & Marks
-                </span>
-                <Link
-                  to="/calculators/grade"
-                  className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-xs font-medium text-text-m hover:text-text-h hover:bg-bg-sec transition-all"
-                >
-                  <FileCheck className="w-3.5 h-3.5 text-brandPurple" />
-                  <span>Grade Calculator</span>
-                </Link>
-                <Link
-                  to="/calculators/marks-grade"
-                  className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-xs font-medium text-text-m hover:text-text-h hover:bg-bg-sec transition-all"
-                >
-                  <Award className="w-3.5 h-3.5 text-brandCyan" />
-                  <span>Marks to Grade</span>
-                </Link>
-                <Link
-                  to="/calculators/credite-calculate"
-                  className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-xs font-medium text-text-m hover:text-text-h hover:bg-bg-sec transition-all"
-                >
-                  <Layers className="w-3.5 h-3.5 text-brandBlue" />
-                  <span>Credits Calculator</span>
-                </Link>
-              </div>
-
-              <div className="space-y-0.5 mb-3">
-                <span className="text-[10px] font-bold text-text-light uppercase tracking-wider block px-2 mb-1">
-                  Academic Planning
-                </span>
-                <Link
-                  to="/calculators/target-cgpa"
-                  className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-xs font-medium text-text-m hover:text-text-h hover:bg-bg-sec transition-all"
-                >
-                  <Target className="w-3.5 h-3.5 text-accent" />
-                  <span>Target CGPA</span>
-                </Link>
-                <Link
-                  to="/calculators/backlog"
-                  className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-xs font-medium text-text-m hover:text-text-h hover:bg-bg-sec transition-all"
-                >
-                  <AlertTriangle className="w-3.5 h-3.5 text-brandAmber" />
-                  <span>Backlog Calculator</span>
-                </Link>
-              </div>
-
-              <div className="space-y-0.5">
-                <span className="text-[10px] font-bold text-text-light uppercase tracking-wider block px-2 mb-1">
-                  Analysis
-                </span>
-                <Link
-                  to="/calculators/result-analysis"
-                  className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-xs font-medium text-text-m hover:text-text-h hover:bg-bg-sec transition-all"
-                >
-                  <PieChart className="w-3.5 h-3.5 text-brandPink" />
-                  <span>Result Analyzer</span>
-                </Link>
-              </div>
-            </div>
-
-            <div className="rounded-2xl bg-card border border-border p-3.5 shadow-subtle">
-              <div className="flex items-start gap-2.5">
-                <div className="w-7 h-7 rounded-lg bg-orange-500/10 text-accent flex items-center justify-center shrink-0">
-                  <Lightbulb className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="text-xs font-bold text-text-h">Not sure which to use?</h3>
-                  <p className="text-[11px] text-text-m mt-1 leading-snug">
-                    Check our guide to find the right tool for your regulation.
-                  </p>
-                  <Link
-                    to="/resources"
-                    className="inline-flex items-center gap-1 text-[11px] font-bold text-accent hover:underline mt-2"
-                  >
-                    <span>View Guide</span>
-                    <ArrowRight className="w-3 h-3" />
-                  </Link>
-                </div>
-              </div>
-            </div>
-          </aside>
+          {/* Reusable Left Sidebar (Highlights CGPA on desktop, Dropdown on mobile) */}
+          <CalculatorDirectorySidebar activeTool="cgpa" />
 
           {/* Center Column: Inputs & Form */}
           <div className="lg:col-span-7 xl:col-span-7 space-y-3.5">
@@ -570,175 +607,97 @@ export default function CGPACalculator() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setIsModalOpen(true)}
-                  className="px-6 py-2.5 rounded-xl bg-accent hover:bg-accent-hover text-white text-xs font-bold shadow-accent transition-all active:scale-95 flex items-center justify-center gap-1.5"
+                  onClick={handleCalculate}
+                  className="px-6 py-2.5 rounded-xl bg-accent hover:bg-accent-hover text-white text-xs font-bold shadow-accent transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
                 >
                   <TrendingUp className="w-3.5 h-3.5" />
-                  <span>Calculate & Save</span>
+                  <span>Calculate CGPA</span>
                   <ArrowRight className="w-3.5 h-3.5" />
                 </button>
               </div>
             </div>
           </div>
 
-          {/* Right Column: Live Result Showcase */}
-          <aside className="lg:col-span-3 xl:col-span-3 space-y-3.5 lg:sticky lg:top-20">
-            <div className="rounded-2xl bg-gradient-to-b from-[#FF6B00] via-[#FF7A18] to-[#EA580C] text-white p-5 shadow-accent text-center relative overflow-hidden">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-white/90">
-                Your CGPA Result
-              </h3>
-
-              <div className="relative w-36 h-36 mx-auto my-3 flex items-center justify-center">
-                <svg className="w-full h-full" viewBox="0 0 160 160">
-                  <circle cx="80" cy="80" r="64" fill="transparent" stroke="rgba(255, 255, 255, 0.25)" strokeWidth="12" />
-                  <circle
-                    cx="80"
-                    cy="80"
-                    r="64"
-                    fill="transparent"
-                    stroke="#FFFFFF"
-                    strokeWidth="12"
-                    strokeLinecap="round"
-                    className="progress-ring-circle"
-                    strokeDasharray="402.12"
-                    strokeDashoffset={strokeDashoffset}
-                  />
-                </svg>
-                <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <span className="text-3xl font-extrabold text-white tracking-tight">
-                    {metrics.cgpa.toFixed(2)}
-                  </span>
-                  <span className="text-[10px] font-semibold text-white/80">out of 10</span>
-                </div>
-              </div>
-
-              <div className="flex justify-center mb-2">
-                <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-bold bg-white/20 text-white border border-white/30 backdrop-blur-sm">
-                  <span>{standing.icon}</span>
-                  <span>{standing.text}</span>
-                </span>
-              </div>
-
-              <p className="text-[11px] text-white/90 leading-relaxed px-1">
-                {standing.narrative}
-              </p>
-
-              <div className="mt-3.5 p-3 rounded-xl bg-card text-text-h border border-white/20 space-y-1.5 text-xs text-left shadow-subtle">
-                <div className="flex items-center justify-between text-text-m text-[11px]">
-                  <span>Total Credits</span>
-                  <span className="font-bold text-text-h">{metrics.totalCredits}</span>
-                </div>
-                <div className="flex items-center justify-between text-text-m text-[11px]">
-                  <span>Total Grade Points</span>
-                  <span className="font-bold text-text-h">{Math.round(metrics.totalPoints)}</span>
-                </div>
-                <div className="flex items-center justify-between text-text-m text-[11px]">
-                  <span>CGPA</span>
-                  <span className="font-extrabold text-accent">{metrics.cgpa.toFixed(2)}</span>
-                </div>
-                <div className="flex items-center justify-between text-text-m text-[11px]">
-                  <span>Percentage Equivalent</span>
-                  <span className="font-bold text-text-h">{metrics.percentage.toFixed(2)}%</span>
-                </div>
-                <div className="flex items-center justify-between text-text-m text-[11px]">
-                  <span>Letter Grade</span>
-                  <span className="font-bold text-text-h">{metrics.letterGrade}</span>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setIsModalOpen(true)}
-                className="mt-3 w-full py-2 px-3 rounded-xl bg-white text-accent hover:bg-slate-50 text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-subtle active:scale-95"
-              >
-                <Bookmark className="w-3.5 h-3.5" />
-                <span>Save Result</span>
-              </button>
-            </div>
-
-            {/* Semester History */}
-            <div className="rounded-2xl bg-card border border-border p-3.5 shadow-subtle">
-              <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-border">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-text-h">Semester History</h4>
-                <button type="button" className="text-[11px] font-semibold text-accent hover:underline">View All</button>
-              </div>
-
-              <div className="space-y-2 text-xs">
-                <div className="p-2 rounded-xl bg-accent-soft/50 border border-accent/20 flex items-center justify-between">
-                  <div>
-                    <span className="font-bold text-accent block text-xs">Semester 4</span>
-                    <span className="text-[10px] text-text-m">24 Credits</span>
-                  </div>
-                  <div className="text-right">
-                    <span className="font-extrabold text-text-h block text-xs">{metrics.cgpa.toFixed(2)}</span>
-                    <span className="text-[9px] font-semibold text-accent uppercase tracking-wider">Current</span>
-                  </div>
-                </div>
-
-                <div className="p-2 rounded-xl bg-bg-sec border border-border flex items-center justify-between">
-                  <div>
-                    <span className="font-bold text-text-h block text-xs">Semester 3</span>
-                    <span className="text-[10px] text-text-m">24 Credits</span>
-                  </div>
-                  <div className="text-right flex items-center gap-1">
-                    <span className="font-extrabold text-text-h text-xs">7.92</span>
-                    <span className="text-brandGreen font-bold text-xs">↑</span>
-                  </div>
-                </div>
-
-                <div className="p-2 rounded-xl bg-bg-sec border border-border flex items-center justify-between">
-                  <div>
-                    <span className="font-bold text-text-h block text-xs">Semester 2</span>
-                    <span className="text-[10px] text-text-m">24 Credits</span>
-                  </div>
-                  <div className="text-right flex items-center gap-1">
-                    <span className="font-extrabold text-text-h text-xs">7.35</span>
-                    <span className="text-brandGreen font-bold text-xs">↑</span>
-                  </div>
-                </div>
-
-                <div className="p-2 rounded-xl bg-bg-sec border border-border flex items-center justify-between">
-                  <div>
-                    <span className="font-bold text-text-h block text-xs">Semester 1</span>
-                    <span className="text-[10px] text-text-m">24 Credits</span>
-                  </div>
-                  <div className="text-right flex items-center gap-1">
-                    <span className="font-extrabold text-text-h text-xs">7.10</span>
-                    <span className="text-brandGreen font-bold text-xs">↑</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Tips Card */}
-            <div className="rounded-2xl bg-card border border-border p-3 shadow-subtle flex items-start gap-2.5">
-              <div className="w-7 h-7 rounded-lg bg-orange-500/10 text-accent flex items-center justify-center shrink-0">
-                <Lightbulb className="w-4 h-4" />
-              </div>
-              <div>
-                <span className="text-xs font-bold text-text-h block">Tips to Improve</span>
-                <p className="text-[11px] text-text-m mt-0.5 leading-snug">
-                  {standing.tips}
-                </p>
-              </div>
-            </div>
-
-            <div className="rounded-2xl bg-accent-soft/60 border border-accent/20 p-3 flex items-start gap-2.5">
-              <div className="w-7 h-7 rounded-lg bg-accent text-white flex items-center justify-center shrink-0 shadow-subtle">
-                <TrendingUp className="w-4 h-4" />
-              </div>
-              <div>
-                <span className="text-xs font-bold text-text-h block">Keep it up!</span>
-                <p className="text-[11px] text-text-m mt-0.5 leading-snug">
-                  Your CGPA is improving consistently.
-                </p>
-              </div>
-            </div>
-          </aside>
+          {/* Reusable Result Gauge Card (Sticky on desktop, popup modal on mobile) */}
+          <ResultGaugeCard
+            score={metrics.cgpa}
+            maxScale={10}
+            title="YOUR CGPA RESULT"
+            metrics={resultCardsData}
+            standing={standing}
+            isMobileModalOpen={isResultModalOpen}
+            onCloseMobileModal={() => setIsResultModalOpen(false)}
+            onSave={(record) => {
+              setPendingCalc(record);
+              setIsModalOpen(true);
+            }}
+            metadata={{
+              university: UNIVERSITY_DATA[selectedUni]?.name || selectedUni.toUpperCase(),
+              regulation: selectedRegulation.toUpperCase(),
+              course: UNIVERSITY_DATA[selectedUni]?.courses[selectedCourse]?.name || selectedCourse.toUpperCase(),
+              semester: selectedSem.toUpperCase(),
+              calculationMethod: 'Weighted Average (Credit Based)',
+              totalSubjects: subjects.length
+            }}
+            subjectRows={subjects.map((s, idx) => ({
+              num: idx + 1,
+              name: s.name || `Subject ${idx + 1}`,
+              credits: s.credits,
+              grade: s.grade,
+              gradePoints: getPointsForGrade(s.grade),
+              creditPoints: (parseFloat(s.credits) || 0) * getPointsForGrade(s.grade)
+            }))}
+            pdfData={{
+              calculatorName: 'CGPA Result Card',
+              subtitle: 'Calculated using your semester subjects and credit weightages',
+              filename: 'ResultPoint_CGPA_Result.pdf',
+              score: metrics.cgpa.toFixed(2),
+              maxScale: 10,
+              standing: standing?.text,
+              metadata: {
+                university: UNIVERSITY_DATA[selectedUni]?.name || selectedUni.toUpperCase(),
+                regulation: selectedRegulation.toUpperCase(),
+                course: UNIVERSITY_DATA[selectedUni]?.courses[selectedCourse]?.name || selectedCourse.toUpperCase(),
+                semester: selectedSem.toUpperCase(),
+                calculationMethod: 'Weighted Average (Credit Based)',
+                totalSubjects: subjects.length
+              },
+              subjectRows: subjects.map((s, idx) => ({
+                num: idx + 1,
+                name: s.name || `Subject ${idx + 1}`,
+                credits: s.credits,
+                grade: s.grade,
+                gradePoints: getPointsForGrade(s.grade),
+                creditPoints: (parseFloat(s.credits) || 0) * getPointsForGrade(s.grade)
+              })),
+              metrics: [
+                { label: 'Total Credits', value: metrics.totalCredits },
+                { label: 'Total Grade Points', value: Math.round(metrics.totalPoints) },
+                { label: 'Percentage Equivalent', value: `${metrics.percentage.toFixed(2)}%` },
+                { label: 'Letter Grade', value: metrics.letterGrade }
+              ]
+            }}
+            shareData={{
+              toolName: 'CGPA',
+              score: metrics.cgpa.toFixed(2),
+              scaleText: 'out of 10',
+              metrics: [
+                { label: 'Total Credits', value: metrics.totalCredits },
+                { label: 'Total Grade Points', value: Math.round(metrics.totalPoints) },
+                { label: 'Percentage', value: `${metrics.percentage.toFixed(2)}%` },
+                { label: 'Letter Grade', value: metrics.letterGrade }
+              ],
+              metadata: {
+                university: (UNIVERSITY_DATA[selectedUni]?.name || selectedUni).toUpperCase(),
+                regulation: selectedRegulation.toUpperCase(),
+                semester: selectedSem.toUpperCase()
+              }
+            }}
+          />
         </div>
 
-        {/* Dynamic Trend Chart */}
-        <section className="mt-5 rounded-2xl bg-card border border-border p-4 sm:p-5 shadow-subtle">
+        {/* Dynamic Trend Chart (Desktop & Tablet Only) */}
+        <section className="hidden lg:block mt-5 rounded-2xl bg-card border border-border p-4 sm:p-5 shadow-subtle">
           <div className="flex items-center justify-between pb-3 border-b border-border">
             <h3 className="text-sm font-bold text-text-h">Your Performance Trend</h3>
             <select className="calc-input px-2.5 py-1 rounded-lg text-xs font-medium cursor-pointer">
@@ -809,52 +768,16 @@ export default function CGPACalculator() {
       </main>
 
       {/* Save Modal */}
-      {isModalOpen && (
-        <div
-          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 transition-all"
-          role="dialog"
-          aria-modal="true"
-          onClick={() => setIsModalOpen(false)}
-        >
-          <div
-            className="bg-card border border-border rounded-2xl p-5 max-w-sm w-full shadow-theme text-center relative"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button
-              type="button"
-              onClick={() => setIsModalOpen(false)}
-              className="absolute top-3.5 right-3.5 w-7 h-7 rounded-lg text-text-m hover:text-text-h flex items-center justify-center"
-              aria-label="Close dialog"
-            >
-              <X className="w-4 h-4" />
-            </button>
-
-            <div className="w-10 h-10 rounded-xl bg-accent-soft text-accent mx-auto flex items-center justify-center mb-2.5">
-              <Lock className="w-5 h-5" />
-            </div>
-
-            <h3 className="text-sm font-bold text-text-h">Save Your Academic Record</h3>
-            <p className="mt-1.5 text-xs text-text-m leading-relaxed">
-              Create an account to save your academic result and track your progress across semesters.
-            </p>
-
-            <div className="mt-5 flex flex-col gap-2">
-              <button
-                type="button"
-                className="w-full py-2.5 rounded-xl bg-accent hover:bg-accent-hover text-white text-xs font-bold transition-all shadow-accent"
-              >
-                Create Account
-              </button>
-              <button
-                type="button"
-                className="w-full py-2.5 rounded-xl border border-border hover:bg-bg-sec text-text-h text-xs font-semibold transition-all"
-              >
-                Login
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <SaveModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        calculationData={pendingCalc}
+        onSaveSuccess={(savedRecord) => {
+          if (savedRecord) {
+            dispatch(saveCalculationToHistory(savedRecord));
+          }
+        }}
+      />
     </>
   );
 }

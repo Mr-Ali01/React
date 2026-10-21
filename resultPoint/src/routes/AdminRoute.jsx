@@ -1,23 +1,22 @@
-import React, { useState } from 'react';
 import { Navigate, Outlet, Link, useLocation } from 'react-router-dom';
-import { ShieldAlert, ArrowLeft, UserCheck, KeyRound } from 'lucide-react';
+import { ShieldAlert, ArrowLeft, LogIn, KeyRound } from 'lucide-react';
+import { useAppSelector } from '../hooks/useAppSelector';
+import { selectCurrentUser, selectIsAuthenticated } from '../features/auth/authSlice';
 import { authService } from '../services/authService';
 
 export default function AdminRoute({ children }) {
   const location = useLocation();
-  const [currentUser, setCurrentUser] = useState(() => authService.getCurrentUser());
+  const isAuthRedux = useAppSelector(selectIsAuthenticated);
+  const reduxUser = useAppSelector(selectCurrentUser);
+  const currentUser = reduxUser || authService.getCurrentUser();
+  const isAuthenticated = Boolean((isAuthRedux && currentUser) || authService.isAuthenticated());
 
-  if (!currentUser) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
+  if (!isAuthenticated || !currentUser) {
+    return <Navigate to="/login?role=admin" state={{ from: location }} replace />;
   }
 
-  // If user is a student, show permission guard
+  // If user is authenticated but is a student, show permission guard
   if (currentUser.role !== 'admin') {
-    const handleSwitchToDemoAdmin = () => {
-      const admin = authService.loginAsAdmin();
-      setCurrentUser(admin);
-    };
-
     return (
       <div className="min-h-screen bg-bg flex items-center justify-center p-4">
         <div className="max-w-md w-full bg-card border border-border rounded-3xl p-6 sm:p-8 shadow-elevated text-center space-y-5">
@@ -45,20 +44,20 @@ export default function AdminRoute({ children }) {
           </div>
 
           <div className="space-y-2.5 pt-2">
-            <button
-              onClick={handleSwitchToDemoAdmin}
-              className="w-full py-2.5 px-4 rounded-xl text-xs font-bold text-white bg-accent hover:bg-accent-hover shadow-accent transition-all flex items-center justify-center gap-2"
-            >
-              <UserCheck className="w-4 h-4" />
-              <span>Switch to Demo Administrator Role</span>
-            </button>
-
             <Link
               to="/student/dashboard"
-              className="w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-semibold text-text-h hover:bg-bg-sec border border-border transition-colors"
+              className="w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-bold text-white bg-accent hover:bg-accent-hover shadow-accent transition-all cursor-pointer"
             >
               <ArrowLeft className="w-4 h-4" />
               <span>Return to Student Dashboard</span>
+            </Link>
+
+            <Link
+              to="/login?role=admin"
+              className="w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-semibold text-text-light hover:text-text-h hover:bg-bg-sec border border-border transition-colors cursor-pointer"
+            >
+              <LogIn className="w-4 h-4" />
+              <span>Sign in with Administrator Account</span>
             </Link>
           </div>
         </div>

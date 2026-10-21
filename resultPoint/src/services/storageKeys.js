@@ -8,5 +8,14 @@ export const STORAGE_KEYS = {
   NOTIFICATIONS: 'resultpoint_notifications',
   SETTINGS: 'resultpoint_settings',
   THEME: 'resultpoint_theme',
-  ACADEMIC_CATALOG: 'resultpoint_academic_catalog',
+  ACADEMIC_CATALOG: 'rp_academic_catalog',
+  LEGACY_ACADEMIC_CATALOG: 'resultpoint_academic_catalog',
+  BACKLOGS: 'resultpoint_backlogs',
+  AUDIT_HISTORY: 'resultpoint_audit_history',
+  ACTIVITY_HISTORY: 'resultpoint_activity_history',
+  EDUCATION_RECORDS: 'resultpoint_education_records',
+  ACTIVE_EDUCATION_ID: 'resultpoint_active_education_id',
+  PENDING_CALCULATION: 'resultpoint_pending_calculation',
+  SUPPORT_QUERIES: 'resultpoint_support_queries',
 };
+

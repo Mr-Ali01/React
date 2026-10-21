@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Calendar,
   Users,
@@ -19,7 +19,25 @@ import SystemOverview from '../../components/admin/SystemOverview';
 import QuickManagementActions from '../../components/admin/QuickManagementActions';
 
 export default function AdminDashboard() {
-  const stats = adminDashboardService.getStats();
+  const [stats, setStats] = useState(() => adminDashboardService.getStats());
+
+  useEffect(() => {
+    const handleUpdate = () => {
+      setStats(adminDashboardService.getStats());
+    };
+
+    window.addEventListener('storage', handleUpdate);
+    window.addEventListener('rp_catalog_updated', handleUpdate);
+    window.addEventListener('activity_history_updated', handleUpdate);
+    window.addEventListener('focus', handleUpdate);
+
+    return () => {
+      window.removeEventListener('storage', handleUpdate);
+      window.removeEventListener('rp_catalog_updated', handleUpdate);
+      window.removeEventListener('activity_history_updated', handleUpdate);
+      window.removeEventListener('focus', handleUpdate);
+    };
+  }, []);
 
   // Dynamic Date matching the reference image format ("Monday, 06 Oct 2026")
   const currentDate = useMemo(() => {

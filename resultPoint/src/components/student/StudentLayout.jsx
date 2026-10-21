@@ -2,30 +2,41 @@ import React, { useState } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
 import StudentHeader from './StudentHeader';
 import StudentSidebar from './StudentSidebar';
-import { authService } from '../../services/authService';
+import { useAppDispatch } from '../../hooks/useAppDispatch';
+import { useAppSelector } from '../../hooks/useAppSelector';
+import {
+  selectSidebarCollapsed,
+  selectMobileSidebarOpen,
+  toggleSidebarCollapsed,
+  toggleMobileSidebar,
+  setMobileSidebarOpen,
+} from '../../features/ui/uiSlice';
+import { logoutUser } from '../../features/auth/authSlice';
 import { useToast } from '../../context/ToastContext';
-import { LogOut, AlertCircle } from 'lucide-react';
+import { LogOut } from 'lucide-react';
+
+import PendingCalculationBanner from '../common/PendingCalculationBanner';
 
 export default function StudentLayout() {
-  const [isCollapsed, setIsCollapsed] = useState(false);
-  const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const dispatch = useAppDispatch();
+  const isCollapsed = useAppSelector(selectSidebarCollapsed);
+  const isMobileOpen = useAppSelector(selectMobileSidebarOpen);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   const navigate = useNavigate();
   const { showToast } = useToast();
 
   const handleToggleSidebar = () => {
-    // If screen is mobile/tablet, open mobile drawer
     if (window.innerWidth < 1024) {
-      setIsMobileOpen((prev) => !prev);
+      dispatch(toggleMobileSidebar());
     } else {
-      setIsCollapsed((prev) => !prev);
+      dispatch(toggleSidebarCollapsed());
     }
   };
 
   const handleConfirmLogout = () => {
     setShowLogoutModal(false);
-    authService.logout();
+    dispatch(logoutUser());
     showToast('Logged out successfully.');
     navigate('/login');
   };
@@ -43,12 +54,13 @@ export default function StudentLayout() {
         <StudentSidebar
           isCollapsed={isCollapsed}
           isMobileOpen={isMobileOpen}
-          onCloseMobile={() => setIsMobileOpen(false)}
+          onCloseMobile={() => dispatch(setMobileSidebarOpen(false))}
           onLogoutRequest={() => setShowLogoutModal(true)}
         />
 
         {/* Dynamic Route Content */}
-        <main className="flex-1 min-w-0 p-3 sm:p-5 lg:p-7 overflow-x-hidden">
+        <main className="flex-1 min-w-0 p-3 sm:p-5 lg:p-7 overflow-x-hidden space-y-4">
+          <PendingCalculationBanner />
           <Outlet />
         </main>
       </div>
@@ -75,14 +87,14 @@ export default function StudentLayout() {
               <button
                 type="button"
                 onClick={() => setShowLogoutModal(false)}
-                className="px-3.5 py-2 rounded-xl text-xs font-semibold text-text-h hover:bg-bg-sec border border-border transition-colors"
+                className="px-3.5 py-2 rounded-xl text-xs font-semibold text-text-h hover:bg-bg-sec border border-border transition-colors cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={handleConfirmLogout}
-                className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-brandPink hover:bg-pink-600 shadow-sm transition-colors"
+                className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-brandPink hover:bg-pink-600 shadow-sm transition-colors cursor-pointer"
               >
                 Log Out
               </button>

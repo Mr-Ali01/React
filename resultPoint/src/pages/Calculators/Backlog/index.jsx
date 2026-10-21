@@ -21,6 +21,10 @@ import ResultGaugeCard from '../ResultGaugeCard';
 import CalculatorPageHeader from '../CalculatorPageHeader';
 import SaveModal from '../CGPA/components/SaveModal';
 import { useToast } from '../../../context/ToastContext';
+import { useAuth } from '../../../hooks/useAuth';
+import { useAppDispatch } from '../../../hooks/useAppDispatch';
+import { saveCalculationToHistory } from '../../../features/calculation/calculationSlice';
+import { calculationSaveService } from '../../../services/calculationSaveService';
 
 const DEFAULT_BACKLOG_SUBJECTS = [
   {
@@ -61,6 +65,10 @@ const SEMESTER_OPTIONS = [
 ];
 
 export default function BacklogCalculator() {
+  const { user, isAuthenticated } = useAuth();
+  const dispatch = useAppDispatch();
+  const { showToast } = useToast();
+
   const [university, setUniversity] = useState('jntuh');
   const [regulation, setRegulation] = useState('r18');
   const [course, setCourse] = useState('btech-cse');
@@ -68,9 +76,23 @@ export default function BacklogCalculator() {
   const [currentCgpa, setCurrentCgpa] = useState(7.20);
   const [subjects, setSubjects] = useState(DEFAULT_BACKLOG_SUBJECTS);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isResultModalOpen, setIsResultModalOpen] = useState(false);
+  const [pendingCalc, setPendingCalc] = useState(null);
   const [validationError, setValidationError] = useState('');
 
-  const { showToast } = useToast();
+  const handleCalculate = () => {
+    if (!subjects || subjects.length === 0) {
+      setValidationError('At least one backlog subject is required.');
+      return;
+    }
+    const hasInvalid = subjects.some(s => !s.name || !s.credits || isNaN(parseFloat(s.credits)) || parseFloat(s.credits) < 1);
+    if (hasInvalid) {
+      setValidationError('Please enter valid names and credit values for all backlog subjects.');
+      return;
+    }
+    setValidationError('');
+    setIsResultModalOpen(true);
+  };
 
   const handleAddSubject = () => {
     if (subjects.length >= 15) return;
@@ -183,6 +205,43 @@ export default function BacklogCalculator() {
     { label: 'Min CGPA Required', value: metrics.minRequiredCgpa },
     { label: 'Status', value: standing.text }
   ];
+
+  const handleSaveResult = () => {
+    const calcRecord = {
+      calculatorType: 'Backlog Calculator',
+      title: 'Backlog Tracker & Study Plan',
+      score: `${metrics.backlogCount} Backlogs`,
+      scale: '10',
+      result: `${metrics.backlogCount} Backlogs (${metrics.totalCredits} Credits)`,
+      standing: standing?.text || 'Review',
+      summary: `Backlogs: ${metrics.backlogCount} | Credits: ${metrics.totalCredits} | Current CGPA: ${metrics.currentCgpa}`,
+      data: {
+        backlogCount: metrics.backlogCount,
+        totalCredits: metrics.totalCredits,
+        currentCgpa: metrics.currentCgpa,
+        minRequiredCgpa: metrics.minRequiredCgpa,
+        university,
+        course,
+        regulation,
+        currentSemester,
+        subjects,
+      },
+    };
+
+    if (isAuthenticated) {
+      const res = calculationSaveService.saveCalculation(calcRecord, user);
+      if (res.success) {
+        dispatch(saveCalculationToHistory(res.record));
+        showToast('Backlog calculation saved to your history!');
+      } else {
+        showToast(res.error || 'Failed to save calculation');
+      }
+    } else {
+      setPendingCalc(calcRecord);
+      calculationSaveService.setPendingCalculation(calcRecord);
+      setIsModalOpen(true);
+    }
+  };
 
   return (
     <>
@@ -487,11 +546,11 @@ export default function BacklogCalculator() {
 
                   <button
                     type="button"
-                    onClick={() => setIsModalOpen(true)}
+                    onClick={handleCalculate}
                     className="px-6 py-2.5 rounded-xl bg-accent hover:bg-accent-hover text-white text-xs font-bold shadow-accent transition-all active:scale-95 flex items-center justify-center gap-1.5"
                   >
                     <TrendingUp className="w-3.5 h-3.5" />
-                    <span>Calculate & Save Plan</span>
+                    <span>Calculate Backlog Plan</span>
                     <ArrowRight className="w-3.5 h-3.5" />
                   </button>
                 </div>
@@ -549,91 +608,82 @@ export default function BacklogCalculator() {
           </div>
 
           {/* Right Column: Result Gauge & Statistics */}
-          <aside className="lg:col-span-3 xl:col-span-3 space-y-3.5 lg:sticky lg:top-20" aria-label="Backlog Summary and Statistics">
-            <ResultGaugeCard
-              score={metrics.backlogCount}
-              maxScale={10}
-              title="YOUR BACKLOG SUMMARY"
-              metrics={resultCardsData}
-              standing={standing}
-              onSave={() => setIsModalOpen(true)}
-            />
-
-            {/* Recent Calculations History */}
-            <div className="rounded-2xl bg-card border border-border p-3.5 shadow-subtle">
-              <div className="flex items-center justify-between pb-2 mb-2 border-b border-border">
-                <div className="flex items-center gap-1.5">
-                  <History className="w-4 h-4 text-accent" />
-                  <h4 className="text-xs font-bold text-text-h uppercase tracking-wider">RECENT CALCULATIONS</h4>
-                </div>
-                <button type="button" className="text-[10.5px] font-semibold text-accent hover:underline">View All</button>
-              </div>
-
-              <div className="space-y-2 text-xs">
-                <div className="p-2 rounded-xl bg-card border border-border flex items-center justify-between">
-                  <div>
-                    <span className="font-bold text-text-h block text-xs">{metrics.backlogCount} Backlogs</span>
-                    <span className="text-[10px] text-text-m">CGPA: {metrics.currentCgpa}</span>
-                  </div>
-                  <div className="text-right">
-                    <span className="font-extrabold text-accent block text-xs">{metrics.totalCredits} Credits</span>
-                    <span className="text-[10px] text-text-light">Current session</span>
-                  </div>
-                </div>
-
-                <div className="p-2 rounded-xl bg-card border border-border flex items-center justify-between">
-                  <div>
-                    <span className="font-bold text-text-h block text-xs">2 Backlogs</span>
-                    <span className="text-[10px] text-text-m">CGPA: 7.80</span>
-                  </div>
-                  <div className="text-right">
-                    <span className="font-extrabold text-accent block text-xs">8 Credits</span>
-                    <span className="text-[10px] text-text-light">1 day ago</span>
-                  </div>
-                </div>
-
-                <div className="p-2 rounded-xl bg-card border border-border flex items-center justify-between">
-                  <div>
-                    <span className="font-bold text-text-h block text-xs">5 Backlogs</span>
-                    <span className="text-[10px] text-text-m">CGPA: 6.50</span>
-                  </div>
-                  <div className="text-right">
-                    <span className="font-extrabold text-accent block text-xs">20 Credits</span>
-                    <span className="text-[10px] text-text-light">3 days ago</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Tips Card */}
-            <div className="rounded-2xl bg-card border border-border p-3 shadow-subtle flex items-start gap-2.5">
-              <div className="w-7 h-7 rounded-lg bg-orange-500/10 text-accent flex items-center justify-center shrink-0">
-                <Lightbulb className="w-4 h-4" />
-              </div>
-              <div>
-                <span className="text-xs font-bold text-text-h block">Tips to Clear Backlogs</span>
-                <p className="text-[11px] text-text-m mt-0.5 leading-snug">
-                  Make a dedicated study plan, focus on core theory papers and practice previous university questions.
-                </p>
-              </div>
-            </div>
-
-            <div className="rounded-2xl bg-accent-soft/60 border border-accent/20 p-3 flex items-start gap-2.5">
-              <div className="w-7 h-7 rounded-lg bg-accent text-white flex items-center justify-center shrink-0 shadow-subtle">
-                <TrendingUp className="w-4 h-4" />
-              </div>
-              <div>
-                <span className="text-xs font-bold text-text-h block">Stay Motivated</span>
-                <p className="text-[11px] text-text-m mt-0.5 leading-snug">
-                  Clear your backlogs step by step with planned semester workloads.
-                </p>
-              </div>
-            </div>
-          </aside>
+          <ResultGaugeCard
+            score={metrics.backlogCount}
+            maxScale={10}
+            title="YOUR BACKLOG SUMMARY"
+            metrics={resultCardsData}
+            standing={standing}
+            isMobileModalOpen={isResultModalOpen}
+            onCloseMobileModal={() => setIsResultModalOpen(false)}
+            metadata={{
+              university: university.toUpperCase(),
+              regulation: regulation.toUpperCase(),
+              course: course.toUpperCase(),
+              calculationMethod: 'Academic Recovery & Clearance Model',
+              totalBacklogs: `${metrics.backlogCount} Papers`
+            }}
+            subjectRows={subjects.map((s, idx) => ({
+              num: idx + 1,
+              name: s.name || `Subject ${idx + 1}`,
+              credits: s.credits,
+              semester: s.semester,
+              status: s.status,
+              recommendation: s.recommendation
+            }))}
+            pdfData={{
+              calculatorName: 'Backlog Clearance Strategy Card',
+              subtitle: 'Actionable clearance plan and CGPA recovery impact',
+              filename: 'ResultPoint_Backlog_Clearance.pdf',
+              score: `${metrics.backlogCount}`,
+              maxScale: 10,
+              standing: standing?.text,
+              metadata: {
+                university: university.toUpperCase(),
+                regulation: regulation.toUpperCase(),
+                course: course.toUpperCase(),
+                calculationMethod: 'Academic Recovery & Clearance Model',
+                totalBacklogs: `${metrics.backlogCount} Papers`
+              },
+              metrics: [
+                { label: 'Backlog Papers', value: metrics.backlogCount },
+                { label: 'Backlog Credits', value: metrics.totalCredits },
+                { label: 'Current CGPA', value: metrics.currentCgpa },
+                { label: 'Min CGPA Required', value: metrics.minRequiredCgpa }
+              ],
+              subjectRows: subjects.map((s, idx) => ({
+                num: idx + 1,
+                name: s.name || `Subject ${idx + 1}`,
+                credits: s.credits,
+                semester: s.semester,
+                status: s.status,
+                recommendation: s.recommendation
+              }))
+            }}
+            shareData={{
+              toolName: 'Backlog Calculator',
+              score: `${metrics.backlogCount} Backlogs`,
+              scaleText: `(${metrics.totalCredits} Credits to clear)`,
+              metrics: [
+                { label: 'Backlogs', value: metrics.backlogCount },
+                { label: 'Pending Credits', value: metrics.totalCredits },
+                { label: 'Current CGPA', value: metrics.currentCgpa },
+                { label: 'Min CGPA Required', value: metrics.minRequiredCgpa }
+              ],
+              metadata: {
+                university: university.toUpperCase(),
+                regulation: regulation.toUpperCase()
+              }
+            }}
+            onSave={(record) => {
+              setPendingCalc(record);
+              setIsModalOpen(true);
+            }}
+          />
         </div>
 
-        {/* Dynamic Backlog Credits by Subject SVG Bar Chart */}
-        <section className="rounded-2xl bg-card border border-border p-4 sm:p-5 shadow-subtle space-y-3" aria-label="Backlog Credits by Subject Chart">
+        {/* Dynamic Backlog Credits by Subject SVG Bar Chart (Desktop / Tablet Only) */}
+        <section className="hidden lg:block rounded-2xl bg-card border border-border p-4 sm:p-5 shadow-subtle space-y-3" aria-label="Backlog Credits by Subject Chart">
           <div className="flex items-center justify-between pb-2 border-b border-border">
             <div>
               <h3 className="text-sm font-bold text-text-h">Backlog Credits by Subject</h3>
@@ -687,7 +737,16 @@ export default function BacklogCalculator() {
         <ExploreMoreTools />
       </main>
 
-      <SaveModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+      <SaveModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        calculationData={pendingCalc}
+        onSaveSuccess={(saved) => {
+          if (saved) {
+            dispatch(saveCalculationToHistory(saved));
+          }
+        }}
+      />
     </>
   );
 }

@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Outlet, Navigate } from 'react-router-dom';
 import { ThemeProvider } from './context/ThemeContext';
 import { ToastProvider } from './context/ToastContext';
+import { useAppDispatch } from './hooks/useAppDispatch';
+import { checkAuthSession } from './features/auth/authSlice';
 
 // Public Layout Components
 import Header from './components/layout/Header';
@@ -26,6 +28,8 @@ import Universities from './pages/Universities';
 import UniversityDetails from './pages/Universities/UniversityDetails';
 import ResourcesDirectory from './pages/Resources';
 import ResourceDetail from './pages/Resources/ResourceDetail';
+import About from './pages/About';
+import Contact from './pages/Contact';
 import LoginSignup from './pages/Auth/LoginSignup';
 
 // Student Dashboard Components & Guard
@@ -35,12 +39,14 @@ import StudentDashboard from './pages/student/Dashboard';
 import MyResults from './pages/student/MyResults';
 import ResultDetail from './pages/student/ResultDetail';
 import AddResult from './pages/student/AddResult';
+import AcademicHistory from './pages/student/AcademicHistory';
 import AcademicGoals from './pages/student/AcademicGoals';
 import PerformanceAnalytics from './pages/student/PerformanceAnalytics';
 import BacklogTracker from './pages/student/BacklogTracker';
 import CalculationHistory from './pages/student/CalculationHistory';
 import AcademicProfile from './pages/student/AcademicProfile';
 import AcademicProfileSetup from './pages/student/AcademicProfileSetup';
+import EducationRecords from './pages/student/EducationRecords';
 import NotificationsPage from './pages/student/NotificationsPage';
 import SettingsPage from './pages/student/SettingsPage';
 
@@ -61,11 +67,14 @@ import {
   Settings
 } from 'lucide-react';
 
+import PendingCalculationBanner from './components/common/PendingCalculationBanner';
+
 // Public Shell Layout (Includes Public Header, Drawer & Footer)
 function PublicLayout({ mobileMenuOpen, setMobileMenuOpen }) {
   return (
     <div className="selection:bg-accent selection:text-white flex flex-col min-h-screen antialiased relative">
       <Header onOpenMobileMenu={() => setMobileMenuOpen(true)} />
+      <PendingCalculationBanner />
       <MobileDrawer isOpen={mobileMenuOpen} onClose={() => setMobileMenuOpen(false)} />
 
       <main className="flex-grow">
@@ -78,7 +87,26 @@ function PublicLayout({ mobileMenuOpen, setMobileMenuOpen }) {
 }
 
 export default function App() {
+  const dispatch = useAppDispatch();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  useEffect(() => {
+    // 1. Deterministic session validation on app startup
+    dispatch(checkAuthSession());
+
+    // 2. React to auth session changes (login, logout, expiration, or tab storage events)
+    const handleAuthChange = () => {
+      dispatch(checkAuthSession());
+    };
+
+    window.addEventListener('auth_session_changed', handleAuthChange);
+    window.addEventListener('storage', handleAuthChange);
+
+    return () => {
+      window.removeEventListener('auth_session_changed', handleAuthChange);
+      window.removeEventListener('storage', handleAuthChange);
+    };
+  }, [dispatch]);
 
   return (
     <ThemeProvider>
@@ -97,15 +125,19 @@ export default function App() {
               <Route index element={<StudentDashboard />} />
               <Route path="dashboard" element={<StudentDashboard />} />
               <Route path="results" element={<MyResults />} />
+              <Route path="my-results" element={<Navigate to="/student/results" replace />} />
               <Route path="results/:resultId" element={<ResultDetail />} />
               <Route path="add-result" element={<AddResult />} />
-              <Route path="academic-history" element={<MyResults />} />
+              <Route path="edit-result/:resultId" element={<AddResult />} />
+              <Route path="academic-history" element={<AcademicHistory />} />
               <Route path="analytics" element={<PerformanceAnalytics />} />
               <Route path="goals" element={<AcademicGoals />} />
               <Route path="backlogs" element={<BacklogTracker />} />
               <Route path="calculation-history" element={<CalculationHistory />} />
               <Route path="profile" element={<AcademicProfile />} />
               <Route path="profile-setup" element={<AcademicProfileSetup />} />
+              <Route path="education-records" element={<EducationRecords />} />
+              <Route path="education" element={<Navigate to="/student/education-records" replace />} />
               <Route path="notifications" element={<NotificationsPage />} />
               <Route path="settings" element={<SettingsPage />} />
             </Route>
@@ -127,7 +159,7 @@ export default function App() {
               <Route path="regulations" element={<AcademicCatalogManager initialTab="regulations" />} />
               <Route path="subjects" element={<AcademicCatalogManager initialTab="subjects" />} />
               <Route path="grading-rules" element={<AcademicCatalogManager initialTab="grading" />} />
-              <Route path="calculation-rules" element={<AcademicCatalogManager initialTab="regulations" />} />
+              <Route path="calculation-rules" element={<AcademicCatalogManager initialTab="calculations" />} />
               <Route path="tools" element={<AdminManagementPage title="Tools Management" icon={Wrench} description="Configure platform calculators, conversion algorithms, and tool availability." />} />
               <Route path="resources" element={<AdminManagementPage title="Resources Management" icon={FolderOpen} description="Manage academic guides, syllabus PDFs, and study materials." />} />
               <Route path="blogs" element={<AdminManagementPage title="Blog Management" icon={Newspaper} description="Publish articles, student advice, and academic performance strategies." />} />
@@ -170,6 +202,8 @@ export default function App() {
               <Route path="/resources/details" element={<ResourceDetail />} />
               <Route path="/resources/resource-details" element={<ResourceDetail />} />
               <Route path="/resources/jntuh-r18-guide" element={<ResourceDetail />} />
+              <Route path="/about" element={<About />} />
+              <Route path="/contact" element={<Contact />} />
             </Route>
 
             {/* Dedicated Authentication Routes (Minimal Auth Header: Logo + Branding + ThemeToggle, No Footer) */}

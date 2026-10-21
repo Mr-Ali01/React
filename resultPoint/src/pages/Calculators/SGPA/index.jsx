@@ -8,6 +8,10 @@ import CalculatorPageHeader from '../CalculatorPageHeader';
 import SubjectFormTable from '../SubjectFormTable';
 import SaveModal from '../CGPA/components/SaveModal';
 import { useToast } from '../../../context/ToastContext';
+import { useAuth } from '../../../hooks/useAuth';
+import { useAppDispatch } from '../../../hooks/useAppDispatch';
+import { saveCalculationToHistory } from '../../../features/calculation/calculationSlice';
+import { calculationSaveService } from '../../../services/calculationSaveService';
 
 const GRADE_POINTS_MAP = {
   S: 10,
@@ -30,15 +34,20 @@ const DEFAULT_SUBJECTS = [
 ];
 
 export default function SGPACalculator() {
+  const { user, isAuthenticated } = useAuth();
+  const dispatch = useAppDispatch();
+  const { showToast } = useToast();
+
   const [subjects, setSubjects] = useState(DEFAULT_SUBJECTS);
   const [university, setUniversity] = useState('jntuh');
   const [course, setCourse] = useState('btech-cse');
   const [regulation, setRegulation] = useState('r18');
+  const [semester, setSemester] = useState('Semester 1');
   const [gradeSystem, setGradeSystem] = useState('10-point');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isResultModalOpen, setIsResultModalOpen] = useState(false);
+  const [pendingCalc, setPendingCalc] = useState(null);
   const [validationError, setValidationError] = useState('');
-
-  const { showToast } = useToast();
 
   const handleAddSubject = () => {
     if (subjects.length >= 12) return;
@@ -95,6 +104,61 @@ export default function SGPACalculator() {
 
     return { totalCredits, totalPoints, sgpa, percentage, letterGrade };
   }, [subjects]);
+
+  const handleSaveResult = () => {
+    const calcRecord = {
+      calculatorType: 'SGPA Calculator',
+      title: 'SGPA Evaluation',
+      score: metrics.sgpa.toFixed(2),
+      scale: '10.0',
+      result: `${metrics.sgpa.toFixed(2)} SGPA`,
+      standing: standing?.text || 'Good',
+      summary: `Total Credits: ${metrics.totalCredits} | Total Points: ${Math.round(metrics.totalPoints)} | Percentage: ${metrics.percentage.toFixed(1)}%`,
+      data: {
+        sgpa: metrics.sgpa,
+        percentage: metrics.percentage,
+        totalCredits: metrics.totalCredits,
+        totalPoints: metrics.totalPoints,
+        letterGrade: metrics.letterGrade,
+        university,
+        course,
+        regulation,
+        semester,
+        gradeSystem,
+        subjects,
+      },
+    };
+
+    if (isAuthenticated) {
+      const res = calculationSaveService.saveCalculation(calcRecord, user);
+      if (res.success) {
+        dispatch(saveCalculationToHistory(res.record));
+        showToast('SGPA calculation saved to your history!');
+      } else {
+        showToast(res.error || 'Failed to save calculation');
+      }
+    } else {
+      setPendingCalc(calcRecord);
+      calculationSaveService.setPendingCalculation(calcRecord);
+      setIsModalOpen(true);
+    }
+  };
+
+  const handleCalculate = () => {
+    if (!subjects || subjects.length === 0) {
+      setValidationError('At least one subject is required for SGPA calculation.');
+      return;
+    }
+    const invalidCredits = subjects.some(
+      (s) => !s.credits || isNaN(parseFloat(s.credits)) || parseFloat(s.credits) <= 0
+    );
+    if (invalidCredits) {
+      setValidationError('Please enter valid positive credits for all subjects.');
+      return;
+    }
+    setValidationError('');
+    setIsResultModalOpen(true);
+  };
 
   // Standing & Recommendations
   const standing = useMemo(() => {
@@ -189,12 +253,14 @@ export default function SGPACalculator() {
             setRegulation={setRegulation}
             gradeSystem={gradeSystem}
             setGradeSystem={setGradeSystem}
+            semester={semester}
+            setSemester={setSemester}
             subjects={subjects}
             onAddSubject={handleAddSubject}
             onRemoveSubject={handleRemoveSubject}
             onSubjectChange={handleSubjectChange}
             onReset={handleReset}
-            onSubmit={() => setIsModalOpen(true)}
+            onSubmit={handleCalculate}
             gradePointsMap={GRADE_POINTS_MAP}
             regulationName={regulation.toUpperCase()}
             validationError={validationError}
@@ -209,12 +275,79 @@ export default function SGPACalculator() {
             title="YOUR SGPA RESULT"
             metrics={resultCardsData}
             standing={standing}
-            onSave={() => setIsModalOpen(true)}
+            isMobileModalOpen={isResultModalOpen}
+            onCloseMobileModal={() => setIsResultModalOpen(false)}
+            metadata={{
+              university: (university || 'JNTUH').toUpperCase(),
+              regulation: (regulation || 'R18').toUpperCase(),
+              course: (course || 'B.Tech').toUpperCase(),
+              semester: (semester || 'Semester 1').toUpperCase(),
+              calculationMethod: 'Weighted Average (Credit Based)',
+              totalSubjects: subjects.length
+            }}
+            subjectRows={subjects.map((s, idx) => ({
+              num: idx + 1,
+              name: s.name || `Subject ${idx + 1}`,
+              credits: s.credits,
+              grade: s.grade,
+              gradePoints: GRADE_POINTS_MAP[s.grade] ?? 0,
+              creditPoints: (parseFloat(s.credits) || 0) * (GRADE_POINTS_MAP[s.grade] ?? 0)
+            }))}
+            pdfData={{
+              calculatorName: 'SGPA Result Card',
+              subtitle: 'Calculated using your semester subject credits and grades',
+              filename: 'ResultPoint_SGPA_Result.pdf',
+              score: metrics.sgpa.toFixed(2),
+              maxScale: 10,
+              standing: standing?.text,
+              metadata: {
+                university: (university || 'JNTUH').toUpperCase(),
+                regulation: (regulation || 'R18').toUpperCase(),
+                course: (course || 'B.Tech').toUpperCase(),
+                semester: (semester || 'Semester 1').toUpperCase(),
+                calculationMethod: 'Weighted Average (Credit Based)',
+                totalSubjects: subjects.length
+              },
+              subjectRows: subjects.map((s, idx) => ({
+                num: idx + 1,
+                name: s.name || `Subject ${idx + 1}`,
+                credits: s.credits,
+                grade: s.grade,
+                gradePoints: GRADE_POINTS_MAP[s.grade] ?? 0,
+                creditPoints: (parseFloat(s.credits) || 0) * (GRADE_POINTS_MAP[s.grade] ?? 0)
+              })),
+              metrics: [
+                { label: 'Total Credits', value: metrics.totalCredits },
+                { label: 'Total Grade Points', value: Math.round(metrics.totalPoints) },
+                { label: 'Percentage Equivalent', value: `${metrics.percentage.toFixed(2)}%` },
+                { label: 'Letter Grade', value: metrics.letterGrade }
+              ]
+            }}
+            shareData={{
+              toolName: 'SGPA',
+              score: metrics.sgpa.toFixed(2),
+              scaleText: 'out of 10',
+              metrics: [
+                { label: 'Total Credits', value: metrics.totalCredits },
+                { label: 'Total Grade Points', value: Math.round(metrics.totalPoints) },
+                { label: 'Percentage', value: `${metrics.percentage.toFixed(2)}%` },
+                { label: 'Letter Grade', value: metrics.letterGrade }
+              ],
+              metadata: {
+                university: (university || 'JNTUH').toUpperCase(),
+                regulation: (regulation || 'R18').toUpperCase(),
+                semester: (semester || 'Semester 1').toUpperCase()
+              }
+            }}
+            onSave={(record) => {
+              setPendingCalc(record);
+              setIsModalOpen(true);
+            }}
           />
         </div>
 
-        {/* Dynamic Semester Bar Chart */}
-        <section className="rounded-2xl bg-card border border-border p-4 sm:p-5 shadow-subtle space-y-4" aria-label="Semester Performance Visualization">
+        {/* Dynamic Semester Bar Chart (Desktop / Tablet Only) */}
+        <section className="hidden lg:block rounded-2xl bg-card border border-border p-4 sm:p-5 shadow-subtle space-y-4" aria-label="Semester Performance Visualization">
           <div className="flex items-center justify-between pb-2 border-b border-border">
             <div>
               <h3 className="text-sm font-bold text-text-h">Your Semester Performance</h3>
@@ -269,7 +402,16 @@ export default function SGPACalculator() {
         <ExploreMoreTools />
       </main>
 
-      <SaveModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+      <SaveModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        calculationData={pendingCalc}
+        onSaveSuccess={(saved) => {
+          if (saved) {
+            dispatch(saveCalculationToHistory(saved));
+          }
+        }}
+      />
     </>
   );
 }

@@ -1,18 +1,40 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Zap, Calculator, Percent, TrendingUp, Target, Scale } from 'lucide-react';
-import { POPULAR_TOOLS } from '../../services/adminDashboardService';
+import { adminDashboardService } from '../../services/adminDashboardService';
 
 export default function PopularToolsTable() {
+  const [tools, setTools] = useState(() => adminDashboardService.getPopularTools());
+
+  useEffect(() => {
+    const handleUpdate = () => {
+      setTools(adminDashboardService.getPopularTools());
+    };
+
+    window.addEventListener('storage', handleUpdate);
+    window.addEventListener('activity_history_updated', handleUpdate);
+    window.addEventListener('focus', handleUpdate);
+
+    return () => {
+      window.removeEventListener('storage', handleUpdate);
+      window.removeEventListener('activity_history_updated', handleUpdate);
+      window.removeEventListener('focus', handleUpdate);
+    };
+  }, []);
+
   const getToolIcon = (id) => {
     switch (id) {
+      case 'cgpa-calculator':
       case 'cgpa-calc':
         return <Calculator className="w-3.5 h-3.5 text-blue-500" />;
+      case 'sgpa-calculator':
       case 'sgpa-calc':
         return <Scale className="w-3.5 h-3.5 text-sky-500" />;
+      case 'cgpa-converter':
       case 'percentage-to-cgpa':
         return <Percent className="w-3.5 h-3.5 text-emerald-500" />;
       case 'cgpa-to-percentage':
+      case 'percentage-calculator':
         return <TrendingUp className="w-3.5 h-3.5 text-purple-500" />;
       case 'target-cgpa':
         return <Target className="w-3.5 h-3.5 text-rose-500" />;
@@ -55,45 +77,53 @@ export default function PopularToolsTable() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100/80 dark:divide-[#1E2A35]/40 font-medium">
-            {POPULAR_TOOLS.map((tool) => (
-              <tr key={tool.id} className="hover:bg-slate-50/60 dark:hover:bg-[#0D141F]/40 transition-colors">
-                <td className="py-3 px-2 text-slate-400 text-[11px] font-semibold">
-                  {tool.rank}
-                </td>
-
-                <td className="py-3 px-2">
-                  <Link
-                    to={tool.path}
-                    className="flex items-center gap-2 text-slate-900 dark:text-white font-semibold hover:text-[#FF6B00] transition-colors"
-                  >
-                    <span className="p-1 rounded-md bg-slate-100 dark:bg-slate-800">
-                      {getToolIcon(tool.id)}
-                    </span>
-                    <span className="truncate">{tool.name}</span>
-                  </Link>
-                </td>
-
-                <td className="py-3 px-2 text-right font-bold text-slate-900 dark:text-white">
-                  {tool.usage}
-                </td>
-
-                <td className="py-3 px-2 text-right">
-                  <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
-                    {tool.growth}
-                  </span>
-                </td>
-
-                {/* Relative usage visual bar */}
-                <td className="py-3 px-3">
-                  <div className="w-full h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                    <div
-                      className={`h-full rounded-full bg-gradient-to-r ${tool.barColor}`}
-                      style={{ width: `${tool.barPercent}%` }}
-                    />
-                  </div>
+            {tools.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="py-6 text-center text-slate-400 text-xs">
+                  No calculators configured or active in registry.
                 </td>
               </tr>
-            ))}
+            ) : (
+              tools.map((tool) => (
+                <tr key={tool.id} className="hover:bg-slate-50/60 dark:hover:bg-[#0D141F]/40 transition-colors">
+                  <td className="py-3 px-2 text-slate-400 text-[11px] font-semibold">
+                    {tool.rank}
+                  </td>
+
+                  <td className="py-3 px-2">
+                    <Link
+                      to={tool.path}
+                      className="flex items-center gap-2 text-slate-900 dark:text-white font-semibold hover:text-[#FF6B00] transition-colors"
+                    >
+                      <span className="p-1 rounded-md bg-slate-100 dark:bg-slate-800">
+                        {getToolIcon(tool.id)}
+                      </span>
+                      <span className="truncate">{tool.name}</span>
+                    </Link>
+                  </td>
+
+                  <td className="py-3 px-2 text-right font-bold text-slate-900 dark:text-white">
+                    {tool.usage}
+                  </td>
+
+                  <td className="py-3 px-2 text-right">
+                    <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                      {tool.growth}
+                    </span>
+                  </td>
+
+                  {/* Relative usage visual bar */}
+                  <td className="py-3 px-3">
+                    <div className="w-full h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full bg-gradient-to-r ${tool.barColor}`}
+                        style={{ width: `${tool.barPercent}%` }}
+                      />
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>

@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { GraduationCap } from 'lucide-react';
+import { useAppSelector } from '../../hooks/useAppSelector';
+import { selectIsProfileComplete } from '../../features/academicProfile/academicProfileSlice';
 import { studentService } from '../../services/studentService';
 
 /**
@@ -13,17 +14,8 @@ export default function AcademicProfileGate({
   title = "Academic Profile Setup Required",
   description = "Before accessing this feature, please configure your University, Course, and Regulation so ResultPoint can load your curriculum subjects, credit weights, and grading rules."
 }) {
-  const [isComplete, setIsComplete] = useState(() => studentService.isProfileComplete());
-
-  useEffect(() => {
-    const check = () => setIsComplete(studentService.isProfileComplete());
-    window.addEventListener('storage', check);
-    window.addEventListener('academic_profile_updated', check);
-    return () => {
-      window.removeEventListener('storage', check);
-      window.removeEventListener('academic_profile_updated', check);
-    };
-  }, []);
+  const isCompleteRedux = useAppSelector(selectIsProfileComplete);
+  const isComplete = isCompleteRedux || studentService.isProfileComplete();
 
   if (!isComplete) {
     return (

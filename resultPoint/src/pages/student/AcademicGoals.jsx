@@ -1,128 +1,208 @@
-import React, { useState } from 'react';
-import { Target, CheckCircle, Lightbulb, TrendingUp, Info } from 'lucide-react';
-import { goalService } from '../../services/goalService';
+import { useState, useEffect, useMemo } from 'react';
+import { Target, PlusCircle, CheckCircle2 } from 'lucide-react';
+import { useAppDispatch } from '../../hooks/useAppDispatch';
+import { useAppSelector } from '../../hooks/useAppSelector';
+import {
+  selectAcademicGoal,
+  selectGoalDetails,
+  fetchAcademicGoal,
+  saveAcademicGoal
+} from '../../features/academicGoals/academicGoalsSlice';
+import { selectResults, fetchResults } from '../../features/results/resultsSlice';
+import { selectAcademicProfile, fetchAcademicProfile } from '../../features/academicProfile/academicProfileSlice';
 import { studentService } from '../../services/studentService';
+import { resultService } from '../../services/resultService';
+import { goalService } from '../../services/goalService';
+import { academicCatalogService } from '../../services/academicCatalogService';
 import { useToast } from '../../context/ToastContext';
+
 import AcademicProfileGate from '../../components/student/AcademicProfileGate';
+import GoalOverviewCards from '../../components/student/goals/GoalOverviewCards';
+import TargetSetterAndFeasibility from '../../components/student/goals/TargetSetterAndFeasibility';
+import ProjectedTrendAndTargets from '../../components/student/goals/ProjectedTrendAndTargets';
+import SubjectPriorityAndProgress from '../../components/student/goals/SubjectPriorityAndProgress';
 
 export default function AcademicGoals() {
+  const dispatch = useAppDispatch();
   const { showToast } = useToast();
-  const summary = studentService.getAcademicSummary();
-  const [goal, setGoal] = useState(() => goalService.getGoal());
-  const [targetCGPA, setTargetCGPA] = useState(goal.targetCGPA || 8.50);
 
-  const metrics = goalService.calculateGoalMetrics(
-    Number(summary.currentCGPA),
-    summary.semestersCompleted,
-    summary.totalSemesters
-  );
+  const reduxProfile = useAppSelector(selectAcademicProfile);
+  const reduxResults = useAppSelector(selectResults);
+  const reduxGoal = useAppSelector(selectAcademicGoal);
+  const reduxDetails = useAppSelector(selectGoalDetails);
 
-  const handleSaveGoal = (e) => {
-    e.preventDefault();
-    goalService.updateGoal({ targetCGPA: Number(targetCGPA) });
-    setGoal(goalService.getGoal());
-    showToast(`Target CGPA updated to ${Number(targetCGPA).toFixed(2)}!`);
+  // Initialize and synchronize
+  useEffect(() => {
+    dispatch(fetchResults());
+    dispatch(fetchAcademicProfile());
+    dispatch(fetchAcademicGoal());
+  }, [dispatch]);
+
+  const profile = useMemo(() => ({
+    ...studentService.getProfile(),
+    ...(reduxProfile || {})
+  }), [reduxProfile]);
+
+  const results = useMemo(() => {
+    return reduxResults && reduxResults.length > 0 ? reduxResults : resultService.getAllResults();
+  }, [reduxResults]);
+
+  const catalogConfig = useMemo(() => {
+    return academicCatalogService.getFullConfiguration(
+      profile.universityId,
+      profile.courseId,
+      profile.regulationId
+    );
+  }, [profile.universityId, profile.courseId, profile.regulationId]);
+
+  // Target CGPA interactive state
+  const initialTarget = reduxGoal?.targetCGPA || 8.50;
+  const [currentTarget, setCurrentTarget] = useState(initialTarget);
+  const [planScope, setPlanScope] = useState('remaining'); // 'remaining' | 'all' | 'next'
+
+  useEffect(() => {
+    if (reduxGoal?.targetCGPA) {
+      setCurrentTarget(reduxGoal.targetCGPA);
+    }
+  }, [reduxGoal]);
+
+  // Recalculate dynamic goal details whenever results or currentTarget change
+  const details = useMemo(() => {
+    return goalService.calculateGoalDetails(profile, results, catalogConfig, currentTarget);
+  }, [profile, results, catalogConfig, currentTarget]);
+
+  // Handle saving target CGPA
+  const handleSaveGoal = async (newTarget) => {
+    const val = Number(parseFloat(newTarget).toFixed(2));
+    setCurrentTarget(val);
+    try {
+      await dispatch(saveAcademicGoal({ targetCGPA: val })).unwrap();
+      showToast(`Target Degree CGPA updated to ${val.toFixed(2)}!`);
+    } catch (err) {
+      showToast(typeof err === 'string' ? err : 'Failed to save goal', 'error');
+    }
   };
+
+  const hasResults = results && results.length > 0;
 
   return (
     <AcademicProfileGate
       title="Academic Profile Setup Required"
-      description="Before setting academic goals and CGPA projection targets, please complete your Academic Profile Setup."
+      description="Before setting graduation targets, modeling semester milestones, and analyzing credit weight impacts, please complete your Academic Profile Setup."
     >
-      <div className="max-w-4xl mx-auto space-y-6">
-      <div className="pb-2 border-b border-border/80">
-        <h1 className="text-xl sm:text-2xl font-extrabold text-text-h tracking-tight flex items-center gap-2.5">
-          <Target className="w-6 h-6 text-brandPink" />
-          <span>Academic Goals</span>
-        </h1>
-        <p className="text-xs sm:text-[13px] text-text-light mt-0.5">
-          Plan, track, and project the required grades for your target graduation degree.
-        </p>
-      </div>
-
-      {/* Target Metric Triple Blocks */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="p-5 rounded-2xl bg-card border border-border shadow-subtle text-center">
-          <span className="text-xs font-semibold text-text-light uppercase tracking-wider block mb-1">
-            Target CGPA
-          </span>
-          <span className="text-3xl font-extrabold text-brandCyan">
-            {Number(targetCGPA).toFixed(2)}
-          </span>
-        </div>
-
-        <div className="p-5 rounded-2xl bg-card border border-border shadow-subtle text-center">
-          <span className="text-xs font-semibold text-text-light uppercase tracking-wider block mb-1">
-            Current CGPA
-          </span>
-          <span className="text-3xl font-extrabold text-text-h">
-            {metrics.currentCGPA}
-          </span>
-        </div>
-
-        <div className="p-5 rounded-2xl bg-card border border-border shadow-subtle text-center">
-          <span className="text-xs font-semibold text-text-light uppercase tracking-wider block mb-1">
-            Required Remaining Avg
-          </span>
-          <span className="text-3xl font-extrabold text-brandGreen">
-            {metrics.requiredAverage}
-          </span>
-        </div>
-      </div>
-
-      {/* Progress & Target Setter Form */}
-      <div className="p-5 sm:p-6 rounded-2xl bg-card border border-border shadow-subtle space-y-5">
-        <h3 className="text-sm font-bold text-text-h uppercase tracking-wider">
-          Adjust Your Target CGPA
-        </h3>
-
-        <form onSubmit={handleSaveGoal} className="space-y-4">
+      <div className="max-w-7xl mx-auto space-y-6">
+        {/* Page Top Header matching reference image */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border/80">
           <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-xs font-semibold text-text-h">
-                Desired Graduation CGPA
-              </label>
-              <span className="text-base font-extrabold text-accent">
-                {Number(targetCGPA).toFixed(2)}
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-accent/15 text-accent border border-accent/25 uppercase tracking-wider">
+                {catalogConfig?.course?.shortName || profile.course || 'Degree Program'} • {catalogConfig?.regulation?.code || profile.regulation || 'CBCS'}
+              </span>
+              <span className="text-xs text-text-light">
+                {catalogConfig?.university?.name || profile.university}
               </span>
             </div>
-            <input
-              type="range"
-              min="6.0"
-              max="10.0"
-              step="0.05"
-              value={targetCGPA}
-              onChange={(e) => setTargetCGPA(e.target.value)}
-              className="w-full accent-accent cursor-pointer"
-            />
-            <div className="flex justify-between text-[10px] text-text-light font-semibold mt-1">
-              <span>6.0 (First Class)</span>
-              <span>8.50 (Distinction Target)</span>
-              <span>10.0 (Perfect)</span>
+            <h1 className="text-xl sm:text-2xl font-extrabold text-text-h tracking-tight flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-accent to-pink-600 text-white flex items-center justify-center shadow-accent/20 shadow-sm">
+                <Target className="w-4 h-4" />
+              </div>
+              <span>Academic Goals</span>
+            </h1>
+            <p className="text-xs sm:text-[13px] text-text-light mt-0.5">
+              Plan, track, and achieve your target CGPA with personalized guidance.
+            </p>
+          </div>
+
+          {/* Right Header Controls matching reference design */}
+          {hasResults && (
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Target Degree Dropdown */}
+              <div className="px-3 py-1.5 rounded-xl bg-card border border-border shadow-2xs flex items-center gap-2">
+                <span className="text-[10px] font-bold text-text-light uppercase tracking-wider">
+                  Target Degree CGPA
+                </span>
+                <select
+                  value={currentTarget}
+                  onChange={(e) => handleSaveGoal(Number(e.target.value))}
+                  className="calc-input bg-transparent border-0 p-0 text-xs font-bold text-accent font-mono cursor-pointer focus:ring-0"
+                >
+                  <option value={9.50}>9.50 (Outstanding)</option>
+                  <option value={9.00}>9.00 (High Distinction)</option>
+                  <option value={8.50}>8.50 (Distinction)</option>
+                  <option value={8.00}>8.00 (First Class)</option>
+                  <option value={7.50}>7.50 (First Division)</option>
+                  <option value={7.00}>7.00 (Second Class)</option>
+                </select>
+              </div>
+
+              {/* View Plan For Dropdown */}
+              <div className="px-3 py-1.5 rounded-xl bg-card border border-border shadow-2xs flex items-center gap-2">
+                <span className="text-[10px] font-bold text-text-light uppercase tracking-wider">
+                  View Plan For
+                </span>
+                <select
+                  value={planScope}
+                  onChange={(e) => setPlanScope(e.target.value)}
+                  className="calc-input bg-transparent border-0 p-0 text-xs font-bold text-text-h cursor-pointer focus:ring-0"
+                >
+                  <option value="remaining">Remaining Semesters</option>
+                  <option value="all">All Semesters</option>
+                  <option value="next">Next Semester Only</option>
+                </select>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Empty State when student has no saved results */}
+        {!hasResults ? (
+          <div className="rounded-2xl bg-card border border-border p-8 sm:p-12 text-center space-y-4 max-w-lg mx-auto shadow-subtle">
+            <div className="w-16 h-16 rounded-2xl bg-accent/15 text-accent flex items-center justify-center mx-auto">
+              <Target className="w-8 h-8" />
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-base sm:text-lg font-bold text-text-h">
+                No Semester Results Recorded Yet
+              </h3>
+              <p className="text-xs text-text-light leading-relaxed">
+                Academic goal forecasting, semester targets, and What-If projections will automatically calibrate once your first semester results are recorded.
+              </p>
+            </div>
+            <div className="pt-2">
+              <a
+                href="/student/add-result"
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-accent hover:bg-accent-hover shadow-accent transition-all"
+              >
+                <PlusCircle className="w-4 h-4" />
+                <span>Add First Semester Result</span>
+              </a>
             </div>
           </div>
+        ) : (
+          <div className="space-y-5">
+            {/* 1. Goal Overview Cards (5 across) */}
+            <GoalOverviewCards details={details} />
 
-          <div className="pt-2">
-            <button
-              type="submit"
-              className="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-accent hover:bg-accent-hover shadow-accent transition-all flex items-center gap-2"
-            >
-              <CheckCircle className="w-4 h-4" />
-              <span>Update Target Goal</span>
-            </button>
-          </div>
-        </form>
+            {/* 2. Target Setter Slider, Goal Feasibility & What-If Analysis */}
+            <TargetSetterAndFeasibility
+              details={details}
+              targetCGPA={currentTarget}
+              onTargetChange={(val) => setCurrentTarget(val)}
+              onSaveGoal={handleSaveGoal}
+            />
 
-        {/* Tip Box */}
-        <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-start gap-3">
-          <Lightbulb className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
-          <div className="text-xs text-text-m leading-relaxed">
-            <span className="font-bold text-amber-500 mr-2">Strategy Advice:</span>
-            To graduate with a <strong className="text-text-h">{Number(targetCGPA).toFixed(2)}</strong> CGPA,
-            maintain an average of <strong className="text-brandGreen">{metrics.requiredAverage} SGPA</strong> over your remaining {summary.semestersRemaining} semesters.
+            {/* 3. Projected CGPA Trend Line Chart & Recommended Semester Targets + Tip */}
+            <ProjectedTrendAndTargets
+              details={details}
+              targetCGPA={currentTarget}
+            />
+
+            {/* 4. Subject-Wise Priority, Credits Impact Analysis & Your Goal Progress */}
+            <SubjectPriorityAndProgress
+              details={details}
+            />
           </div>
-        </div>
-      </div>
+        )}
       </div>
     </AcademicProfileGate>
   );

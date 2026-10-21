@@ -20,6 +20,8 @@ import {
   GraduationCap
 } from 'lucide-react';
 
+import { contactService } from '../../services/contactService';
+
 export const ADMIN_NAV_ITEMS = [
   { name: 'Dashboard', path: '/admin/dashboard', icon: LayoutDashboard },
   { name: 'Users Management', path: '/admin/users', icon: Users },
@@ -34,7 +36,7 @@ export const ADMIN_NAV_ITEMS = [
   { name: 'Blog Management', path: '/admin/blogs', icon: Newspaper },
   { name: 'Announcements', path: '/admin/announcements', icon: Bell },
   { name: 'Reports & Analytics', path: '/admin/reports', icon: BarChart2 },
-  { name: 'Support Queries', path: '/admin/support', icon: MessageSquare, badge: 12 },
+  { name: 'Support Queries', path: '/admin/support', icon: MessageSquare, badgeKey: 'support' },
   { name: 'Settings & Activity Logs', path: '/admin/settings', icon: Settings }
 ];
 
@@ -44,6 +46,34 @@ export default function AdminSidebar({
   onCloseMobile
 }) {
   const location = useLocation();
+
+  const [openSupportCount, React_setOpenSupportCount] = React.useState(() => {
+    try {
+      return contactService.getAllQueries().filter((q) => (q.status || 'open').toLowerCase() === 'open').length;
+    } catch {
+      return 0;
+    }
+  });
+
+  React.useEffect(() => {
+    const handleUpdate = () => {
+      try {
+        React_setOpenSupportCount(
+          contactService.getAllQueries().filter((q) => (q.status || 'open').toLowerCase() === 'open').length
+        );
+      } catch {
+        React_setOpenSupportCount(0);
+      }
+    };
+
+    window.addEventListener('storage', handleUpdate);
+    window.addEventListener('focus', handleUpdate);
+
+    return () => {
+      window.removeEventListener('storage', handleUpdate);
+      window.removeEventListener('focus', handleUpdate);
+    };
+  }, []);
 
   // Close on Escape key
   useEffect(() => {
@@ -115,6 +145,8 @@ export default function AdminSidebar({
             location.pathname === item.path ||
             (item.path === '/admin/dashboard' && (location.pathname === '/admin' || location.pathname === '/admin/'));
 
+          const effectiveBadge = item.badgeKey === 'support' ? (openSupportCount > 0 ? openSupportCount : null) : item.badge;
+
           return (
             <div key={item.name} className="relative group">
               <NavLink
@@ -138,9 +170,9 @@ export default function AdminSidebar({
                   <span className="truncate flex-1">{item.name}</span>
                 )}
 
-                {!isCollapsed && item.badge && (
+                {!isCollapsed && effectiveBadge && (
                   <span className="px-1.5 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-500 text-white leading-none">
-                    {item.badge}
+                    {effectiveBadge}
                   </span>
                 )}
               </NavLink>
@@ -149,9 +181,9 @@ export default function AdminSidebar({
               {isCollapsed && (
                 <div className="hidden lg:group-hover:flex items-center gap-1.5 absolute left-full ml-3 top-1/2 -translate-y-1/2 z-50 px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 shadow-xl text-xs font-semibold text-white whitespace-nowrap pointer-events-none">
                   <span>{item.name}</span>
-                  {item.badge && (
+                  {effectiveBadge && (
                     <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-rose-500 text-white">
-                      {item.badge}
+                      {effectiveBadge}
                     </span>
                   )}
                 </div>

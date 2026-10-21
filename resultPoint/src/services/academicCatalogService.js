@@ -5,6 +5,7 @@
  */
 
 import { STORAGE_KEYS } from './storageKeys.js';
+import { auditHistoryService } from './auditHistoryService.js';
 
 // Verified Multi-University Catalog Data
 const DEFAULT_CATALOG = {
@@ -151,7 +152,7 @@ const DEFAULT_CATALOG = {
               name: 'Choice Based Credit System (CBCS)',
               ruleVersion: 'OU_BCA_CBCS_V1',
               verificationStatus: 'verified',
-              effectiveBatches: ['2021-2024', '2022-2025', '2023-2026', '2024-2027', '2025-2028', '2026-2029'],
+              effectiveBatches: ['2021-2024', '2022-2025', '2023-2026', '2024-2027', '2025-2027', '2025-2028', '2026-2029'],
               gradingSystem: '10-point (S-Grade Scheme)',
               gradeScale: [
                 { grade: 'S', points: 10, minPercentage: 85, maxPercentage: 100, desc: 'Super', isPass: true },
@@ -953,11 +954,152 @@ const DEFAULT_CATALOG = {
         }
       ]
     }
+  ],
+  gradingScales: [
+    {
+      id: 'ugc-10-point',
+      name: 'UGC Standard 10-Point Letter Grade Scheme',
+      system: '10-point',
+      description: 'Standard UGC CBCS 10-point letter grading system adopted by JNTUH, Osmania B.Tech, and technical universities.',
+      status: 'active',
+      isOfficial: true,
+      grades: [
+        { grade: 'O', points: 10, minPercentage: 85, maxPercentage: 100, desc: 'Outstanding', isPass: true },
+        { grade: 'A+', points: 9, minPercentage: 75, maxPercentage: 84.99, desc: 'Excellent', isPass: true },
+        { grade: 'A', points: 8, minPercentage: 65, maxPercentage: 74.99, desc: 'Very Good', isPass: true },
+        { grade: 'B+', points: 7, minPercentage: 55, maxPercentage: 64.99, desc: 'Good', isPass: true },
+        { grade: 'B', points: 6, minPercentage: 50, maxPercentage: 54.99, desc: 'Above Average', isPass: true },
+        { grade: 'C', points: 5, minPercentage: 40, maxPercentage: 49.99, desc: 'Pass', isPass: true },
+        { grade: 'F', points: 0, minPercentage: 0, maxPercentage: 39.99, desc: 'Fail', isPass: false }
+      ]
+    },
+    {
+      id: 'ou-s-grade-10-point',
+      name: 'Osmania PG / MCA S-Grade 10-Point Scheme',
+      system: '10-point',
+      description: 'Official Osmania University PG/MCA Choice Based Credit System scale featuring the S (Super) grade.',
+      status: 'active',
+      isOfficial: true,
+      grades: [
+        { grade: 'S', points: 10, minPercentage: 85, maxPercentage: 100, desc: 'Super', isPass: true },
+        { grade: 'A+', points: 9, minPercentage: 75, maxPercentage: 84.99, desc: 'Excellent', isPass: true },
+        { grade: 'A', points: 8, minPercentage: 65, maxPercentage: 74.99, desc: 'Very Good', isPass: true },
+        { grade: 'B+', points: 7, minPercentage: 55, maxPercentage: 64.99, desc: 'Good', isPass: true },
+        { grade: 'B', points: 6, minPercentage: 50, maxPercentage: 54.99, desc: 'Fair', isPass: true },
+        { grade: 'C', points: 5, minPercentage: 40, maxPercentage: 49.99, desc: 'Pass', isPass: true },
+        { grade: 'F', points: 0, minPercentage: 0, maxPercentage: 39.99, desc: 'Fail', isPass: false }
+      ]
+    },
+    {
+      id: 'vtu-cbcs-10-point',
+      name: 'VTU CBCS 10-Point Scheme',
+      system: '10-point',
+      description: 'Visvesvaraya Technological University CBCS grading scheme including P (Pass) grade threshold.',
+      status: 'active',
+      isOfficial: true,
+      grades: [
+        { grade: 'O', points: 10, minPercentage: 90, maxPercentage: 100, desc: 'Outstanding', isPass: true },
+        { grade: 'A+', points: 9, minPercentage: 80, maxPercentage: 89.99, desc: 'Excellent', isPass: true },
+        { grade: 'A', points: 8, minPercentage: 70, maxPercentage: 79.99, desc: 'Very Good', isPass: true },
+        { grade: 'B+', points: 7, minPercentage: 60, maxPercentage: 69.99, desc: 'Good', isPass: true },
+        { grade: 'B', points: 6, minPercentage: 55, maxPercentage: 59.99, desc: 'Above Average', isPass: true },
+        { grade: 'C', points: 5, minPercentage: 50, maxPercentage: 54.99, desc: 'Average', isPass: true },
+        { grade: 'P', points: 4, minPercentage: 40, maxPercentage: 49.99, desc: 'Pass', isPass: true },
+        { grade: 'F', points: 0, minPercentage: 0, maxPercentage: 39.99, desc: 'Fail', isPass: false }
+      ]
+    }
+  ],
+  calculationRules: [
+    {
+      id: 'jntuh-r18-r22-rule',
+      name: 'JNTUH Standard B.Tech Calculation Rule (R18/R22)',
+      description: 'Official JNTU Hyderabad CBCS weighted credit sum for SGPA/CGPA with (CGPA - 0.5) × 10 percentage formula.',
+      ruleType: 'percentage',
+      universityId: 'jntuh',
+      courseId: 'btech-cse',
+      regulationId: 'jntuh-cse-r18',
+      sgpaFormula: 'WEIGHTED_CREDIT_SUM',
+      cgpaFormula: 'CUMULATIVE_WEIGHTED_CREDIT_SUM',
+      percentageFormula: '(CGPA - 0.5) * 10',
+      formulaDescription: 'Percentage = (CGPA - 0.5) × 10',
+      decimalPrecision: 2,
+      roundingMode: 'round',
+      minPassingGradePoints: 5.0,
+      includeBacklogsInCredits: false,
+      status: 'active',
+      isOfficial: true,
+      ruleVersion: 'JNTUH_R18_V1',
+      createdAt: '2026-01-01T00:00:00.000Z'
+    },
+    {
+      id: 'ou-cbcs-standard-rule',
+      name: 'Osmania University Standard CBCS Calculation Rule',
+      description: 'Official Osmania University CBCS calculation: weighted credit sum with CGPA × 10 percentage formula.',
+      ruleType: 'percentage',
+      universityId: 'osmania',
+      courseId: 'bca',
+      regulationId: 'ou-bca-cbcs',
+      sgpaFormula: 'WEIGHTED_CREDIT_SUM',
+      cgpaFormula: 'CUMULATIVE_WEIGHTED_CREDIT_SUM',
+      percentageFormula: 'CGPA * 10',
+      formulaDescription: 'Percentage = CGPA × 10',
+      decimalPrecision: 2,
+      roundingMode: 'round',
+      minPassingGradePoints: 5.0,
+      includeBacklogsInCredits: false,
+      status: 'active',
+      isOfficial: true,
+      ruleVersion: 'OU_CBCS_V1',
+      createdAt: '2026-01-01T00:00:00.000Z'
+    },
+    {
+      id: 'aicte-75-formula-rule',
+      name: 'AICTE / National 10-Point Conversion Rule',
+      description: 'National AICTE conversion standard: Percentage = (CGPA - 0.75) × 10.',
+      ruleType: 'percentage',
+      universityId: null,
+      courseId: null,
+      regulationId: null,
+      sgpaFormula: 'WEIGHTED_CREDIT_SUM',
+      cgpaFormula: 'CUMULATIVE_WEIGHTED_CREDIT_SUM',
+      percentageFormula: '(CGPA - 0.75) * 10',
+      formulaDescription: 'Percentage = (CGPA - 0.75) × 10',
+      decimalPrecision: 2,
+      roundingMode: 'round',
+      minPassingGradePoints: 4.5,
+      includeBacklogsInCredits: false,
+      status: 'active',
+      isOfficial: true,
+      ruleVersion: 'AICTE_2018_V1',
+      createdAt: '2026-01-01T00:00:00.000Z'
+    },
+    {
+      id: 'cbse-95-formula-rule',
+      name: 'Standard 9.5 Multiplier Rule',
+      description: 'Percentage conversion using CGPA × 9.5 multiplier.',
+      ruleType: 'percentage',
+      universityId: null,
+      courseId: null,
+      regulationId: null,
+      sgpaFormula: 'WEIGHTED_CREDIT_SUM',
+      cgpaFormula: 'CUMULATIVE_WEIGHTED_CREDIT_SUM',
+      percentageFormula: 'CGPA * 9.5',
+      formulaDescription: 'Percentage = CGPA × 9.5',
+      decimalPrecision: 2,
+      roundingMode: 'round',
+      minPassingGradePoints: 4.0,
+      includeBacklogsInCredits: false,
+      status: 'active',
+      isOfficial: false,
+      ruleVersion: 'CBSE_95_V1',
+      createdAt: '2026-01-01T00:00:00.000Z'
+    }
   ]
 };
 
-const STORAGE_KEY_CATALOG = 'rp_academic_catalog';
-const CATALOG_SCHEMA_VERSION = 'v5_batches_2026_s_grade';
+const STORAGE_KEY_CATALOG = STORAGE_KEYS.ACADEMIC_CATALOG;
+const LEGACY_STORAGE_KEY_CATALOG = STORAGE_KEYS.LEGACY_ACADEMIC_CATALOG || 'resultpoint_academic_catalog';
+const CATALOG_SCHEMA_VERSION = 'v7_calculation_rules_crud';
 
 function safeGet(key, fallback) {
   try {
@@ -979,19 +1121,136 @@ function safeSet(key, val) {
   }
 }
 
+/**
+ * Safely merge two catalogs without losing custom admin additions or creating duplicates.
+ * Preserves target entities and merges in non-duplicate items from source.
+ */
+function mergeCatalogs(targetCatalog, sourceCatalog) {
+  if (!targetCatalog && !sourceCatalog) return { ...DEFAULT_CATALOG, catalogVersion: CATALOG_SCHEMA_VERSION };
+  if (!targetCatalog) return sourceCatalog;
+  if (!sourceCatalog) return targetCatalog;
+
+  const merged = { ...targetCatalog };
+  if (!Array.isArray(merged.universities)) merged.universities = [];
+  if (!Array.isArray(merged.gradingScales)) merged.gradingScales = [];
+  if (!Array.isArray(merged.calculationRules)) merged.calculationRules = [];
+
+  // 1. Merge universities
+  const sourceUniversities = Array.isArray(sourceCatalog.universities) ? sourceCatalog.universities : [];
+  sourceUniversities.forEach((srcUniv) => {
+    const targetUnivIndex = merged.universities.findIndex((u) => u.id === srcUniv.id);
+    if (targetUnivIndex === -1) {
+      // University exists in source but not in target - preserve it
+      merged.universities.push(srcUniv);
+    } else {
+      // University exists in both - merge courses
+      const targetUniv = merged.universities[targetUnivIndex];
+      const targetCourses = Array.isArray(targetUniv.courses) ? [...targetUniv.courses] : [];
+      const srcCourses = Array.isArray(srcUniv.courses) ? srcUniv.courses : [];
+
+      srcCourses.forEach((srcCourse) => {
+        const targetCourseIndex = targetCourses.findIndex((c) => c.id === srcCourse.id);
+        if (targetCourseIndex === -1) {
+          targetCourses.push(srcCourse);
+        } else {
+          // Merge regulations inside course
+          const targetCourse = targetCourses[targetCourseIndex];
+          const targetRegs = Array.isArray(targetCourse.regulations) ? [...targetCourse.regulations] : [];
+          const srcRegs = Array.isArray(srcCourse.regulations) ? srcCourse.regulations : [];
+
+          srcRegs.forEach((srcReg) => {
+            const targetRegIndex = targetRegs.findIndex((r) => r.id === srcReg.id);
+            if (targetRegIndex === -1) {
+              targetRegs.push(srcReg);
+            } else {
+              // Merge semester curricula
+              const targetReg = targetRegs[targetRegIndex];
+              const mergedSemesters = { ...(targetReg.semesters || {}), ...(srcReg.semesters || {}) };
+              targetRegs[targetRegIndex] = { ...srcReg, ...targetReg, semesters: mergedSemesters };
+            }
+          });
+          targetCourses[targetCourseIndex] = { ...srcCourse, ...targetCourse, regulations: targetRegs };
+        }
+      });
+
+      merged.universities[targetUnivIndex] = {
+        ...srcUniv,
+        ...targetUniv,
+        courses: targetCourses
+      };
+    }
+  });
+
+  // 2. Merge gradingScales
+  const sourceScales = Array.isArray(sourceCatalog.gradingScales) ? sourceCatalog.gradingScales : [];
+  sourceScales.forEach((srcScale) => {
+    if (!merged.gradingScales.some((s) => s.id === srcScale.id)) {
+      merged.gradingScales.push(srcScale);
+    }
+  });
+
+  // 3. Merge calculationRules
+  const sourceCalcRules = Array.isArray(sourceCatalog.calculationRules) ? sourceCatalog.calculationRules : [];
+  sourceCalcRules.forEach((srcRule) => {
+    if (!merged.calculationRules.some((r) => r.id === srcRule.id)) {
+      merged.calculationRules.push(srcRule);
+    }
+  });
+
+  merged.catalogVersion = CATALOG_SCHEMA_VERSION;
+  return merged;
+}
+
 export const academicCatalogService = {
   initialize() {
-    const existing = safeGet(STORAGE_KEY_CATALOG, null);
-    const osmaniaUniv = existing?.universities?.find((u) => u.id === 'osmania');
-    const needsMigration =
-      !existing ||
-      !existing.universities ||
-      existing.catalogVersion !== CATALOG_SCHEMA_VERSION ||
-      !osmaniaUniv ||
-      (osmaniaUniv.courses?.length || 0) < 10;
+    // 1. Check legacy and canonical storage keys
+    const canonicalRaw = safeGet(STORAGE_KEY_CATALOG, null);
+    const legacyRaw = safeGet(LEGACY_STORAGE_KEY_CATALOG, null);
 
-    if (needsMigration) {
-      safeSet(STORAGE_KEY_CATALOG, { ...DEFAULT_CATALOG, catalogVersion: CATALOG_SCHEMA_VERSION });
+    let activeCatalog = null;
+
+    if (canonicalRaw && legacyRaw) {
+      // Both keys have data: merge them cleanly without data loss or duplicates
+      activeCatalog = mergeCatalogs(canonicalRaw, legacyRaw);
+      safeSet(STORAGE_KEY_CATALOG, activeCatalog);
+    } else if (!canonicalRaw && legacyRaw) {
+      // Migrate legacy data to canonical key
+      activeCatalog = legacyRaw;
+      safeSet(STORAGE_KEY_CATALOG, activeCatalog);
+    } else if (canonicalRaw) {
+      activeCatalog = canonicalRaw;
+    }
+
+    // 2. Check if baseline default catalog must be merged (idempotent, preserves custom data)
+    if (!activeCatalog || !Array.isArray(activeCatalog.universities) || activeCatalog.universities.length === 0) {
+      activeCatalog = { ...DEFAULT_CATALOG, catalogVersion: CATALOG_SCHEMA_VERSION };
+      safeSet(STORAGE_KEY_CATALOG, activeCatalog);
+    } else {
+      // Ensure official seed universities (OU, JNTUH), grading scales, and calculation rules exist
+      const osmaniaUniv = activeCatalog.universities.find((u) => u.id === 'osmania');
+      const jntuhUniv = activeCatalog.universities.find((u) => u.id === 'jntuh');
+
+      const needsSeedMerge =
+        !osmaniaUniv ||
+        (osmaniaUniv.courses?.length || 0) < 10 ||
+        !jntuhUniv ||
+        activeCatalog.catalogVersion !== CATALOG_SCHEMA_VERSION;
+
+      if (needsSeedMerge) {
+        // Safe merge with DEFAULT_CATALOG so any custom added universities/courses/rules are preserved!
+        activeCatalog = mergeCatalogs(activeCatalog, DEFAULT_CATALOG);
+        safeSet(STORAGE_KEY_CATALOG, activeCatalog);
+      }
+
+      if (!Array.isArray(activeCatalog.gradingScales) || activeCatalog.gradingScales.length === 0) {
+        activeCatalog.gradingScales = [...(DEFAULT_CATALOG.gradingScales || [])];
+        safeSet(STORAGE_KEY_CATALOG, activeCatalog);
+      }
+
+      if (!Array.isArray(activeCatalog.calculationRules) || activeCatalog.calculationRules.length === 0) {
+        activeCatalog.calculationRules = [...(DEFAULT_CATALOG.calculationRules || [])];
+        safeSet(STORAGE_KEY_CATALOG, activeCatalog);
+      }
     }
   },
 
@@ -1006,16 +1265,34 @@ export const academicCatalogService = {
       id: u.id,
       name: u.name,
       shortName: u.shortName,
-      city: u.city,
-      state: u.state,
-      type: u.type,
-      courseCount: u.courses?.length || 0
+      city: u.city || '',
+      state: u.state || '',
+      type: u.type || 'State University',
+      status: u.status || 'active',
+      website: u.website || '',
+      logo: u.logo || null,
+      description: u.description || '',
+      courses: u.courses || [],
+      courseCount: u.courses?.length || 0,
+      coursesCount: u.courses?.length || 0
     }));
   },
 
   getUniversityById(univId) {
+    if (!univId) return null;
     const catalog = this.getCatalog();
-    return catalog.universities.find((u) => u.id === univId) || null;
+    const normalized = String(univId).trim().toLowerCase();
+    return (
+      catalog.universities.find(
+        (u) =>
+          (u.id && u.id.toLowerCase() === normalized) ||
+          (u.shortName && u.shortName.toLowerCase() === normalized)
+      ) || null
+    );
+  },
+
+  getUniversity(univId) {
+    return this.getUniversityById(univId);
   },
 
   getCoursesByUniversity(univId) {
@@ -1025,18 +1302,28 @@ export const academicCatalogService = {
       id: c.id,
       name: c.name,
       shortName: c.shortName,
-      level: c.level,
-      durationYears: c.durationYears,
-      totalSemesters: c.totalSemesters,
-      totalDegreeCredits: c.totalDegreeCredits,
+      level: c.level || 'UG',
+      durationYears: c.durationYears || 4,
+      totalSemesters: c.totalSemesters || 8,
+      totalDegreeCredits: c.totalDegreeCredits || 160,
+      status: c.status || 'active',
+      regulations: c.regulations || [],
       regulationCount: c.regulations?.length || 0
     }));
   },
 
   getCourse(univId, courseId) {
+    if (!courseId) return null;
     const univ = this.getUniversityById(univId);
     if (!univ || !univ.courses) return null;
-    return univ.courses.find((c) => c.id === courseId) || null;
+    const normalized = String(courseId).trim().toLowerCase();
+    return (
+      univ.courses.find(
+        (c) =>
+          c.id.toLowerCase() === normalized ||
+          (c.shortName && c.shortName.toLowerCase() === normalized)
+      ) || null
+    );
   },
 
   getRegulationsByCourse(univId, courseId) {
@@ -1128,7 +1415,7 @@ export const academicCatalogService = {
     const config = this.getFullConfiguration(univId, courseId, regulationId);
     if (!config || !config.semesters) return [];
     const subjects = config.semesters[semesterNumber];
-    if (subjects && Array.isArray(subjects) && subjects.length > 0) {
+    if (Array.isArray(subjects)) {
       return subjects;
     }
     // Fallback: Generate compliant placeholder subjects for unconfigured upper semesters
@@ -1146,58 +1433,603 @@ export const academicCatalogService = {
 
   saveCatalog(catalog) {
     safeSet(STORAGE_KEY_CATALOG, catalog);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('rp_catalog_updated', { detail: catalog }));
+      window.dispatchEvent(new Event('storage'));
+    }
     return catalog;
   },
 
   addUniversity(univData) {
+    if (!univData || !univData.name || !univData.name.trim()) {
+      throw new Error('University name is required.');
+    }
+    if (!univData.shortName || !univData.shortName.trim()) {
+      throw new Error('University acronym / short name is required.');
+    }
+
+    const trimmedName = univData.name.trim();
+    const trimmedShortName = univData.shortName.trim().toUpperCase();
+
+    if (trimmedName.length < 3) {
+      throw new Error('University name must be at least 3 characters long.');
+    }
+    if (trimmedShortName.length < 2) {
+      throw new Error('Short code must be at least 2 characters long.');
+    }
+
+    if (univData.website && univData.website.trim()) {
+      const url = univData.website.trim();
+      if (!/^https?:\/\/.+/i.test(url)) {
+        throw new Error('Official website must be a valid URL starting with http:// or https://');
+      }
+    }
+
     const catalog = this.getCatalog();
+    const candidateId = (univData.id || trimmedShortName).toLowerCase().replace(/[^a-z0-9]/g, '-');
+
+    if (catalog.universities.some((u) => u.id === candidateId)) {
+      throw new Error(`A university with identifier "${candidateId}" already exists.`);
+    }
+
+    if (catalog.universities.some((u) => u.shortName.toUpperCase() === trimmedShortName)) {
+      throw new Error(`A university with acronym "${trimmedShortName}" already exists.`);
+    }
+
+    if (catalog.universities.some((u) => u.name.toLowerCase() === trimmedName.toLowerCase())) {
+      throw new Error(`A university with name "${trimmedName}" already exists.`);
+    }
+
     const newUniv = {
-      id: univData.id || univData.shortName.toLowerCase().replace(/[^a-z0-9]/g, '-'),
-      name: univData.name,
-      shortName: univData.shortName,
-      city: univData.city || 'Campus',
-      state: univData.state || 'State',
-      type: univData.type || 'Public University',
-      status: 'active',
-      courses: univData.courses || []
+      id: candidateId,
+      name: trimmedName,
+      shortName: trimmedShortName,
+      city: (univData.city || '').trim(),
+      state: (univData.state || '').trim(),
+      type: univData.type || 'State Public University',
+      website: (univData.website || '').trim(),
+      logo: univData.logo || null,
+      description: (univData.description || '').trim(),
+      status: univData.status || 'active',
+      courses: Array.isArray(univData.courses) ? univData.courses : [],
+      createdAt: new Date().toISOString()
     };
 
     catalog.universities.push(newUniv);
     this.saveCatalog(catalog);
+
+    try {
+      auditHistoryService.recordEvent({
+        action: 'UNIVERSITY_ADDED',
+        entityType: 'university',
+        entityId: newUniv.id,
+        entityName: newUniv.name,
+        details: `Added new university "${newUniv.name}" (${newUniv.shortName}) to the catalog.`,
+        actor: 'Administrator'
+      });
+    } catch (e) {
+      console.warn('Audit record warning:', e);
+    }
+
     return newUniv;
   },
 
-  updateUniversity(univId, updates) {
+  updateUniversity(univId, updates = {}) {
     const catalog = this.getCatalog();
     const idx = catalog.universities.findIndex((u) => u.id === univId);
-    if (idx !== -1) {
-      catalog.universities[idx] = { ...catalog.universities[idx], ...updates };
-      this.saveCatalog(catalog);
-      return catalog.universities[idx];
+    if (idx === -1) {
+      throw new Error(`University with ID "${univId}" does not exist.`);
     }
-    return null;
+
+    const existing = catalog.universities[idx];
+
+    if (updates.name !== undefined) {
+      const trimmedName = updates.name.trim();
+      if (trimmedName.length < 3) {
+        throw new Error('University name must be at least 3 characters long.');
+      }
+      if (catalog.universities.some((u) => u.id !== univId && u.name.toLowerCase() === trimmedName.toLowerCase())) {
+        throw new Error(`Another university with name "${trimmedName}" already exists.`);
+      }
+    }
+
+    if (updates.shortName !== undefined) {
+      const trimmedShort = updates.shortName.trim().toUpperCase();
+      if (trimmedShort.length < 2) {
+        throw new Error('Short code must be at least 2 characters long.');
+      }
+      if (catalog.universities.some((u) => u.id !== univId && u.shortName.toUpperCase() === trimmedShort)) {
+        throw new Error(`Another university with acronym "${trimmedShort}" already exists.`);
+      }
+    }
+
+    if (updates.website && updates.website.trim()) {
+      const url = updates.website.trim();
+      if (!/^https?:\/\/.+/i.test(url)) {
+        throw new Error('Official website must be a valid URL starting with http:// or https://');
+      }
+    }
+
+    catalog.universities[idx] = {
+      ...existing,
+      name: updates.name !== undefined ? updates.name.trim() : existing.name,
+      shortName: updates.shortName !== undefined ? updates.shortName.trim().toUpperCase() : existing.shortName,
+      city: updates.city !== undefined ? updates.city.trim() : existing.city,
+      state: updates.state !== undefined ? updates.state.trim() : existing.state,
+      type: updates.type !== undefined ? updates.type : existing.type,
+      website: updates.website !== undefined ? updates.website.trim() : existing.website,
+      logo: updates.logo !== undefined ? updates.logo : existing.logo,
+      description: updates.description !== undefined ? updates.description.trim() : existing.description,
+      status: updates.status !== undefined ? updates.status : (existing.status || 'active'),
+      updatedAt: new Date().toISOString()
+    };
+
+    this.saveCatalog(catalog);
+
+    try {
+      auditHistoryService.recordEvent({
+        action: 'UNIVERSITY_UPDATED',
+        entityType: 'university',
+        entityId: univId,
+        entityName: catalog.universities[idx].name,
+        details: `Updated metadata for university "${catalog.universities[idx].name}".`,
+        actor: 'Administrator'
+      });
+    } catch (e) {
+      console.warn('Audit record warning:', e);
+    }
+
+    return catalog.universities[idx];
+  },
+
+  setUniversityStatus(univId, newStatus) {
+    if (!['active', 'inactive', 'archived'].includes(newStatus)) {
+      throw new Error(`Invalid status "${newStatus}". Must be "active", "inactive", or "archived".`);
+    }
+
+    const updated = this.updateUniversity(univId, { status: newStatus });
+
+    try {
+      auditHistoryService.recordEvent({
+        action: newStatus === 'archived' ? 'UNIVERSITY_ARCHIVED' : 'UNIVERSITY_STATUS_CHANGED',
+        entityType: 'university',
+        entityId: univId,
+        entityName: updated.name,
+        details: `Set status of university "${updated.name}" to ${newStatus}.`,
+        actor: 'Administrator'
+      });
+    } catch (e) {
+      console.warn('Audit record warning:', e);
+    }
+
+    return updated;
+  },
+
+  checkUniversityReferences(univId) {
+    const catalog = this.getCatalog();
+    const univ = catalog.universities.find((u) => u.id === univId);
+    if (!univ) return { canDelete: true, totalReferences: 0 };
+
+    const courseCount = Array.isArray(univ.courses) ? univ.courses.length : 0;
+    let regulationCount = 0;
+    if (univ.courses) {
+      univ.courses.forEach((c) => {
+        if (Array.isArray(c.regulations)) regulationCount += c.regulations.length;
+      });
+    }
+
+    let studentProfileCount = 0;
+    let educationRecordCount = 0;
+    let resultCount = 0;
+
+    try {
+      const users = safeGet(STORAGE_KEYS.USERS, []);
+      studentProfileCount += users.filter(
+        (u) => u.universityId === univId || (u.university && u.university.toLowerCase().includes(univ.shortName.toLowerCase()))
+      ).length;
+
+      const student = safeGet(STORAGE_KEYS.STUDENT, null);
+      if (student && student.universityId === univId) studentProfileCount++;
+    } catch {}
+
+    try {
+      const eduRecords = safeGet(STORAGE_KEYS.EDUCATION_RECORDS, []);
+      educationRecordCount += eduRecords.filter((r) => r.universityId === univId).length;
+    } catch {}
+
+    try {
+      const results = safeGet(STORAGE_KEYS.RESULTS, []);
+      resultCount += results.filter((r) => r.universityId === univId).length;
+    } catch {}
+
+    const totalReferences = courseCount + regulationCount + studentProfileCount + educationRecordCount + resultCount;
+
+    const reasons = [];
+    if (courseCount > 0) reasons.push(`${courseCount} configured course${courseCount === 1 ? '' : 's'}`);
+    if (regulationCount > 0) reasons.push(`${regulationCount} regulation${regulationCount === 1 ? '' : 's'}`);
+    if (studentProfileCount > 0) reasons.push(`${studentProfileCount} student profile${studentProfileCount === 1 ? '' : 's'}`);
+    if (educationRecordCount > 0) reasons.push(`${educationRecordCount} education record${educationRecordCount === 1 ? '' : 's'}`);
+    if (resultCount > 0) reasons.push(`${resultCount} semester result${resultCount === 1 ? '' : 's'}`);
+
+    const reason = totalReferences > 0
+      ? `Cannot permanently delete "${univ.name}": It is referenced by ${reasons.join(', ')}. Please Archive this university instead to preserve historical academic integrity.`
+      : null;
+
+    return {
+      canDelete: totalReferences === 0,
+      courseCount,
+      regulationCount,
+      studentProfileCount,
+      educationRecordCount,
+      resultCount,
+      totalReferences,
+      reason,
+      reasons,
+      details: {
+        courses: courseCount,
+        regulations: regulationCount,
+        studentProfiles: studentProfileCount,
+        educationRecords: educationRecordCount,
+        savedResults: resultCount,
+        studentRecords: studentProfileCount + educationRecordCount
+      }
+    };
+  },
+
+  archiveUniversity(univId) {
+    return this.setUniversityStatus(univId, 'archived');
+  },
+
+  deleteUniversity(univId) {
+    const refCheck = this.checkUniversityReferences(univId);
+    if (!refCheck.canDelete) {
+      throw new Error(refCheck.reason);
+    }
+
+    const catalog = this.getCatalog();
+    const idx = catalog.universities.findIndex((u) => u.id === univId);
+    if (idx === -1) {
+      throw new Error(`University with ID "${univId}" does not exist.`);
+    }
+
+    const deleted = catalog.universities.splice(idx, 1)[0];
+    this.saveCatalog(catalog);
+
+    try {
+      auditHistoryService.recordEvent({
+        action: 'UNIVERSITY_DELETED',
+        entityType: 'university',
+        entityId: univId,
+        entityName: deleted.name,
+        details: `Permanently deleted unreferenced university "${deleted.name}".`,
+        actor: 'Administrator'
+      });
+    } catch (e) {
+      console.warn('Audit record warning:', e);
+    }
+
+    return deleted;
   },
 
   addCourse(univId, courseData) {
+    if (!univId) {
+      throw new Error('Parent university ID is required.');
+    }
     const catalog = this.getCatalog();
     const univ = catalog.universities.find((u) => u.id === univId);
-    if (!univ) return null;
+    if (!univ) {
+      throw new Error(`Parent university with ID "${univId}" does not exist.`);
+    }
 
-    const newCourse = {
-      id: courseData.id || courseData.shortName.toLowerCase().replace(/[^a-z0-9]/g, '-'),
-      name: courseData.name,
-      shortName: courseData.shortName,
-      level: courseData.level || 'UG',
-      durationYears: Number(courseData.durationYears) || 4,
-      totalSemesters: Number(courseData.totalSemesters) || 8,
-      totalDegreeCredits: Number(courseData.totalDegreeCredits) || 160,
-      regulations: courseData.regulations || []
-    };
+    if (!courseData || !courseData.name || !courseData.name.trim()) {
+      throw new Error('Course full name is required.');
+    }
+    if (!courseData.shortName || !courseData.shortName.trim()) {
+      throw new Error('Course acronym / short code is required.');
+    }
+
+    const trimmedName = courseData.name.trim();
+    const trimmedShort = courseData.shortName.trim().toUpperCase();
+
+    if (trimmedName.length < 3) {
+      throw new Error('Course full name must be at least 3 characters long.');
+    }
+    if (trimmedShort.length < 1) {
+      throw new Error('Course short code must not be empty.');
+    }
+
+    const semesters = Number(courseData.totalSemesters);
+    if (isNaN(semesters) || semesters < 1 || semesters > 12) {
+      throw new Error('Total semesters must be a valid number between 1 and 12.');
+    }
+
+    const duration = Number(courseData.durationYears);
+    if (isNaN(duration) || duration < 1 || duration > 6) {
+      throw new Error('Course duration must be a valid number between 1 and 6 years.');
+    }
+
+    const credits = Number(courseData.totalDegreeCredits);
+    if (isNaN(credits) || credits <= 0) {
+      throw new Error('Total degree credits must be a positive number greater than 0.');
+    }
 
     if (!univ.courses) univ.courses = [];
+
+    const candidateId = (courseData.id || trimmedShort.toLowerCase()).toLowerCase().replace(/[^a-z0-9]/g, '-');
+
+    if (univ.courses.some((c) => c.id === candidateId)) {
+      throw new Error(`A course with identifier "${candidateId}" already exists under ${univ.shortName}.`);
+    }
+
+    if (univ.courses.some((c) => c.shortName.toUpperCase() === trimmedShort)) {
+      throw new Error(`A course with acronym "${trimmedShort}" already exists under ${univ.shortName}.`);
+    }
+
+    if (univ.courses.some((c) => c.name.toLowerCase() === trimmedName.toLowerCase())) {
+      throw new Error(`A course with name "${trimmedName}" already exists under ${univ.shortName}.`);
+    }
+
+    const newCourse = {
+      id: candidateId,
+      name: trimmedName,
+      shortName: trimmedShort,
+      level: courseData.level || 'UG',
+      durationYears: duration,
+      totalSemesters: semesters,
+      totalDegreeCredits: credits,
+      status: courseData.status || 'active',
+      regulations: Array.isArray(courseData.regulations) ? courseData.regulations : [],
+      createdAt: new Date().toISOString()
+    };
+
     univ.courses.push(newCourse);
     this.saveCatalog(catalog);
+
+    try {
+      auditHistoryService.recordEvent({
+        action: 'COURSE_ADDED',
+        entityType: 'course',
+        entityId: newCourse.id,
+        entityName: newCourse.name,
+        details: `Added new course "${newCourse.name}" (${newCourse.shortName}, ${newCourse.level}) under ${univ.shortName}.`,
+        actor: 'Administrator'
+      });
+    } catch (e) {
+      console.warn('Audit record warning:', e);
+    }
+
     return newCourse;
+  },
+
+  updateCourse(univId, courseId, updates = {}) {
+    if (!univId) throw new Error('Parent university ID is required.');
+    if (!courseId) throw new Error('Course ID is required.');
+
+    const catalog = this.getCatalog();
+    const univ = catalog.universities.find((u) => u.id === univId);
+    if (!univ) throw new Error(`Parent university with ID "${univId}" does not exist.`);
+
+    if (!univ.courses) univ.courses = [];
+    const idx = univ.courses.findIndex((c) => c.id === courseId);
+    if (idx === -1) {
+      throw new Error(`Course with ID "${courseId}" does not exist under ${univ.shortName}.`);
+    }
+
+    const existing = univ.courses[idx];
+
+    if (updates.name !== undefined) {
+      const trimmedName = updates.name.trim();
+      if (trimmedName.length < 3) {
+        throw new Error('Course full name must be at least 3 characters long.');
+      }
+      if (univ.courses.some((c) => c.id !== courseId && c.name.toLowerCase() === trimmedName.toLowerCase())) {
+        throw new Error(`Another course with name "${trimmedName}" already exists under ${univ.shortName}.`);
+      }
+    }
+
+    if (updates.shortName !== undefined) {
+      const trimmedShort = updates.shortName.trim().toUpperCase();
+      if (trimmedShort.length < 1) {
+        throw new Error('Course short code cannot be empty.');
+      }
+      if (univ.courses.some((c) => c.id !== courseId && c.shortName.toUpperCase() === trimmedShort)) {
+        throw new Error(`Another course with acronym "${trimmedShort}" already exists under ${univ.shortName}.`);
+      }
+    }
+
+    if (updates.totalSemesters !== undefined) {
+      const s = Number(updates.totalSemesters);
+      if (isNaN(s) || s < 1 || s > 12) {
+        throw new Error('Total semesters must be between 1 and 12.');
+      }
+    }
+
+    if (updates.durationYears !== undefined) {
+      const d = Number(updates.durationYears);
+      if (isNaN(d) || d < 1 || d > 6) {
+        throw new Error('Duration in years must be between 1 and 6.');
+      }
+    }
+
+    if (updates.totalDegreeCredits !== undefined) {
+      const cr = Number(updates.totalDegreeCredits);
+      if (isNaN(cr) || cr <= 0) {
+        throw new Error('Total degree credits must be a positive number greater than 0.');
+      }
+    }
+
+    univ.courses[idx] = {
+      ...existing,
+      name: updates.name !== undefined ? updates.name.trim() : existing.name,
+      shortName: updates.shortName !== undefined ? updates.shortName.trim().toUpperCase() : existing.shortName,
+      level: updates.level !== undefined ? updates.level : (existing.level || 'UG'),
+      durationYears: updates.durationYears !== undefined ? Number(updates.durationYears) : existing.durationYears,
+      totalSemesters: updates.totalSemesters !== undefined ? Number(updates.totalSemesters) : existing.totalSemesters,
+      totalDegreeCredits: updates.totalDegreeCredits !== undefined ? Number(updates.totalDegreeCredits) : existing.totalDegreeCredits,
+      status: updates.status !== undefined ? updates.status : (existing.status || 'active'),
+      regulations: existing.regulations || [],
+      updatedAt: new Date().toISOString()
+    };
+
+    this.saveCatalog(catalog);
+
+    try {
+      auditHistoryService.recordEvent({
+        action: 'COURSE_UPDATED',
+        entityType: 'course',
+        entityId: courseId,
+        entityName: univ.courses[idx].name,
+        details: `Updated metadata for course "${univ.courses[idx].name}" under ${univ.shortName}.`,
+        actor: 'Administrator'
+      });
+    } catch (e) {
+      console.warn('Audit record warning:', e);
+    }
+
+    return univ.courses[idx];
+  },
+
+  setCourseStatus(univId, courseId, newStatus) {
+    if (!['active', 'inactive', 'archived'].includes(newStatus)) {
+      throw new Error(`Invalid status "${newStatus}". Must be "active", "inactive", or "archived".`);
+    }
+
+    const updated = this.updateCourse(univId, courseId, { status: newStatus });
+
+    try {
+      auditHistoryService.recordEvent({
+        action: newStatus === 'archived' ? 'COURSE_ARCHIVED' : 'COURSE_STATUS_CHANGED',
+        entityType: 'course',
+        entityId: courseId,
+        entityName: updated.name,
+        details: `Set status of course "${updated.name}" to ${newStatus}.`,
+        actor: 'Administrator'
+      });
+    } catch (e) {
+      console.warn('Audit record warning:', e);
+    }
+
+    return updated;
+  },
+
+  checkCourseReferences(univId, courseId) {
+    const catalog = this.getCatalog();
+    const univ = catalog.universities.find((u) => u.id === univId);
+    if (!univ || !univ.courses) return { canDelete: true, totalReferences: 0 };
+
+    const course = univ.courses.find((c) => c.id === courseId);
+    if (!course) return { canDelete: true, totalReferences: 0 };
+
+    const regulationCount = Array.isArray(course.regulations) ? course.regulations.length : 0;
+    let studentProfileCount = 0;
+    let educationRecordCount = 0;
+    let resultCount = 0;
+
+    try {
+      const users = safeGet(STORAGE_KEYS.USERS, []);
+      studentProfileCount += users.filter(
+        (u) =>
+          u.courseId === courseId ||
+          (u.course && u.course.toLowerCase() === course.shortName.toLowerCase())
+      ).length;
+
+      const student = safeGet(STORAGE_KEYS.STUDENT, null);
+      if (
+        student &&
+        (student.courseId === courseId ||
+          (student.course && student.course.toLowerCase() === course.shortName.toLowerCase()))
+      ) {
+        studentProfileCount++;
+      }
+    } catch {}
+
+    try {
+      const eduRecords = safeGet(STORAGE_KEYS.EDUCATION_RECORDS, []);
+      educationRecordCount += eduRecords.filter(
+        (r) =>
+          r.courseId === courseId ||
+          (r.course && r.course.toLowerCase() === course.shortName.toLowerCase())
+      ).length;
+    } catch {}
+
+    try {
+      const results = safeGet(STORAGE_KEYS.RESULTS, []);
+      resultCount += results.filter(
+        (r) =>
+          r.courseId === courseId ||
+          (r.course && r.course.toLowerCase() === course.shortName.toLowerCase())
+      ).length;
+    } catch {}
+
+    const totalReferences = regulationCount + studentProfileCount + educationRecordCount + resultCount;
+
+    const reasons = [];
+    if (regulationCount > 0) reasons.push(`${regulationCount} configured regulation${regulationCount === 1 ? '' : 's'}`);
+    if (studentProfileCount > 0) reasons.push(`${studentProfileCount} student profile${studentProfileCount === 1 ? '' : 's'}`);
+    if (educationRecordCount > 0) reasons.push(`${educationRecordCount} education record${educationRecordCount === 1 ? '' : 's'}`);
+    if (resultCount > 0) reasons.push(`${resultCount} saved semester calculation result${resultCount === 1 ? '' : 's'}`);
+
+    const reason = totalReferences > 0
+      ? `Cannot permanently delete course "${course.name}": It is referenced by ${reasons.join(', ')}. Please Archive this course instead to preserve academic calculation history.`
+      : null;
+
+    return {
+      canDelete: totalReferences === 0,
+      regulationCount,
+      studentProfileCount,
+      educationRecordCount,
+      resultCount,
+      totalReferences,
+      reason,
+      reasons,
+      details: {
+        regulations: regulationCount,
+        studentProfiles: studentProfileCount,
+        educationRecords: educationRecordCount,
+        savedResults: resultCount,
+        studentRecords: studentProfileCount + educationRecordCount
+      }
+    };
+  },
+
+  archiveCourse(univId, courseId) {
+    return this.setCourseStatus(univId, courseId, 'archived');
+  },
+
+  deleteCourse(univId, courseId) {
+    const refCheck = this.checkCourseReferences(univId, courseId);
+    if (!refCheck.canDelete) {
+      throw new Error(refCheck.reason);
+    }
+
+    const catalog = this.getCatalog();
+    const univ = catalog.universities.find((u) => u.id === univId);
+    if (!univ || !univ.courses) {
+      throw new Error(`University with ID "${univId}" does not exist.`);
+    }
+
+    const idx = univ.courses.findIndex((c) => c.id === courseId);
+    if (idx === -1) {
+      throw new Error(`Course with ID "${courseId}" does not exist.`);
+    }
+
+    const deleted = univ.courses.splice(idx, 1)[0];
+    this.saveCatalog(catalog);
+
+    try {
+      auditHistoryService.recordEvent({
+        action: 'COURSE_DELETED',
+        entityType: 'course',
+        entityId: courseId,
+        entityName: deleted.name,
+        details: `Permanently deleted unreferenced course "${deleted.name}" under ${univ.shortName}.`,
+        actor: 'Administrator'
+      });
+    } catch (e) {
+      console.warn('Audit record warning:', e);
+    }
+
+    return deleted;
   },
 
   addRegulation(univId, courseId, regData) {
@@ -1276,9 +2108,1414 @@ export const academicCatalogService = {
     return true;
   },
 
+  getSubject(univId, courseId, regId, semesterNumber, subjectCode) {
+    const subjects = this.getSemesterSubjects(univId, courseId, regId, semesterNumber);
+    return subjects.find((s) => s.code.toUpperCase() === String(subjectCode).toUpperCase()) || null;
+  },
+
+  getSemesterTotalCredits(univId, courseId, regId, semesterNumber) {
+    const subjects = this.getSemesterSubjects(univId, courseId, regId, semesterNumber);
+    return subjects
+      .filter((s) => s.status !== 'archived')
+      .reduce((sum, s) => sum + (Number(s.defaultCredits !== undefined ? s.defaultCredits : s.credits) || 0), 0);
+  },
+
+  addSubject(univId, courseId, regId, semesterNumber, subjectData) {
+    if (!subjectData || typeof subjectData !== 'object') {
+      throw new Error('Subject details are required.');
+    }
+
+    const code = (subjectData.code || '').trim().toUpperCase();
+    const name = (subjectData.name || '').trim();
+
+    if (!code || code.length < 2) {
+      throw new Error('Subject code is required and must be at least 2 characters.');
+    }
+    if (!name || name.length < 2) {
+      throw new Error('Subject title / name is required and must be at least 2 characters.');
+    }
+
+    const rawCredits = subjectData.defaultCredits !== undefined ? subjectData.defaultCredits : subjectData.credits;
+    const credits = Number(rawCredits !== undefined && rawCredits !== '' ? rawCredits : 4);
+    if (isNaN(credits) || credits < 0 || credits > 30) {
+      throw new Error('Credits must be a valid non-negative number between 0 and 30.');
+    }
+
+    let maxMarks;
+    let passMarks;
+    if (subjectData.maxMarks !== undefined && subjectData.maxMarks !== null && subjectData.maxMarks !== '') {
+      maxMarks = Number(subjectData.maxMarks);
+      if (isNaN(maxMarks) || maxMarks <= 0) {
+        throw new Error('Maximum marks must be a positive number.');
+      }
+      if (subjectData.passMarks !== undefined && subjectData.passMarks !== null && subjectData.passMarks !== '') {
+        passMarks = Number(subjectData.passMarks);
+        if (isNaN(passMarks) || passMarks < 0) {
+          throw new Error('Passing marks must be a non-negative number.');
+        }
+        if (passMarks > maxMarks) {
+          throw new Error(`Passing marks (${passMarks}) cannot exceed maximum marks (${maxMarks}).`);
+        }
+      }
+    }
+
+    const catalog = this.getCatalog();
+    const univ = catalog.universities.find((u) => u.id === univId);
+    if (!univ) throw new Error(`University with ID "${univId}" does not exist.`);
+
+    const course = univ.courses?.find((c) => c.id === courseId);
+    if (!course) throw new Error(`Course with ID "${courseId}" does not exist under ${univ.shortName}.`);
+
+    const reg = course.regulations?.find((r) => r.id === regId);
+    if (!reg) throw new Error(`Regulation with ID "${regId}" does not exist under ${course.shortName}.`);
+
+    const semNum = Number(semesterNumber);
+    if (!semNum || semNum < 1 || semNum > (course.totalSemesters || 12)) {
+      throw new Error(`Invalid semester number: ${semesterNumber}. Must be between 1 and ${course.totalSemesters || 12}.`);
+    }
+
+    if (!reg.semesters) reg.semesters = {};
+    if (!Array.isArray(reg.semesters[semNum])) {
+      reg.semesters[semNum] = [];
+    }
+
+    const existingIndex = reg.semesters[semNum].findIndex(
+      (s) => s.code.toUpperCase() === code
+    );
+    if (existingIndex !== -1) {
+      throw new Error(`Subject with code "${code}" already exists in Semester ${semNum} of regulation "${reg.code || reg.name}".`);
+    }
+
+    const newSubject = {
+      code,
+      name,
+      defaultCredits: credits,
+      type: subjectData.type || 'Theory',
+      ...(maxMarks !== undefined && { maxMarks }),
+      ...(passMarks !== undefined && { passMarks }),
+      status: subjectData.status || 'active',
+      createdAt: new Date().toISOString()
+    };
+
+    reg.semesters[semNum].push(newSubject);
+    this.saveCatalog(catalog);
+
+    try {
+      auditHistoryService.recordEvent({
+        action: 'SUBJECT_ADDED',
+        entityType: 'subject',
+        entityId: newSubject.code,
+        entityName: newSubject.name,
+        semesterNumber: semNum,
+        semesterLabel: `Semester ${semNum}`,
+        credits: newSubject.defaultCredits,
+        details: `Added subject "${newSubject.name}" (${newSubject.code}) with ${newSubject.defaultCredits} credits in ${univ.shortName} • ${course.shortName} • Sem ${semNum}.`,
+        actor: 'Administrator'
+      });
+    } catch (e) {
+      console.warn('Audit record warning:', e);
+    }
+
+    return newSubject;
+  },
+
+  updateSubject(univId, courseId, regId, semesterNumber, subjectCode, updates) {
+    if (!updates || typeof updates !== 'object') {
+      throw new Error('Update payload is required.');
+    }
+
+    const catalog = this.getCatalog();
+    const univ = catalog.universities.find((u) => u.id === univId);
+    if (!univ) throw new Error(`University with ID "${univId}" does not exist.`);
+
+    const course = univ.courses?.find((c) => c.id === courseId);
+    if (!course) throw new Error(`Course with ID "${courseId}" does not exist under ${univ.shortName}.`);
+
+    const reg = course.regulations?.find((r) => r.id === regId);
+    if (!reg) throw new Error(`Regulation with ID "${regId}" does not exist under ${course.shortName}.`);
+
+    const semNum = Number(semesterNumber);
+    if (!reg.semesters || !Array.isArray(reg.semesters[semNum])) {
+      throw new Error(`No subjects configured for Semester ${semNum}.`);
+    }
+
+    const subIdx = reg.semesters[semNum].findIndex(
+      (s) => s.code.toUpperCase() === String(subjectCode).toUpperCase()
+    );
+    if (subIdx === -1) {
+      throw new Error(`Subject with code "${subjectCode}" was not found in Semester ${semNum}.`);
+    }
+
+    const existing = reg.semesters[semNum][subIdx];
+
+    // Validate new code if changed
+    let updatedCode = existing.code;
+    if (updates.code) {
+      const trimmedCode = updates.code.trim().toUpperCase();
+      if (trimmedCode.length < 2) {
+        throw new Error('Subject code must be at least 2 characters.');
+      }
+      if (trimmedCode !== existing.code.toUpperCase()) {
+        const conflict = reg.semesters[semNum].some(
+          (s, idx) => idx !== subIdx && s.code.toUpperCase() === trimmedCode
+        );
+        if (conflict) {
+          throw new Error(`Subject code "${trimmedCode}" is already in use by another subject in Semester ${semNum}.`);
+        }
+        updatedCode = trimmedCode;
+      }
+    }
+
+    // Validate name if provided
+    let updatedName = existing.name;
+    if (updates.name !== undefined) {
+      const trimmedName = updates.name.trim();
+      if (trimmedName.length < 2) {
+        throw new Error('Subject name must be at least 2 characters.');
+      }
+      updatedName = trimmedName;
+    }
+
+    // Validate credits if provided
+    let updatedCredits = existing.defaultCredits !== undefined ? existing.defaultCredits : (existing.credits || 4);
+    const candidateCredits = updates.defaultCredits !== undefined ? updates.defaultCredits : updates.credits;
+    if (candidateCredits !== undefined && candidateCredits !== '') {
+      const numCredits = Number(candidateCredits);
+      if (isNaN(numCredits) || numCredits < 0 || numCredits > 30) {
+        throw new Error('Credits must be a valid non-negative number between 0 and 30.');
+      }
+      updatedCredits = numCredits;
+    }
+
+    // Validate maxMarks & passMarks
+    let updatedMaxMarks = existing.maxMarks;
+    let updatedPassMarks = existing.passMarks;
+
+    if (updates.maxMarks !== undefined) {
+      if (updates.maxMarks === '' || updates.maxMarks === null) {
+        updatedMaxMarks = undefined;
+      } else {
+        const mm = Number(updates.maxMarks);
+        if (isNaN(mm) || mm <= 0) {
+          throw new Error('Maximum marks must be a positive number.');
+        }
+        updatedMaxMarks = mm;
+      }
+    }
+
+    if (updates.passMarks !== undefined) {
+      if (updates.passMarks === '' || updates.passMarks === null) {
+        updatedPassMarks = undefined;
+      } else {
+        const pm = Number(updates.passMarks);
+        if (isNaN(pm) || pm < 0) {
+          throw new Error('Passing marks must be a non-negative number.');
+        }
+        updatedPassMarks = pm;
+      }
+    }
+
+    if (updatedMaxMarks !== undefined && updatedPassMarks !== undefined) {
+      if (updatedPassMarks > updatedMaxMarks) {
+        throw new Error(`Passing marks (${updatedPassMarks}) cannot exceed maximum marks (${updatedMaxMarks}).`);
+      }
+    }
+
+    const updatedSubject = {
+      ...existing,
+      code: updatedCode,
+      name: updatedName,
+      defaultCredits: updatedCredits,
+      type: updates.type || existing.type || 'Theory',
+      status: updates.status || existing.status || 'active',
+      updatedAt: new Date().toISOString()
+    };
+
+    if (updatedMaxMarks !== undefined) updatedSubject.maxMarks = updatedMaxMarks;
+    else delete updatedSubject.maxMarks;
+
+    if (updatedPassMarks !== undefined) updatedSubject.passMarks = updatedPassMarks;
+    else delete updatedSubject.passMarks;
+
+    reg.semesters[semNum][subIdx] = updatedSubject;
+    this.saveCatalog(catalog);
+
+    try {
+      auditHistoryService.recordEvent({
+        action: 'SUBJECT_UPDATED',
+        entityType: 'subject',
+        entityId: updatedSubject.code,
+        entityName: updatedSubject.name,
+        semesterNumber: semNum,
+        semesterLabel: `Semester ${semNum}`,
+        credits: updatedSubject.defaultCredits,
+        details: `Updated subject "${updatedSubject.name}" (${updatedSubject.code}) in ${univ.shortName} • ${course.shortName} • Sem ${semNum}.`,
+        actor: 'Administrator'
+      });
+    } catch (e) {
+      console.warn('Audit record warning:', e);
+    }
+
+    return updatedSubject;
+  },
+
+  setSubjectStatus(univId, courseId, regId, semesterNumber, subjectCode, status) {
+    if (!['active', 'inactive', 'archived'].includes(status)) {
+      throw new Error(`Invalid status: "${status}". Must be active, inactive, or archived.`);
+    }
+    return this.updateSubject(univId, courseId, regId, semesterNumber, subjectCode, { status });
+  },
+
+  checkSubjectReferences(univId, courseId, regId, semesterNumber, subjectCode) {
+    const codeUpper = String(subjectCode).trim().toUpperCase();
+
+    // 1. Saved student semester results
+    let resultCount = 0;
+    try {
+      const allResults = safeGet(STORAGE_KEYS.RESULTS, []);
+      if (Array.isArray(allResults)) {
+        resultCount = allResults.filter(
+          (r) =>
+            Array.isArray(r.subjects) &&
+            r.subjects.some((s) => (s.code || '').trim().toUpperCase() === codeUpper)
+        ).length;
+      }
+      const savedResults = safeGet(STORAGE_KEYS.SAVED_RESULTS, []);
+      if (Array.isArray(savedResults)) {
+        const extra = savedResults.filter(
+          (r) =>
+            Array.isArray(r.subjects) &&
+            r.subjects.some((s) => (s.code || '').trim().toUpperCase() === codeUpper) &&
+            !allResults.some((ar) => ar.id === r.id)
+        ).length;
+        resultCount += extra;
+      }
+    } catch {}
+
+    // 2. Backlog tracker records
+    let backlogCount = 0;
+    try {
+      const allBacklogs = safeGet(STORAGE_KEYS.BACKLOGS, []);
+      if (Array.isArray(allBacklogs)) {
+        backlogCount = allBacklogs.filter(
+          (b) =>
+            (b.subjectCode && b.subjectCode.trim().toUpperCase() === codeUpper) ||
+            (b.code && b.code.trim().toUpperCase() === codeUpper)
+        ).length;
+      }
+    } catch {}
+
+    const totalReferences = resultCount + backlogCount;
+    const reasons = [];
+    if (resultCount > 0) reasons.push(`${resultCount} saved student semester result snapshot${resultCount === 1 ? '' : 's'}`);
+    if (backlogCount > 0) reasons.push(`${backlogCount} student backlog record${backlogCount === 1 ? '' : 's'}`);
+
+    const reason = totalReferences > 0
+      ? `Cannot permanently delete subject "${subjectCode}": It is referenced by ${reasons.join(', ')}. Please Archive this subject instead to preserve student academic transcripts and grade history.`
+      : null;
+
+    return {
+      canDelete: totalReferences === 0,
+      resultCount,
+      backlogCount,
+      totalReferences,
+      reason,
+      reasons,
+      details: {
+        savedResults: resultCount,
+        backlogs: backlogCount
+      }
+    };
+  },
+
+  archiveSubject(univId, courseId, regId, semesterNumber, subjectCode) {
+    const updated = this.setSubjectStatus(univId, courseId, regId, semesterNumber, subjectCode, 'archived');
+    try {
+      auditHistoryService.recordEvent({
+        action: 'SUBJECT_ARCHIVED',
+        entityType: 'subject',
+        entityId: updated.code,
+        entityName: updated.name,
+        semesterNumber: Number(semesterNumber),
+        semesterLabel: `Semester ${semesterNumber}`,
+        details: `Archived subject "${updated.name}" (${updated.code}). Historical references and transcripts remain fully intact.`,
+        actor: 'Administrator'
+      });
+    } catch (e) {
+      console.warn('Audit record warning:', e);
+    }
+    return updated;
+  },
+
+  deleteSubject(univId, courseId, regId, semesterNumber, subjectCode) {
+    const refCheck = this.checkSubjectReferences(univId, courseId, regId, semesterNumber, subjectCode);
+    if (!refCheck.canDelete) {
+      throw new Error(refCheck.reason);
+    }
+
+    const catalog = this.getCatalog();
+    const univ = catalog.universities.find((u) => u.id === univId);
+    if (!univ) throw new Error(`University with ID "${univId}" does not exist.`);
+
+    const course = univ.courses?.find((c) => c.id === courseId);
+    if (!course) throw new Error(`Course with ID "${courseId}" does not exist.`);
+
+    const reg = course.regulations?.find((r) => r.id === regId);
+    if (!reg) throw new Error(`Regulation with ID "${regId}" does not exist.`);
+
+    const semNum = Number(semesterNumber);
+    if (!reg.semesters || !Array.isArray(reg.semesters[semNum])) {
+      throw new Error(`No subjects configured for Semester ${semNum}.`);
+    }
+
+    const subIdx = reg.semesters[semNum].findIndex(
+      (s) => s.code.toUpperCase() === String(subjectCode).toUpperCase()
+    );
+    if (subIdx === -1) {
+      throw new Error(`Subject with code "${subjectCode}" was not found in Semester ${semNum}.`);
+    }
+
+    const deleted = reg.semesters[semNum].splice(subIdx, 1)[0];
+    this.saveCatalog(catalog);
+
+    try {
+      auditHistoryService.recordEvent({
+        action: 'SUBJECT_DELETED',
+        entityType: 'subject',
+        entityId: deleted.code,
+        entityName: deleted.name,
+        semesterNumber: semNum,
+        semesterLabel: `Semester ${semNum}`,
+        details: `Permanently deleted unreferenced subject "${deleted.name}" (${deleted.code}) from ${univ.shortName} • ${course.shortName} • Sem ${semNum}.`,
+        actor: 'Administrator'
+      });
+    } catch (e) {
+      console.warn('Audit record warning:', e);
+    }
+
+    return deleted;
+  },
+
+  // ================= GRADING RULES & SCALES WORKFLOWS ================= //
+
+  validateGradeScale(grades, options = { checkCoverage: false }) {
+    const errors = [];
+    const warnings = [];
+
+    if (!Array.isArray(grades) || grades.length === 0) {
+      errors.push('Grading scale must contain at least one grade tier.');
+      return { isValid: false, errors, warnings };
+    }
+
+    const seenSymbols = new Set();
+    const parsedGrades = [];
+
+    for (let i = 0; i < grades.length; i++) {
+      const g = grades[i];
+      const symbol = String(g.grade || '').trim().toUpperCase();
+
+      if (!symbol) {
+        errors.push(`Grade entry at row ${i + 1} is missing a grade letter/symbol.`);
+        continue;
+      }
+
+      if (seenSymbols.has(symbol)) {
+        errors.push(`Duplicate grade symbol "${symbol}" found. Grade symbols must be unique within a scale.`);
+      }
+      seenSymbols.add(symbol);
+
+      const points = Number(g.points);
+      if (isNaN(points) || points < 0 || points > 100) {
+        errors.push(`Grade "${symbol}" has invalid grade points (${g.points}). Must be a finite number between 0 and 100.`);
+      }
+
+      const minPercentage = Number(g.minPercentage);
+      const maxPercentage = Number(g.maxPercentage);
+
+      if (isNaN(minPercentage) || minPercentage < 0 || minPercentage > 100) {
+        errors.push(`Grade "${symbol}" has invalid minimum percentage (${g.minPercentage}). Must be between 0 and 100.`);
+      }
+
+      if (isNaN(maxPercentage) || maxPercentage < 0 || maxPercentage > 100) {
+        errors.push(`Grade "${symbol}" has invalid maximum percentage (${g.maxPercentage}). Must be between 0 and 100.`);
+      }
+
+      if (!isNaN(minPercentage) && !isNaN(maxPercentage)) {
+        if (minPercentage > maxPercentage) {
+          errors.push(`For grade "${symbol}", minimum marks (${minPercentage}%) cannot exceed maximum marks (${maxPercentage}%).`);
+        }
+      }
+
+      parsedGrades.push({
+        ...g,
+        symbol,
+        points,
+        minPercentage,
+        maxPercentage,
+        index: i
+      });
+    }
+
+    // Check for overlapping marks ranges
+    for (let i = 0; i < parsedGrades.length; i++) {
+      for (let j = i + 1; j < parsedGrades.length; j++) {
+        const a = parsedGrades[i];
+        const b = parsedGrades[j];
+        if (isNaN(a.minPercentage) || isNaN(a.maxPercentage) || isNaN(b.minPercentage) || isNaN(b.maxPercentage)) continue;
+        if (a.minPercentage > a.maxPercentage || b.minPercentage > b.maxPercentage) continue;
+
+        // Two ranges [minA, maxA] and [minB, maxB] strictly overlap if:
+        // max(minA, minB) < min(maxA, maxB)
+        const overlapStart = Math.max(a.minPercentage, b.minPercentage);
+        const overlapEnd = Math.min(a.maxPercentage, b.maxPercentage);
+
+        if (overlapStart < overlapEnd) {
+          errors.push(
+            `Marks range overlap detected between "${a.symbol}" (${a.minPercentage}%-${a.maxPercentage}%) and "${b.symbol}" (${b.minPercentage}%-${b.maxPercentage}%).`
+          );
+        }
+      }
+    }
+
+    // Check for gaps / incomplete coverage if requested
+    if (options.checkCoverage && errors.length === 0 && parsedGrades.length > 0) {
+      const sortedByMin = [...parsedGrades].sort((a, b) => a.minPercentage - b.minPercentage);
+
+      // Check lower bound (starts at 0)
+      if (sortedByMin[0].minPercentage > 0) {
+        warnings.push(`Scale does not cover marks from 0% to ${sortedByMin[0].minPercentage}%.`);
+      }
+
+      // Check upper bound (ends at 100)
+      const lastTier = sortedByMin[sortedByMin.length - 1];
+      if (lastTier.maxPercentage < 100) {
+        warnings.push(`Scale does not cover marks from ${lastTier.maxPercentage}% to 100%.`);
+      }
+
+      // Check interior gaps
+      for (let k = 0; k < sortedByMin.length - 1; k++) {
+        const current = sortedByMin[k];
+        const next = sortedByMin[k + 1];
+        const gap = next.minPercentage - current.maxPercentage;
+        if (gap > 0.05) {
+          warnings.push(
+            `Gap detected between "${current.symbol}" (max ${current.maxPercentage}%) and "${next.symbol}" (min ${next.minPercentage}%).`
+          );
+        }
+      }
+    }
+
+    return {
+      isValid: errors.length === 0,
+      errors,
+      warnings
+    };
+  },
+
+  getGradingScales() {
+    const catalog = this.getCatalog();
+    return Array.isArray(catalog.gradingScales) ? catalog.gradingScales : [];
+  },
+
+  getGradingScale(scaleId) {
+    const scales = this.getGradingScales();
+    const idClean = String(scaleId || '').trim().toLowerCase();
+    return scales.find((s) => s.id.toLowerCase() === idClean) || null;
+  },
+
+  addGradingScale(scaleData) {
+    if (!scaleData || typeof scaleData !== 'object') {
+      throw new Error('Grading scale data is required.');
+    }
+
+    const name = (scaleData.name || '').trim();
+    if (!name || name.length < 3) {
+      throw new Error('Grading scale name is required and must be at least 3 characters.');
+    }
+
+    const rawId = (scaleData.id || name).trim().toLowerCase().replace(/[^a-z0-9_-]/g, '-');
+    if (!rawId || rawId.length < 2) {
+      throw new Error('Grading scale ID must be at least 2 characters.');
+    }
+
+    const catalog = this.getCatalog();
+    if (!Array.isArray(catalog.gradingScales)) {
+      catalog.gradingScales = [];
+    }
+
+    if (catalog.gradingScales.some((s) => s.id.toLowerCase() === rawId.toLowerCase())) {
+      throw new Error(`A grading scale with identifier "${rawId}" already exists.`);
+    }
+
+    const grades = Array.isArray(scaleData.grades) && scaleData.grades.length > 0
+      ? scaleData.grades
+      : [
+          { grade: 'O', points: 10, minPercentage: 85, maxPercentage: 100, desc: 'Outstanding', isPass: true },
+          { grade: 'A+', points: 9, minPercentage: 75, maxPercentage: 84.99, desc: 'Excellent', isPass: true },
+          { grade: 'A', points: 8, minPercentage: 65, maxPercentage: 74.99, desc: 'Very Good', isPass: true },
+          { grade: 'B+', points: 7, minPercentage: 55, maxPercentage: 64.99, desc: 'Good', isPass: true },
+          { grade: 'B', points: 6, minPercentage: 50, maxPercentage: 54.99, desc: 'Above Average', isPass: true },
+          { grade: 'C', points: 5, minPercentage: 40, maxPercentage: 49.99, desc: 'Pass', isPass: true },
+          { grade: 'F', points: 0, minPercentage: 0, maxPercentage: 39.99, desc: 'Fail', isPass: false }
+        ];
+
+    const validation = this.validateGradeScale(grades, { checkCoverage: false });
+    if (!validation.isValid) {
+      throw new Error(`Invalid grading scale: ${validation.errors.join(' ')}`);
+    }
+
+    const newScale = {
+      id: rawId,
+      name,
+      system: scaleData.system || '10-point',
+      description: (scaleData.description || '').trim(),
+      status: scaleData.status || 'active',
+      isOfficial: Boolean(scaleData.isOfficial),
+      grades: grades.map((g) => ({
+        grade: String(g.grade || '').trim().toUpperCase(),
+        points: Number(g.points) || 0,
+        minPercentage: Number(g.minPercentage) || 0,
+        maxPercentage: Number(g.maxPercentage) || 100,
+        desc: String(g.desc || '').trim(),
+        isPass: g.isPass !== undefined ? Boolean(g.isPass) : Number(g.points) > 0
+      })),
+      createdAt: new Date().toISOString()
+    };
+
+    catalog.gradingScales.push(newScale);
+    this.saveCatalog(catalog);
+
+    try {
+      auditHistoryService.recordEvent({
+        action: 'GRADING_SCALE_ADDED',
+        entityType: 'grading_scale',
+        entityId: newScale.id,
+        entityName: newScale.name,
+        details: `Created new grading scale "${newScale.name}" (${newScale.id}) with ${newScale.grades.length} grade tiers.`,
+        actor: 'Administrator'
+      });
+    } catch (e) {
+      console.warn('Audit record warning:', e);
+    }
+
+    return newScale;
+  },
+
+  updateGradingScale(scaleId, updates) {
+    if (!updates || typeof updates !== 'object') {
+      throw new Error('Update payload is required.');
+    }
+
+    const catalog = this.getCatalog();
+    if (!Array.isArray(catalog.gradingScales)) {
+      catalog.gradingScales = [];
+    }
+
+    const idx = catalog.gradingScales.findIndex((s) => s.id.toLowerCase() === String(scaleId).toLowerCase());
+    if (idx === -1) {
+      throw new Error(`Grading scale with ID "${scaleId}" does not exist.`);
+    }
+
+    const existing = catalog.gradingScales[idx];
+
+    let updatedName = existing.name;
+    if (updates.name !== undefined) {
+      const trimmed = updates.name.trim();
+      if (!trimmed || trimmed.length < 3) {
+        throw new Error('Grading scale name must be at least 3 characters.');
+      }
+      updatedName = trimmed;
+    }
+
+    let updatedGrades = existing.grades;
+    if (updates.grades !== undefined) {
+      const validation = this.validateGradeScale(updates.grades, { checkCoverage: false });
+      if (!validation.isValid) {
+        throw new Error(`Invalid grade entries: ${validation.errors.join(' ')}`);
+      }
+      updatedGrades = updates.grades.map((g) => ({
+        grade: String(g.grade || '').trim().toUpperCase(),
+        points: Number(g.points) || 0,
+        minPercentage: Number(g.minPercentage) || 0,
+        maxPercentage: Number(g.maxPercentage) || 100,
+        desc: String(g.desc || '').trim(),
+        isPass: g.isPass !== undefined ? Boolean(g.isPass) : Number(g.points) > 0
+      }));
+    }
+
+    const updatedScale = {
+      ...existing,
+      name: updatedName,
+      system: updates.system || existing.system || '10-point',
+      description: updates.description !== undefined ? updates.description.trim() : existing.description,
+      status: updates.status || existing.status || 'active',
+      isOfficial: updates.isOfficial !== undefined ? Boolean(updates.isOfficial) : existing.isOfficial,
+      grades: updatedGrades,
+      updatedAt: new Date().toISOString()
+    };
+
+    catalog.gradingScales[idx] = updatedScale;
+    this.saveCatalog(catalog);
+
+    try {
+      auditHistoryService.recordEvent({
+        action: 'GRADING_SCALE_UPDATED',
+        entityType: 'grading_scale',
+        entityId: updatedScale.id,
+        entityName: updatedScale.name,
+        details: `Updated grading scale "${updatedScale.name}" (${updatedScale.id}).`,
+        actor: 'Administrator'
+      });
+    } catch (e) {
+      console.warn('Audit record warning:', e);
+    }
+
+    return updatedScale;
+  },
+
+  setGradingScaleStatus(scaleId, status) {
+    if (!['active', 'archived'].includes(status)) {
+      throw new Error(`Invalid status "${status}". Must be active or archived.`);
+    }
+    return this.updateGradingScale(scaleId, { status });
+  },
+
+  addGradeEntry(scaleId, entryData) {
+    if (!entryData || typeof entryData !== 'object') {
+      throw new Error('Grade entry details are required.');
+    }
+
+    const scale = this.getGradingScale(scaleId);
+    if (!scale) {
+      throw new Error(`Grading scale with ID "${scaleId}" does not exist.`);
+    }
+
+    const symbol = String(entryData.grade || '').trim().toUpperCase();
+    if (!symbol) {
+      throw new Error('Grade symbol is required (e.g. "A+").');
+    }
+
+    const proposedGrades = [
+      ...scale.grades,
+      {
+        grade: symbol,
+        points: Number(entryData.points) || 0,
+        minPercentage: Number(entryData.minPercentage) || 0,
+        maxPercentage: Number(entryData.maxPercentage) || 100,
+        desc: String(entryData.desc || '').trim(),
+        isPass: entryData.isPass !== undefined ? Boolean(entryData.isPass) : Number(entryData.points) > 0
+      }
+    ];
+
+    const validation = this.validateGradeScale(proposedGrades, { checkCoverage: false });
+    if (!validation.isValid) {
+      throw new Error(validation.errors[0]);
+    }
+
+    return this.updateGradingScale(scaleId, { grades: proposedGrades });
+  },
+
+  updateGradeEntry(scaleId, gradeSymbol, updates) {
+    const scale = this.getGradingScale(scaleId);
+    if (!scale) {
+      throw new Error(`Grading scale with ID "${scaleId}" does not exist.`);
+    }
+
+    const symbolClean = String(gradeSymbol || '').trim().toUpperCase();
+    const entryIdx = scale.grades.findIndex((g) => g.grade.toUpperCase() === symbolClean);
+    if (entryIdx === -1) {
+      throw new Error(`Grade symbol "${gradeSymbol}" not found in scale "${scale.name}".`);
+    }
+
+    const proposedGrades = scale.grades.map((g, idx) => {
+      if (idx !== entryIdx) return g;
+      return {
+        ...g,
+        grade: updates.grade ? String(updates.grade).trim().toUpperCase() : g.grade,
+        points: updates.points !== undefined ? Number(updates.points) : g.points,
+        minPercentage: updates.minPercentage !== undefined ? Number(updates.minPercentage) : g.minPercentage,
+        maxPercentage: updates.maxPercentage !== undefined ? Number(updates.maxPercentage) : g.maxPercentage,
+        desc: updates.desc !== undefined ? String(updates.desc).trim() : g.desc,
+        isPass: updates.isPass !== undefined ? Boolean(updates.isPass) : g.isPass
+      };
+    });
+
+    const validation = this.validateGradeScale(proposedGrades, { checkCoverage: false });
+    if (!validation.isValid) {
+      throw new Error(validation.errors[0]);
+    }
+
+    return this.updateGradingScale(scaleId, { grades: proposedGrades });
+  },
+
+  deleteGradeEntry(scaleId, gradeSymbol) {
+    const scale = this.getGradingScale(scaleId);
+    if (!scale) {
+      throw new Error(`Grading scale with ID "${scaleId}" does not exist.`);
+    }
+
+    if (scale.grades.length <= 1) {
+      throw new Error('Cannot delete the last remaining grade tier. A scale must have at least one grade.');
+    }
+
+    const symbolClean = String(gradeSymbol || '').trim().toUpperCase();
+    const filteredGrades = scale.grades.filter((g) => g.grade.toUpperCase() !== symbolClean);
+
+    if (filteredGrades.length === scale.grades.length) {
+      throw new Error(`Grade symbol "${gradeSymbol}" not found in scale "${scale.name}".`);
+    }
+
+    return this.updateGradingScale(scaleId, { grades: filteredGrades });
+  },
+
+  checkGradingScaleReferences(scaleId) {
+    const idClean = String(scaleId || '').trim().toLowerCase();
+    const catalog = this.getCatalog();
+    const scale = this.getGradingScale(scaleId);
+
+    const referencingRegulations = [];
+
+    (catalog.universities || []).forEach((u) => {
+      (u.courses || []).forEach((c) => {
+        (c.regulations || []).forEach((r) => {
+          if (
+            (r.gradingScaleId && r.gradingScaleId.toLowerCase() === idClean) ||
+            (!r.gradingScaleId && idClean === 'ugc-10-point')
+          ) {
+            referencingRegulations.push({
+              universityId: u.id,
+              universityShortName: u.shortName,
+              courseId: c.id,
+              courseShortName: c.shortName,
+              regulationId: r.id,
+              regulationCode: r.code,
+              ruleVersion: r.ruleVersion
+            });
+          }
+        });
+      });
+    });
+
+    // Check saved student results
+    let resultCount = 0;
+    try {
+      const allResults = safeGet(STORAGE_KEYS.RESULTS, []);
+      if (Array.isArray(allResults)) {
+        resultCount = allResults.filter((res) => {
+          return referencingRegulations.some((ref) => ref.regulationId === res.regulationId);
+        }).length;
+      }
+    } catch {}
+
+    const regulationCount = referencingRegulations.length;
+    const totalReferences = regulationCount + resultCount;
+
+    const reasons = [];
+    if (regulationCount > 0) {
+      reasons.push(`${regulationCount} configured regulation${regulationCount === 1 ? '' : 's'}`);
+    }
+    if (resultCount > 0) {
+      reasons.push(`${resultCount} saved student semester result snapshot${resultCount === 1 ? '' : 's'}`);
+    }
+
+    const scaleName = scale ? scale.name : scaleId;
+    const reason = totalReferences > 0
+      ? `Cannot permanently delete grading scale "${scaleName}": It is referenced by ${reasons.join(', ')}. Please Archive this scale instead to protect historical calculation accuracy.`
+      : null;
+
+    return {
+      canDelete: totalReferences === 0,
+      hasReferences: totalReferences > 0,
+      regulationCount,
+      resultCount,
+      totalReferences,
+      regulations: referencingRegulations,
+      referencingRegulations,
+      reasons,
+      reason
+    };
+  },
+
+  archiveGradingScale(scaleId) {
+    const updated = this.setGradingScaleStatus(scaleId, 'archived');
+    try {
+      auditHistoryService.recordEvent({
+        action: 'GRADING_SCALE_ARCHIVED',
+        entityType: 'grading_scale',
+        entityId: updated.id,
+        entityName: updated.name,
+        details: `Archived grading scale "${updated.name}" (${updated.id}). Existing regulations and historical transcripts remain intact.`,
+        actor: 'Administrator'
+      });
+    } catch (e) {
+      console.warn('Audit record warning:', e);
+    }
+    return updated;
+  },
+
+  deleteGradingScale(scaleId) {
+    const refCheck = this.checkGradingScaleReferences(scaleId);
+    if (!refCheck.canDelete) {
+      throw new Error(refCheck.reason);
+    }
+
+    const catalog = this.getCatalog();
+    const idClean = String(scaleId || '').trim().toLowerCase();
+    const idx = (catalog.gradingScales || []).findIndex((s) => s.id.toLowerCase() === idClean);
+    if (idx === -1) {
+      throw new Error(`Grading scale with ID "${scaleId}" does not exist.`);
+    }
+
+    const deleted = catalog.gradingScales.splice(idx, 1)[0];
+    this.saveCatalog(catalog);
+
+    try {
+      auditHistoryService.recordEvent({
+        action: 'GRADING_SCALE_DELETED',
+        entityType: 'grading_scale',
+        entityId: deleted.id,
+        entityName: deleted.name,
+        details: `Permanently deleted unreferenced grading scale "${deleted.name}" (${deleted.id}).`,
+        actor: 'Administrator'
+      });
+    } catch (e) {
+      console.warn('Audit record warning:', e);
+    }
+
+    return deleted;
+  },
+
+  assignGradingScaleToRegulation(univId, courseId, regId, scaleId, options = {}) {
+    const scale = this.getGradingScale(scaleId);
+    if (!scale) {
+      throw new Error(`Grading scale with ID "${scaleId}" does not exist.`);
+    }
+
+    if (options.publishNewVersion) {
+      return this.publishNewRegulationVersion(univId, courseId, regId, {
+        gradingScaleId: scale.id,
+        gradingSystem: scale.system || '10-point',
+        gradeScale: [...scale.grades],
+        ruleVersion: options.ruleVersion || `${scale.id.toUpperCase()}_VERSIONED`
+      });
+    }
+
+    const catalog = this.getCatalog();
+    const univ = catalog.universities.find((u) => u.id === univId);
+    if (!univ) throw new Error(`University with ID "${univId}" does not exist.`);
+
+    const course = univ.courses?.find((c) => c.id === courseId);
+    if (!course) throw new Error(`Course with ID "${courseId}" does not exist.`);
+
+    const reg = course.regulations?.find((r) => r.id === regId);
+    if (!reg) throw new Error(`Regulation with ID "${regId}" does not exist.`);
+
+    reg.gradingScaleId = scale.id;
+    reg.gradingSystem = scale.system || '10-point';
+    reg.gradeScale = [...scale.grades];
+
+    this.saveCatalog(catalog);
+
+    try {
+      auditHistoryService.recordEvent({
+        action: 'REGULATION_GRADING_UPDATED',
+        entityType: 'grading_scale',
+        entityId: scale.id,
+        entityName: scale.name,
+        details: `Assigned grading scale "${scale.name}" to regulation ${reg.code} (${course.shortName}).`,
+        actor: 'Administrator'
+      });
+    } catch (e) {
+      console.warn('Audit record warning:', e);
+    }
+
+    return reg;
+  },
+
+  publishNewRegulationVersion(univId, courseId, regId, versionData = {}) {
+    const catalog = this.getCatalog();
+    const univ = (catalog.universities || []).find((u) => u.id === univId);
+    if (!univ) throw new Error(`University with ID "${univId}" does not exist.`);
+
+    const course = (univ.courses || []).find((c) => c.id === courseId);
+    if (!course) throw new Error(`Course with ID "${courseId}" does not exist.`);
+
+    const reg = (course.regulations || []).find((r) => r.id === regId);
+    if (!reg) throw new Error(`Regulation with ID "${regId}" does not exist.`);
+
+    const newVersionCode = (versionData.ruleVersion || `${reg.code}_V${(course.regulations?.length || 1) + 1}`).trim();
+    const newRegId = `${course.id}-${newVersionCode.toLowerCase().replace(/[^a-z0-9_-]/g, '-')}`;
+
+    // Create a new immutable regulation version cloning current regulation with version updates
+    const newRegulation = {
+      ...JSON.parse(JSON.stringify(reg)),
+      id: newRegId,
+      code: newVersionCode,
+      name: versionData.name || `${reg.name} (${newVersionCode})`,
+      ruleVersion: newVersionCode,
+      verificationStatus: 'verified',
+      isOfficial: reg.isOfficial !== undefined ? reg.isOfficial : true,
+      gradingScaleId: versionData.gradingScaleId || reg.gradingScaleId,
+      gradingSystem: versionData.gradingSystem || reg.gradingSystem,
+      gradeScale: versionData.gradeScale ? [...versionData.gradeScale] : (reg.gradeScale ? [...reg.gradeScale] : []),
+      calculationRuleId: versionData.calculationRuleId || reg.calculationRuleId,
+      calculationRule: versionData.calculationRule || reg.calculationRule,
+      percentageFormula: versionData.percentageFormula || versionData.calculationRule?.percentageFormula || reg.percentageFormula,
+      createdAt: new Date().toISOString()
+    };
+
+    course.regulations.push(newRegulation);
+    this.saveCatalog(catalog);
+
+    try {
+      auditHistoryService.recordEvent({
+        action: 'REGULATION_VERSION_PUBLISHED',
+        entityType: 'regulation',
+        entityId: newRegulation.id,
+        entityName: newRegulation.name,
+        details: `Published new immutable regulation version "${newRegulation.name}" (${newRegulation.code}) for course ${course.name}.`,
+        actor: 'Administrator'
+      });
+    } catch (e) {
+      console.warn('Audit record warning:', e);
+    }
+
+    return newRegulation;
+  },
+
+  // =========================================================================
+  // CALCULATION RULES MANAGEMENT (Phase 2E)
+  // =========================================================================
+
+  validateCalculationRule(ruleData, options = {}) {
+    const errors = [];
+    const warnings = [];
+
+    if (!ruleData || typeof ruleData !== 'object') {
+      return { isValid: false, errors: ['Calculation rule data must be an object.'], warnings };
+    }
+
+    // Name
+    const name = String(ruleData.name || '').trim();
+    if (!name || name.length < 3) {
+      errors.push('Calculation rule name is required and must be at least 3 characters.');
+    }
+
+    // ID
+    const rawId = String(ruleData.id || name).trim().toLowerCase().replace(/[^a-z0-9_-]/g, '-');
+    if (!rawId || rawId.length < 2) {
+      errors.push('Calculation rule ID must be at least 2 characters.');
+    }
+
+    // Rule Type
+    const validTypes = ['percentage', 'sgpa', 'cgpa', 'composite', 'gpa'];
+    const ruleType = ruleData.ruleType || 'percentage';
+    if (!validTypes.includes(ruleType)) {
+      errors.push(`Invalid rule type "${ruleType}". Supported types are: ${validTypes.join(', ')}.`);
+    }
+
+    // Decimal Precision
+    const precision = ruleData.decimalPrecision !== undefined ? Number(ruleData.decimalPrecision) : 2;
+    if (isNaN(precision) || !Number.isInteger(precision) || precision < 0 || precision > 4) {
+      errors.push('Decimal precision must be an integer between 0 and 4.');
+    }
+
+    // Rounding Mode
+    const validModes = ['round', 'floor', 'ceil', 'truncate'];
+    const roundingMode = ruleData.roundingMode || 'round';
+    if (!validModes.includes(roundingMode)) {
+      errors.push(`Invalid rounding mode "${roundingMode}". Must be one of: ${validModes.join(', ')}.`);
+    }
+
+    // Percentage Formula Security & Declarative Validation
+    const formulaStr = String(ruleData.percentageFormula || '').trim();
+    if (!formulaStr) {
+      errors.push('Percentage conversion formula is required.');
+    } else {
+      // Security: Disallow arbitrary code execution, eval, script tags, statement delimiters
+      const forbiddenTokens = ['eval', 'function', '=>', ';', 'window', 'document', 'process', 'require', 'import', '<', '>', '{', '}', '`'];
+      const hasForbidden = forbiddenTokens.some(token => formulaStr.toLowerCase().includes(token));
+      if (hasForbidden) {
+        errors.push('Percentage formula contains prohibited script tokens. Only declarative linear math formulas are permitted.');
+      } else {
+        // Validate declarative syntax pattern
+        const formulaClean = formulaStr.toLowerCase().replace(/\s+/g, '');
+        const isLinear = /^\(?cgpa(?:-([0-9.]+))?\)?\*([0-9.]+)$/.test(formulaClean);
+        const isStandard = ['cgpa*10', '(cgpa-0.5)*10', '(cgpa-0.75)*10', 'cgpa*9.5'].includes(formulaClean);
+        if (!isLinear && !isStandard) {
+          errors.push(`Unsupported percentage formula format "${formulaStr}". Must conform to linear conversion pattern, e.g. "CGPA * 10", "(CGPA - 0.5) * 10", or "(CGPA - 0.75) * 10".`);
+        }
+      }
+    }
+
+    // SGPA and CGPA formula validation
+    const validSgpa = ['WEIGHTED_CREDIT_SUM', 'SIMPLE_AVERAGE'];
+    if (ruleData.sgpaFormula && !validSgpa.includes(ruleData.sgpaFormula)) {
+      errors.push(`Unsupported SGPA formula method "${ruleData.sgpaFormula}". Must be one of: ${validSgpa.join(', ')}.`);
+    }
+
+    const validCgpa = ['CUMULATIVE_WEIGHTED_CREDIT_SUM', 'SIMPLE_SGPA_AVERAGE'];
+    if (ruleData.cgpaFormula && !validCgpa.includes(ruleData.cgpaFormula)) {
+      errors.push(`Unsupported CGPA formula method "${ruleData.cgpaFormula}". Must be one of: ${validCgpa.join(', ')}.`);
+    }
+
+    // Applicability validation
+    const catalog = this.getCatalog();
+    if (ruleData.universityId) {
+      const u = (catalog.universities || []).find(x => x.id === ruleData.universityId);
+      if (!u) {
+        errors.push(`Referenced university with ID "${ruleData.universityId}" does not exist.`);
+      } else if (ruleData.courseId) {
+        const c = (u.courses || []).find(x => x.id === ruleData.courseId);
+        if (!c) {
+          errors.push(`Referenced course with ID "${ruleData.courseId}" does not exist under university "${u.shortName || u.name}".`);
+        } else if (ruleData.regulationId) {
+          const r = (c.regulations || []).find(x => x.id === ruleData.regulationId);
+          if (!r) {
+            errors.push(`Referenced regulation with ID "${ruleData.regulationId}" does not exist under course "${c.name}".`);
+          }
+        }
+      }
+    }
+
+    return {
+      isValid: errors.length === 0,
+      errors,
+      warnings
+    };
+  },
+
+  getCalculationRules() {
+    const catalog = this.getCatalog();
+    return Array.isArray(catalog.calculationRules) ? catalog.calculationRules : [];
+  },
+
+  getCalculationRule(ruleId) {
+    const rules = this.getCalculationRules();
+    const cleanId = String(ruleId || '').trim().toLowerCase();
+    return rules.find(r => r.id.toLowerCase() === cleanId) || null;
+  },
+
+  addCalculationRule(ruleData) {
+    if (!ruleData || typeof ruleData !== 'object') {
+      throw new Error('Calculation rule data is required.');
+    }
+
+    const validation = this.validateCalculationRule(ruleData);
+    if (!validation.isValid) {
+      throw new Error(`Invalid calculation rule: ${validation.errors.join(' ')}`);
+    }
+
+    const cleanId = String(ruleData.id || ruleData.name).trim().toLowerCase().replace(/[^a-z0-9_-]/g, '-');
+    const catalog = this.getCatalog();
+    if (!Array.isArray(catalog.calculationRules)) {
+      catalog.calculationRules = [];
+    }
+
+    if (catalog.calculationRules.some(r => r.id.toLowerCase() === cleanId)) {
+      throw new Error(`A calculation rule with identifier "${cleanId}" already exists.`);
+    }
+
+    const newRule = {
+      id: cleanId,
+      name: ruleData.name.trim(),
+      description: (ruleData.description || '').trim(),
+      ruleType: ruleData.ruleType || 'percentage',
+      universityId: ruleData.universityId || null,
+      courseId: ruleData.courseId || null,
+      regulationId: ruleData.regulationId || null,
+      sgpaFormula: ruleData.sgpaFormula || 'WEIGHTED_CREDIT_SUM',
+      cgpaFormula: ruleData.cgpaFormula || 'CUMULATIVE_WEIGHTED_CREDIT_SUM',
+      percentageFormula: ruleData.percentageFormula || 'CGPA * 10',
+      formulaDescription: ruleData.formulaDescription || `Percentage = ${ruleData.percentageFormula || 'CGPA * 10'}`,
+      decimalPrecision: Number.isInteger(ruleData.decimalPrecision) ? ruleData.decimalPrecision : 2,
+      roundingMode: ruleData.roundingMode || 'round',
+      minPassingGradePoints: Number(ruleData.minPassingGradePoints) || 5.0,
+      includeBacklogsInCredits: Boolean(ruleData.includeBacklogsInCredits),
+      status: ruleData.status || 'active',
+      isOfficial: Boolean(ruleData.isOfficial),
+      ruleVersion: ruleData.ruleVersion || `${cleanId.toUpperCase()}_V1`,
+      createdAt: new Date().toISOString()
+    };
+
+    catalog.calculationRules.push(newRule);
+    this.saveCatalog(catalog);
+
+    try {
+      auditHistoryService.recordEvent({
+        action: 'CALCULATION_RULE_ADDED',
+        entityType: 'calculation_rule',
+        entityId: newRule.id,
+        entityName: newRule.name,
+        details: `Created new calculation rule "${newRule.name}" (${newRule.id}) with formula ${newRule.percentageFormula}.`,
+        actor: 'Administrator'
+      });
+    } catch (e) {
+      console.warn('Audit record warning:', e);
+    }
+
+    return newRule;
+  },
+
+  updateCalculationRule(ruleId, updates) {
+    if (!updates || typeof updates !== 'object') {
+      throw new Error('Update payload is required.');
+    }
+
+    const catalog = this.getCatalog();
+    if (!Array.isArray(catalog.calculationRules)) {
+      catalog.calculationRules = [];
+    }
+
+    const cleanId = String(ruleId || '').trim().toLowerCase();
+    const idx = catalog.calculationRules.findIndex(r => r.id.toLowerCase() === cleanId);
+    if (idx === -1) {
+      throw new Error(`Calculation rule with ID "${ruleId}" does not exist.`);
+    }
+
+    const existing = catalog.calculationRules[idx];
+    const candidate = {
+      ...existing,
+      ...updates,
+      id: existing.id // ID is immutable
+    };
+
+    const validation = this.validateCalculationRule(candidate);
+    if (!validation.isValid) {
+      throw new Error(`Invalid calculation rule update: ${validation.errors.join(' ')}`);
+    }
+
+    const updatedRule = {
+      ...candidate,
+      updatedAt: new Date().toISOString()
+    };
+
+    catalog.calculationRules[idx] = updatedRule;
+    this.saveCatalog(catalog);
+
+    try {
+      auditHistoryService.recordEvent({
+        action: 'CALCULATION_RULE_UPDATED',
+        entityType: 'calculation_rule',
+        entityId: updatedRule.id,
+        entityName: updatedRule.name,
+        details: `Updated metadata and parameters for calculation rule "${updatedRule.name}" (${updatedRule.id}).`,
+        actor: 'Administrator'
+      });
+    } catch (e) {
+      console.warn('Audit record warning:', e);
+    }
+
+    return updatedRule;
+  },
+
+  setCalculationRuleStatus(ruleId, status) {
+    if (!['active', 'archived'].includes(status)) {
+      throw new Error(`Invalid status "${status}". Allowed: "active", "archived".`);
+    }
+
+    const catalog = this.getCatalog();
+    const cleanId = String(ruleId || '').trim().toLowerCase();
+    const rule = (catalog.calculationRules || []).find(r => r.id.toLowerCase() === cleanId);
+    if (!rule) {
+      throw new Error(`Calculation rule with ID "${ruleId}" does not exist.`);
+    }
+
+    rule.status = status;
+    rule.updatedAt = new Date().toISOString();
+    this.saveCatalog(catalog);
+
+    const isArchived = status === 'archived';
+    try {
+      auditHistoryService.recordEvent({
+        action: isArchived ? 'CALCULATION_RULE_ARCHIVED' : 'CALCULATION_RULE_STATUS_CHANGED',
+        entityType: 'calculation_rule',
+        entityId: rule.id,
+        entityName: rule.name,
+        details: isArchived
+          ? `Archived calculation rule "${rule.name}" (${rule.id}). Historical calculation records remain intact.`
+          : `Changed status of calculation rule "${rule.name}" to ${status}.`,
+        actor: 'Administrator'
+      });
+    } catch (e) {
+      console.warn('Audit record warning:', e);
+    }
+
+    return rule;
+  },
+
+  archiveCalculationRule(ruleId) {
+    return this.setCalculationRuleStatus(ruleId, 'archived');
+  },
+
+  checkCalculationRuleReferences(ruleId) {
+    const cleanId = String(ruleId || '').trim().toLowerCase();
+    const catalog = this.getCatalog();
+    const rule = this.getCalculationRule(ruleId);
+
+    const referencingRegulations = [];
+
+    (catalog.universities || []).forEach((u) => {
+      (u.courses || []).forEach((c) => {
+        (c.regulations || []).forEach((r) => {
+          const directMatch = r.calculationRuleId && r.calculationRuleId.toLowerCase() === cleanId;
+          const legacyMatch = (!r.calculationRuleId && cleanId === 'jntuh-r18-r22-rule' && u.id === 'jntuh') ||
+                              (!r.calculationRuleId && cleanId === 'ou-cbcs-standard-rule' && u.id === 'ou');
+
+          if (directMatch || legacyMatch) {
+            referencingRegulations.push({
+              universityId: u.id,
+              universityShortName: u.shortName,
+              courseId: c.id,
+              courseShortName: c.shortName,
+              regulationId: r.id,
+              regulationCode: r.code,
+              ruleVersion: r.ruleVersion
+            });
+          }
+        });
+      });
+    });
+
+    let resultCount = 0;
+    try {
+      const allResults = safeGet(STORAGE_KEYS.RESULTS, []);
+      if (Array.isArray(allResults)) {
+        resultCount = allResults.filter((res) => {
+          return referencingRegulations.some((ref) => ref.regulationId === res.regulationId);
+        }).length;
+      }
+    } catch {}
+
+    const regulationCount = referencingRegulations.length;
+    const totalReferences = regulationCount + resultCount;
+
+    const reasons = [];
+    if (regulationCount > 0) {
+      reasons.push(`${regulationCount} configured regulation${regulationCount === 1 ? '' : 's'}`);
+    }
+    if (resultCount > 0) {
+      reasons.push(`${resultCount} saved student calculation result snapshot${resultCount === 1 ? '' : 's'}`);
+    }
+
+    const ruleName = rule ? rule.name : ruleId;
+    const reason = totalReferences > 0
+      ? `Cannot permanently delete calculation rule "${ruleName}": It is referenced by ${reasons.join(', ')}. Please Archive this rule instead to protect historical calculation accuracy.`
+      : null;
+
+    return {
+      canDelete: totalReferences === 0,
+      hasReferences: totalReferences > 0,
+      regulationCount,
+      resultCount,
+      resultsCount: resultCount,
+      totalReferences,
+      regulations: referencingRegulations,
+      referencingRegulations,
+      reasons,
+      reason
+    };
+  },
+
+  deleteCalculationRule(ruleId) {
+    const refCheck = this.checkCalculationRuleReferences(ruleId);
+    if (!refCheck.canDelete) {
+      throw new Error(refCheck.reason);
+    }
+
+    const catalog = this.getCatalog();
+    const cleanId = String(ruleId || '').trim().toLowerCase();
+    const idx = (catalog.calculationRules || []).findIndex(r => r.id.toLowerCase() === cleanId);
+    if (idx === -1) {
+      throw new Error(`Calculation rule with ID "${ruleId}" does not exist.`);
+    }
+
+    const deleted = catalog.calculationRules.splice(idx, 1)[0];
+    this.saveCatalog(catalog);
+
+    try {
+      auditHistoryService.recordEvent({
+        action: 'CALCULATION_RULE_DELETED',
+        entityType: 'calculation_rule',
+        entityId: deleted.id,
+        entityName: deleted.name,
+        details: `Permanently deleted unreferenced calculation rule "${deleted.name}" (${deleted.id}).`,
+        actor: 'Administrator'
+      });
+    } catch (e) {
+      console.warn('Audit record warning:', e);
+    }
+
+    return deleted;
+  },
+
+  assignCalculationRuleToRegulation(univId, courseId, regId, ruleId, options = {}) {
+    const rule = this.getCalculationRule(ruleId);
+    if (!rule) {
+      throw new Error(`Calculation rule with ID "${ruleId}" does not exist.`);
+    }
+
+    if (rule.status === 'archived' && !options.allowArchived) {
+      throw new Error(`Cannot assign archived calculation rule "${rule.name}". Please activate the rule first.`);
+    }
+
+    if (options.publishNewVersion) {
+      return this.publishNewRegulationVersion(univId, courseId, regId, {
+        calculationRuleId: rule.id,
+        calculationRule: {
+          sgpaFormula: rule.sgpaFormula,
+          cgpaFormula: rule.cgpaFormula,
+          percentageFormula: rule.percentageFormula,
+          formulaDescription: rule.formulaDescription
+        },
+        ruleVersion: options.ruleVersion || `${rule.id.toUpperCase()}_VERSIONED`
+      });
+    }
+
+    const catalog = this.getCatalog();
+    const univ = (catalog.universities || []).find((u) => u.id === univId);
+    if (!univ) throw new Error(`University with ID "${univId}" does not exist.`);
+
+    const course = (univ.courses || []).find((c) => c.id === courseId);
+    if (!course) throw new Error(`Course with ID "${courseId}" does not exist.`);
+
+    const reg = (course.regulations || []).find((r) => r.id === regId);
+    if (!reg) throw new Error(`Regulation with ID "${regId}" does not exist.`);
+
+    reg.calculationRuleId = rule.id;
+    reg.percentageFormula = rule.percentageFormula;
+    reg.calculationRule = {
+      sgpaFormula: rule.sgpaFormula,
+      cgpaFormula: rule.cgpaFormula,
+      percentageFormula: rule.percentageFormula,
+      formulaDescription: rule.formulaDescription
+    };
+
+    this.saveCatalog(catalog);
+
+    try {
+      auditHistoryService.recordEvent({
+        action: 'REGULATION_RULE_ASSIGNED',
+        entityType: 'calculation_rule',
+        entityId: rule.id,
+        entityName: rule.name,
+        details: `Assigned calculation rule "${rule.name}" (${rule.percentageFormula}) to regulation ${reg.code} (${course.shortName}).`,
+        actor: 'Administrator'
+      });
+    } catch (e) {
+      console.warn('Audit record warning:', e);
+    }
+
+    return reg;
+  },
+
   resetToDefaults() {
     const fresh = { ...DEFAULT_CATALOG, catalogVersion: CATALOG_SCHEMA_VERSION };
     safeSet(STORAGE_KEY_CATALOG, fresh);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('rp_catalog_updated', { detail: fresh }));
+      window.dispatchEvent(new Event('storage'));
+    }
     return fresh;
   }
 };

@@ -1,9 +1,29 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Settings, Wrench, Database, Activity, HardDrive } from 'lucide-react';
-import { SYSTEM_METRICS } from '../../services/adminDashboardService';
+import { adminDashboardService } from '../../services/adminDashboardService';
 
 export default function SystemOverview() {
-  const { activeTools, universitiesData, uptime, totalStorage } = SYSTEM_METRICS;
+  const [metrics, setMetrics] = useState(() => adminDashboardService.getSystemMetrics());
+
+  useEffect(() => {
+    const handleUpdate = () => {
+      setMetrics(adminDashboardService.getSystemMetrics());
+    };
+
+    window.addEventListener('storage', handleUpdate);
+    window.addEventListener('rp_catalog_updated', handleUpdate);
+    window.addEventListener('activity_history_updated', handleUpdate);
+    window.addEventListener('focus', handleUpdate);
+
+    return () => {
+      window.removeEventListener('storage', handleUpdate);
+      window.removeEventListener('rp_catalog_updated', handleUpdate);
+      window.removeEventListener('activity_history_updated', handleUpdate);
+      window.removeEventListener('focus', handleUpdate);
+    };
+  }, []);
+
+  const { activeTools, universitiesData, uptime, totalStorage } = metrics;
 
   return (
     <div className="bg-white dark:bg-[#111418] border border-slate-200/80 dark:border-[#1E2A35] rounded-2xl p-4 sm:p-5 shadow-2xs flex flex-col justify-between">

@@ -1,5 +1,9 @@
-import { STORAGE_KEYS } from './storageKeys';
-import { academicCalculationEngine } from './academicCalculationEngine';
+import { STORAGE_KEYS } from './storageKeys.js';
+import { academicCalculationEngine } from './academicCalculationEngine.js';
+import { auditHistoryService } from './auditHistoryService.js';
+import { activityHistoryService } from './activityHistoryService.js';
+import { notificationService } from './notificationService.js';
+
 
 // Default semester results matching the reference image exactly (S grade for MCA 10 points)
 export const DEMO_STUDENT_RESULTS = [
@@ -135,12 +139,59 @@ function recalculateProgressiveCGPAs(resultsList) {
   return updated;
 }
 
+/**
+ * Automatically synchronizes student's current active semester when results are added, edited, or deleted
+ */
+function syncStudentActiveSemester(normalizedResults) {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    const rawStudent = localStorage.getItem(STORAGE_KEYS.STUDENT);
+    if (!rawStudent) return;
+    const student = JSON.parse(rawStudent);
+    const maxSem = Number(student.totalSemesters) || 6;
+    const validResults = (normalizedResults || []).filter(
+      (r) => r && Number(r.semesterNumber) >= 1 && Number(r.semesterNumber) <= maxSem
+    );
+    const completedSet = new Set(validResults.map((r) => Number(r.semesterNumber)));
+    let lowestMissing = null;
+    for (let s = 1; s <= maxSem; s++) {
+      if (!completedSet.has(s)) {
+        lowestMissing = s;
+        break;
+      }
+    }
+    const isDegreeCompleted = completedSet.size >= maxSem && lowestMissing === null;
+    const nextActive = isDegreeCompleted ? maxSem : (lowestMissing || 1);
+
+    if (student.currentSemester !== nextActive) {
+      student.currentSemester = nextActive;
+      localStorage.setItem(STORAGE_KEYS.STUDENT, JSON.stringify(student));
+
+      // Also update auth user session if present
+      const rawAuth = localStorage.getItem(STORAGE_KEYS.AUTH);
+      if (rawAuth) {
+        const auth = JSON.parse(rawAuth);
+        if (auth && auth.user) {
+          auth.user.currentSemester = nextActive;
+          localStorage.setItem(STORAGE_KEYS.AUTH, JSON.stringify(auth));
+        }
+      }
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('academic_profile_updated'));
+      }
+    }
+  } catch (err) {
+    console.warn('Could not sync student active semester:', err);
+  }
+}
+
 export const resultService = {
   initialize() {
     const existing = safeGet(STORAGE_KEYS.RESULTS, null);
-    if (!existing || !Array.isArray(existing) || existing.length === 0) {
+    if (existing === null) {
       safeSet(STORAGE_KEYS.RESULTS, DEFAULT_RESULTS);
-    } else {
+    } else if (Array.isArray(existing) && existing.length > 0) {
       // Check if student profile is MCA or BCA under Osmania and has legacy 'O' grades
       const profile = safeGet(STORAGE_KEYS.STUDENT, null);
       if (profile && ['mca', 'bca'].includes(profile.courseId) && (profile.universityId === 'osmania' || !profile.universityId)) {
@@ -165,7 +216,7 @@ export const resultService = {
 
   getAllResults() {
     this.initialize();
-    return safeGet(STORAGE_KEYS.RESULTS, DEFAULT_RESULTS);
+    return safeGet(STORAGE_KEYS.RESULTS, []);
   },
 
   getStudentResults() {
@@ -221,30 +272,88 @@ export const resultService = {
 
   addResult(newResult) {
     const results = this.getAllResults();
+    const semNum = Number(newResult.semesterNumber) || (results.length + 1);
+
+    // Prevent duplicate semester entries
+    const existingIndex = results.findIndex(
+      (r) => Number(r.semesterNumber) === semNum || r.id === newResult.id
+    );
+    if (existingIndex !== -1) {
+      throw new Error(`Semester ${semNum} has already been saved.`);
+    }
+
     const resultToSave = {
-      id: newResult.id || `res_sem_${Date.now()}`,
-      semesterNumber: Number(newResult.semesterNumber) || results.length + 1,
-      semesterTitle: newResult.semesterTitle || `Semester ${newResult.semesterNumber || results.length + 1}`,
-      semesterLabel: newResult.semesterLabel || `Semester ${newResult.semesterNumber || results.length + 1}`,
-      academicPeriod: newResult.academicPeriod || 'Current Period',
+      id: newResult.id || `semester-${semNum}`,
+      semesterNumber: semNum,
+      semesterTitle: newResult.semesterTitle || `Semester ${semNum}`,
+      semesterLabel: newResult.semesterLabel || `Semester ${semNum}`,
+      academicPeriod: newResult.academicPeriod || `Semester ${semNum} Exam`,
       sgpa: Number(newResult.sgpa) || 0,
       cgpa: Number(newResult.cgpa) || Number(newResult.sgpa) || 0,
-      creditsEarned: Number(newResult.creditsEarned) || 20,
-      totalCredits: Number(newResult.totalCredits) || 20,
+      creditsEarned: Number(newResult.creditsEarned) || 0,
+      totalCredits: Number(newResult.totalCredits) || 0,
+      subjectCount: (newResult.subjects && newResult.subjects.length) || Number(newResult.subjectCount) || 0,
       status: newResult.status || 'Passed',
-      badgeColor: newResult.badgeColor || 'blue',
+      badgeColor: newResult.badgeColor || (Number(newResult.sgpa) >= 8.5 ? 'purple' : Number(newResult.sgpa) >= 7.5 ? 'blue' : 'emerald'),
       subjects: newResult.subjects || [],
       universityId: newResult.universityId,
       courseId: newResult.courseId,
       regulationId: newResult.regulationId,
       ruleVersion: newResult.ruleVersion,
-      academicBatch: newResult.academicBatch
+      academicBatch: newResult.academicBatch,
+      savedAt: new Date().toISOString()
     };
 
     const combined = [...results, resultToSave];
     const normalized = recalculateProgressiveCGPAs(combined);
     safeSet(STORAGE_KEYS.RESULTS, normalized);
-    return normalized.find((r) => r.id === resultToSave.id) || resultToSave;
+    syncStudentActiveSemester(normalized);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('results_data_updated'));
+    }
+    const saved = normalized.find((r) => r.id === resultToSave.id || Number(r.semesterNumber) === semNum) || resultToSave;
+    try {
+      auditHistoryService.recordEvent({
+        action: 'CREATED',
+        semesterNumber: saved.semesterNumber,
+        semesterLabel: saved.semesterLabel,
+        resultId: saved.id,
+        academicPeriod: saved.academicPeriod,
+        sgpa: saved.sgpa,
+        cgpa: saved.cgpa,
+        credits: saved.creditsEarned || saved.totalCredits,
+        subjectCount: saved.subjects?.length || saved.subjectCount,
+        status: saved.status,
+        details: `Saved result for Semester ${saved.semesterNumber} with SGPA: ${Number(saved.sgpa).toFixed(2)}, CGPA: ${Number(saved.cgpa).toFixed(2)}.`
+      });
+
+      activityHistoryService.recordActivity({
+        type: 'result',
+        action: 'created',
+        title: 'Added Semester Result',
+        description: `Added Semester ${saved.semesterNumber} results (${saved.courseId?.toUpperCase() || 'BCA'})`,
+        entityId: saved.id,
+        badgeValues: [`Semester ${saved.semesterNumber}`, saved.courseId?.toUpperCase() || 'BCA', `${saved.subjects?.length || saved.subjectCount || 6} Subjects`],
+        resultMetric: { label: 'SGPA', value: Number(saved.sgpa).toFixed(2), color: 'emerald' },
+        metadata: {
+          activityType: 'Result Creation',
+          course: saved.courseId?.toUpperCase() || 'BCA',
+          semester: `Semester ${saved.semesterNumber}`,
+          semesterNumber: saved.semesterNumber,
+          totalSubjects: saved.subjects?.length || saved.subjectCount || 6,
+          sgpa: Number(saved.sgpa).toFixed(2),
+          cgpa: Number(saved.cgpa).toFixed(2),
+          creditsEarned: saved.creditsEarned,
+          status: saved.status,
+          remarks: 'Initial semester result recorded.'
+        }
+      });
+
+      notificationService.notifyResultSaved(saved.semesterNumber, saved.sgpa);
+    } catch (e) {
+      console.warn('Audit/Activity/Notification record warning:', e);
+    }
+    return saved;
   },
 
   updateResult(id, updatedFields) {
@@ -261,10 +370,85 @@ export const resultService = {
         r.id === `res_sem_${cleanId}`
     );
     if (index !== -1) {
-      results[index] = { ...results[index], ...updatedFields };
+      const previousSem = results[index];
+      let fieldsToApply = { ...updatedFields };
+
+      // If subjects are passed but sgpa or creditsEarned not specified, calculate them automatically
+      if (fieldsToApply.subjects && Array.isArray(fieldsToApply.subjects)) {
+        const calc = academicCalculationEngine.calculateSGPA(fieldsToApply.subjects);
+        if (fieldsToApply.sgpa === undefined) fieldsToApply.sgpa = calc.sgpa;
+        if (fieldsToApply.creditsEarned === undefined) fieldsToApply.creditsEarned = calc.earnedCredits;
+        if (fieldsToApply.totalCredits === undefined) fieldsToApply.totalCredits = calc.totalCredits;
+        if (!fieldsToApply.status || fieldsToApply.status === 'Failed' || fieldsToApply.status === 'Passed') {
+          fieldsToApply.status = calc.status;
+        }
+      }
+
+      results[index] = { ...results[index], ...fieldsToApply };
       const normalized = recalculateProgressiveCGPAs(results);
       safeSet(STORAGE_KEYS.RESULTS, normalized);
-      return normalized[index];
+      syncStudentActiveSemester(normalized);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('results_data_updated'));
+      }
+      const saved = normalized[index];
+      try {
+        auditHistoryService.recordEvent({
+          action: 'UPDATED',
+          semesterNumber: saved.semesterNumber,
+          semesterLabel: saved.semesterLabel,
+          resultId: saved.id,
+          academicPeriod: saved.academicPeriod,
+          sgpa: saved.sgpa,
+          cgpa: saved.cgpa,
+          credits: saved.creditsEarned || saved.totalCredits,
+          subjectCount: saved.subjects?.length || saved.subjectCount,
+          status: saved.status,
+          details: `Updated Semester ${saved.semesterNumber} result details. New SGPA: ${Number(saved.sgpa).toFixed(2)}, CGPA: ${Number(saved.cgpa).toFixed(2)}.`
+        });
+
+        // Compute subject changes
+        let subjectChanges = [];
+        if (Array.isArray(updatedFields.subjects) && Array.isArray(previousSem.subjects)) {
+          subjectChanges = updatedFields.subjects.map((sub) => {
+            const prev = previousSem.subjects.find((p) => p.code === sub.code || p.name === sub.name);
+            return {
+              subject: sub.code || sub.name,
+              name: sub.name,
+              previousGrade: prev?.grade || '-',
+              updatedGrade: sub.grade
+            };
+          }).filter((c) => c.previousGrade !== c.updatedGrade);
+        }
+
+        activityHistoryService.recordActivity({
+          type: 'result',
+          action: 'updated',
+          title: 'Edited Semester Result',
+          description: `Updated Semester ${saved.semesterNumber} results (${saved.courseId?.toUpperCase() || 'BCA'})`,
+          entityId: saved.id,
+          badgeValues: [`Semester ${saved.semesterNumber}`, saved.courseId?.toUpperCase() || 'BCA', `${saved.subjects?.length || saved.subjectCount || 6} Subjects`],
+          resultMetric: { label: 'SGPA', value: Number(saved.sgpa).toFixed(2), color: 'emerald' },
+          metadata: {
+            activityType: 'Result Update',
+            course: saved.courseId?.toUpperCase() || 'BCA',
+            semester: `Semester ${saved.semesterNumber}`,
+            semesterNumber: saved.semesterNumber,
+            totalSubjects: saved.subjects?.length || saved.subjectCount || 6,
+            previousSGPA: Number(previousSem.sgpa).toFixed(2),
+            updatedSGPA: Number(saved.sgpa).toFixed(2),
+            previousCGPA: Number(previousSem.cgpa).toFixed(2),
+            updatedCGPA: Number(saved.cgpa).toFixed(2),
+            subjectChanges,
+            remarks: 'Updated semester marks and grading standing.'
+          }
+        });
+
+        notificationService.notifyResultUpdated(saved.semesterNumber, saved.sgpa);
+      } catch (e) {
+        console.warn('Audit/Activity/Notification record warning:', e);
+      }
+      return saved;
     }
     return null;
   },
@@ -272,6 +456,12 @@ export const resultService = {
   deleteResult(id) {
     const results = this.getAllResults();
     const cleanId = String(id).replace('semester-', '').replace('res_sem_', '');
+    const targetSem = results.find(
+      (r) =>
+        r.id === id ||
+        String(r.semesterNumber) === String(id) ||
+        String(r.semesterNumber) === cleanId
+    );
     const filtered = results.filter(
       (r) =>
         r.id !== id &&
@@ -284,7 +474,46 @@ export const resultService = {
     );
     const normalized = recalculateProgressiveCGPAs(filtered);
     safeSet(STORAGE_KEYS.RESULTS, normalized);
+    syncStudentActiveSemester(normalized);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('results_data_updated'));
+    }
+    try {
+      auditHistoryService.recordEvent({
+        action: 'DELETED',
+        semesterNumber: targetSem ? targetSem.semesterNumber : cleanId,
+        semesterLabel: targetSem ? targetSem.semesterLabel : `Semester ${cleanId}`,
+        resultId: id,
+        details: `Deleted academic result record for Semester ${targetSem ? targetSem.semesterNumber : cleanId}.`
+      });
+
+      activityHistoryService.recordActivity({
+        type: 'result',
+        action: 'deleted',
+        title: 'Deleted Semester Result',
+        description: `Removed Semester ${targetSem?.semesterNumber || cleanId} result record`,
+        entityId: id,
+        badgeValues: [`Semester ${targetSem?.semesterNumber || cleanId}`, 'Removed'],
+        resultMetric: { label: 'Status', value: 'Deleted', color: 'rose' },
+        metadata: {
+          activityType: 'Result Deletion',
+          semesterNumber: targetSem?.semesterNumber || cleanId,
+          remarks: 'Academic semester result removed from curriculum records.'
+        }
+      });
+    } catch (e) {
+      console.warn('Audit/Activity record warning:', e);
+    }
     return true;
+  },
+
+  resetResults(newResults = []) {
+    safeSet(STORAGE_KEYS.RESULTS, newResults);
+    syncStudentActiveSemester(newResults);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('results_data_updated'));
+    }
+    return newResults;
   }
 };
 

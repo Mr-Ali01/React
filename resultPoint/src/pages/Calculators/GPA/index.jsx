@@ -8,6 +8,10 @@ import CalculatorPageHeader from '../CalculatorPageHeader';
 import SubjectFormTable from '../SubjectFormTable';
 import SaveModal from '../CGPA/components/SaveModal';
 import { useToast } from '../../../context/ToastContext';
+import { useAuth } from '../../../hooks/useAuth';
+import { useAppDispatch } from '../../../hooks/useAppDispatch';
+import { saveCalculationToHistory } from '../../../features/calculation/calculationSlice';
+import { calculationSaveService } from '../../../services/calculationSaveService';
 
 const GRADE_POINTS_MAP = {
   S: 10, 'A+': 9, A: 8, 'B+': 7, B: 6, C: 5, D: 4, F: 0
@@ -22,15 +26,19 @@ const DEFAULT_SUBJECTS = [
 ];
 
 export default function GPACalculator() {
+  const { user, isAuthenticated } = useAuth();
+  const dispatch = useAppDispatch();
+  const { showToast } = useToast();
+
   const [subjects, setSubjects] = useState(DEFAULT_SUBJECTS);
   const [university, setUniversity] = useState('jntuh');
   const [course, setCourse] = useState('btech-cse');
   const [regulation, setRegulation] = useState('r18');
   const [gradeSystem, setGradeSystem] = useState('10-point');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isResultModalOpen, setIsResultModalOpen] = useState(false);
+  const [pendingCalc, setPendingCalc] = useState(null);
   const [validationError, setValidationError] = useState('');
-
-  const { showToast } = useToast();
 
   const handleAddSubject = () => {
     if (subjects.length >= 12) return;
@@ -100,6 +108,60 @@ export default function GPACalculator() {
     return { icon: '⚠️', text: 'Needs Improvement', narrative: 'Revisit foundational topics and clarify doubts ahead of final exams.', tips: 'Prioritize high-credit courses and consult professors.' };
   }, [metrics.gpa]);
 
+  const handleSaveResult = () => {
+    const calcRecord = {
+      calculatorType: 'GPA Calculator',
+      title: 'GPA Evaluation',
+      score: metrics.gpa.toFixed(2),
+      scale: '10.0',
+      result: `${metrics.gpa.toFixed(2)} GPA`,
+      standing: standing?.text || 'Good',
+      summary: `Total Credits: ${metrics.totalCredits} | Points: ${Math.round(metrics.totalPoints)} | Percentage: ${metrics.percentage.toFixed(1)}%`,
+      data: {
+        gpa: metrics.gpa,
+        percentage: metrics.percentage,
+        totalCredits: metrics.totalCredits,
+        totalPoints: metrics.totalPoints,
+        letterGrade: metrics.letterGrade,
+        university,
+        course,
+        regulation,
+        gradeSystem,
+        subjects,
+      },
+    };
+
+    if (isAuthenticated) {
+      const res = calculationSaveService.saveCalculation(calcRecord, user);
+      if (res.success) {
+        dispatch(saveCalculationToHistory(res.record));
+        showToast('GPA calculation saved to your history!');
+      } else {
+        showToast(res.error || 'Failed to save calculation');
+      }
+    } else {
+      setPendingCalc(calcRecord);
+      calculationSaveService.setPendingCalculation(calcRecord);
+      setIsModalOpen(true);
+    }
+  };
+
+  const handleCalculate = () => {
+    if (!subjects || subjects.length === 0) {
+      setValidationError('At least one subject is required for GPA calculation.');
+      return;
+    }
+    const invalid = subjects.some(
+      (s) => !s.credits || isNaN(parseFloat(s.credits)) || parseFloat(s.credits) <= 0
+    );
+    if (invalid) {
+      setValidationError('Please enter valid positive credits for all subjects.');
+      return;
+    }
+    setValidationError('');
+    setIsResultModalOpen(true);
+  };
+
   const resultCardsData = [
     { label: 'Total Credits', value: metrics.totalCredits },
     { label: 'Total Grade Points', value: Math.round(metrics.totalPoints) },
@@ -155,12 +217,12 @@ export default function GPACalculator() {
             onRemoveSubject={handleRemoveSubject}
             onSubjectChange={handleSubjectChange}
             onReset={handleReset}
-            onSubmit={() => setIsModalOpen(true)}
+            onSubmit={handleCalculate}
             gradePointsMap={GRADE_POINTS_MAP}
             regulationName={regulation.toUpperCase()}
             validationError={validationError}
             infoBannerText="Enter your subjects, credits and grades to calculate your GPA."
-            actionButtonText="Calculate & Save"
+            actionButtonText="Calculate GPA"
           />
 
           {/* Reusable Result Gauge Card */}
@@ -170,7 +232,72 @@ export default function GPACalculator() {
             title="YOUR GPA RESULT"
             metrics={resultCardsData}
             standing={standing}
-            onSave={() => setIsModalOpen(true)}
+            isMobileModalOpen={isResultModalOpen}
+            onCloseMobileModal={() => setIsResultModalOpen(false)}
+            metadata={{
+              university: university.toUpperCase(),
+              regulation: regulation.toUpperCase(),
+              course: course.toUpperCase(),
+              semester: 'Semester',
+              calculationMethod: 'Weighted Average (Credit Based)',
+              totalSubjects: subjects.length
+            }}
+            subjectRows={subjects.map((s, idx) => ({
+              num: idx + 1,
+              name: s.name || `Subject ${idx + 1}`,
+              credits: s.credits,
+              grade: s.grade,
+              gradePoints: GRADE_POINTS_MAP[s.grade] ?? 0,
+              creditPoints: (parseFloat(s.credits) || 0) * (GRADE_POINTS_MAP[s.grade] ?? 0)
+            }))}
+            pdfData={{
+              calculatorName: 'GPA Result Card',
+              subtitle: 'Calculated using your subject credits and grades',
+              filename: 'ResultPoint_GPA_Result.pdf',
+              score: metrics.gpa.toFixed(2),
+              maxScale: 10,
+              standing: standing?.text,
+              metadata: {
+                university: university.toUpperCase(),
+                regulation: regulation.toUpperCase(),
+                course: course.toUpperCase(),
+                calculationMethod: 'Weighted Average (Credit Based)',
+                totalSubjects: subjects.length
+              },
+              subjectRows: subjects.map((s, idx) => ({
+                num: idx + 1,
+                name: s.name || `Subject ${idx + 1}`,
+                credits: s.credits,
+                grade: s.grade,
+                gradePoints: GRADE_POINTS_MAP[s.grade] ?? 0,
+                creditPoints: (parseFloat(s.credits) || 0) * (GRADE_POINTS_MAP[s.grade] ?? 0)
+              })),
+              metrics: [
+                { label: 'Total Credits', value: metrics.totalCredits },
+                { label: 'Total Grade Points', value: Math.round(metrics.totalPoints) },
+                { label: 'Percentage Equivalent', value: `${metrics.percentage.toFixed(2)}%` },
+                { label: 'Letter Grade', value: metrics.letterGrade }
+              ]
+            }}
+            shareData={{
+              toolName: 'GPA',
+              score: metrics.gpa.toFixed(2),
+              scaleText: 'out of 10',
+              metrics: [
+                { label: 'Total Credits', value: metrics.totalCredits },
+                { label: 'Total Grade Points', value: Math.round(metrics.totalPoints) },
+                { label: 'Percentage', value: `${metrics.percentage.toFixed(2)}%` },
+                { label: 'Letter Grade', value: metrics.letterGrade }
+              ],
+              metadata: {
+                university: university.toUpperCase(),
+                regulation: regulation.toUpperCase()
+              }
+            }}
+            onSave={(record) => {
+              setPendingCalc(record);
+              setIsModalOpen(true);
+            }}
           />
         </div>
 
@@ -178,7 +305,16 @@ export default function GPACalculator() {
         <ExploreMoreTools />
       </main>
 
-      <SaveModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+      <SaveModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        calculationData={pendingCalc}
+        onSaveSuccess={(saved) => {
+          if (saved) {
+            dispatch(saveCalculationToHistory(saved));
+          }
+        }}
+      />
     </>
   );
 }
