@@ -9,6 +9,7 @@ export const SEED_ACCOUNTS = [
     email: 'student@resultpoint.edu',
     password: 'password123',
     role: 'student',
+    status: 'Active',
     hasCompletedProfile: true,
     avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=256&q=80',
     universityId: 'osmania',
@@ -34,8 +35,10 @@ export const SEED_ACCOUNTS = [
     email: 'admin@resultpoint.edu',
     password: 'adminpassword123',
     role: 'admin',
+    status: 'Active',
     avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=128&q=80',
-    title: 'Platform Owner'
+    title: 'Platform Owner',
+    joinedDate: '2026-01-01'
   }
 ];
 
@@ -79,6 +82,10 @@ export const authService = {
           if (!users[existingIdx].phoneNumber) users[existingIdx].phoneNumber = seed.phoneNumber;
           if (!users[existingIdx].dob) users[existingIdx].dob = seed.dob;
           if (!users[existingIdx].gender) users[existingIdx].gender = seed.gender;
+          modified = true;
+        }
+        if (!users[existingIdx].status) {
+          users[existingIdx].status = seed.status || 'Active';
           modified = true;
         }
       }
@@ -278,6 +285,13 @@ export const authService = {
       return {
         success: false,
         error: 'Invalid email or password. Please verify your credentials.'
+      };
+    }
+
+    if (found.status && (found.status.toLowerCase() === 'inactive' || found.status.toLowerCase() === 'suspended')) {
+      return {
+        success: false,
+        error: `Your account is ${found.status.toLowerCase()}. Please contact the platform administrator for assistance.`
       };
     }
 

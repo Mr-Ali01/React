@@ -53,7 +53,7 @@ export default function Footer() {
               <li><Link to="/calculators/target-cgpa" className="hover:text-accent transition-colors">Target CGPA Calculator</Link></li>
               <li><Link to="/calculators/grade" className="hover:text-accent transition-colors">Grade Calculator</Link></li>
               <li><Link to="/calculators/marks-grade" className="hover:text-accent transition-colors">Marks to Grade</Link></li>
-              <li><Link to="/calculators/credite-calculate" className="hover:text-accent transition-colors">Credits Calculator</Link></li>
+              <li><Link to="/calculators/credit-calculate" className="hover:text-accent transition-colors">Credits Calculator</Link></li>
             </ul>
           </div>
 
@@ -63,7 +63,7 @@ export default function Footer() {
             <ul className="space-y-1.5 text-xs text-[#A1A1AA]">
               <li><Link to="/calculators/result-analysis" className="hover:text-accent transition-colors">Result Analyzer</Link></li>
               <li><Link to="/calculators/backlog" className="hover:text-accent transition-colors">Backlog Calculator</Link></li>
-              <li><Link to="/calculators/credite-calculate" className="hover:text-accent transition-colors">Credits Calculator</Link></li>
+              <li><Link to="/calculators/credit-calculate" className="hover:text-accent transition-colors">Credits Calculator</Link></li>
               <li><Link to="/calculators/marks-grade" className="hover:text-accent transition-colors">Marks to Grade</Link></li>
               <li><Link to="/tools/study-planner" className="hover:text-accent transition-colors">Study Planner</Link></li>
               <li><Link to="/tools/cgpa-converter" className="hover:text-accent transition-colors">CGPA Converter</Link></li>

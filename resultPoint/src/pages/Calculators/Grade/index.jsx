@@ -28,6 +28,8 @@ import { saveCalculationToHistory } from '../../../features/calculation/calculat
 import { calculationSaveService } from '../../../services/calculationSaveService';
 import { downloadCalculatorPdf } from '../../../services/calculatorPdfService';
 import { shareCalculationResult } from '../../../services/calculatorShareService';
+import { academicCatalogService } from '../../../services/academicCatalogService';
+import { academicCalculationEngine } from '../../../services/academicCalculationEngine';
 
 const GRADING_TABLE_DATA = [
   { range: '90 - 100', grade: 'S', points: 10, performance: 'Outstanding', badgeClass: 'bg-emerald-500/10 text-brandGreen' },
@@ -95,26 +97,71 @@ export default function GradeCalculator() {
     showToast('Form reset to default marks (85 / 100)');
   };
 
+  // Live Catalog Configuration & Dynamic Grading Scale
+  const catalogConfig = useMemo(() => {
+    try {
+      return academicCatalogService.getFullConfiguration(university, course, regulation);
+    } catch {
+      return null;
+    }
+  }, [university, course, regulation]);
+
+  const displayedGradingTable = useMemo(() => {
+    if (catalogConfig?.gradeScale && Array.isArray(catalogConfig.gradeScale) && catalogConfig.gradeScale.length > 0) {
+      return catalogConfig.gradeScale.map((tier) => ({
+        range: `${tier.minPercentage} - ${tier.maxPercentage || 100}%`,
+        grade: tier.grade,
+        points: tier.points,
+        performance: tier.desc,
+        badgeClass:
+          tier.points >= 8
+            ? 'bg-emerald-500/10 text-brandGreen'
+            : tier.points >= 6
+            ? 'bg-blue-500/10 text-brandBlue'
+            : tier.points >= 4
+            ? 'bg-amber-500/10 text-brandAmber'
+            : 'bg-pink-500/10 text-brandPink',
+      }));
+    }
+    return GRADING_TABLE_DATA;
+  }, [catalogConfig]);
+
   // Grade Evaluation Calculation
   const result = useMemo(() => {
     const percentage = maxMarks > 0 ? (obtainedMarks / maxMarks) * 100 : 0;
     const roundedPercent = parseFloat(percentage.toFixed(2));
 
-    let evaluated = { grade: 'F', points: 0, performance: 'Fail', rowIdx: 7, icon: '⚠️' };
-    if (roundedPercent >= 90) {
-      evaluated = { grade: 'S', points: 10, performance: 'Outstanding', rowIdx: 0, icon: '🏆' };
-    } else if (roundedPercent > 85) {
-      evaluated = { grade: 'A+', points: 9, performance: 'Excellent', rowIdx: 1, icon: '🏆' };
-    } else if (roundedPercent >= 70) {
-      evaluated = { grade: 'A', points: 8, performance: 'Very Good', rowIdx: 2, icon: '🌟' };
-    } else if (roundedPercent >= 60) {
-      evaluated = { grade: 'B+', points: 7, performance: 'Good', rowIdx: 3, icon: '🌟' };
-    } else if (roundedPercent >= 50) {
-      evaluated = { grade: 'B', points: 6, performance: 'Above Average', rowIdx: 4, icon: '📈' };
-    } else if (roundedPercent >= 40) {
-      evaluated = { grade: 'C', points: 5, performance: 'Average', rowIdx: 5, icon: '📈' };
-    } else if (roundedPercent >= 30) {
-      evaluated = { grade: 'D', points: 4, performance: 'Pass', rowIdx: 6, icon: '📈' };
+    let evaluated = null;
+    let activeRowIdx = -1;
+
+    if (catalogConfig?.gradeScale && Array.isArray(catalogConfig.gradeScale) && catalogConfig.gradeScale.length > 0) {
+      const engineRes = academicCalculationEngine.getGradeFromMarks(obtainedMarks, maxMarks, catalogConfig.gradeScale);
+      activeRowIdx = catalogConfig.gradeScale.findIndex((g) => g.grade === engineRes.grade);
+      evaluated = {
+        grade: engineRes.grade,
+        points: engineRes.points,
+        performance: engineRes.desc,
+        rowIdx: activeRowIdx,
+        icon: engineRes.points >= 8 ? '🏆' : engineRes.points >= 6 ? '🌟' : engineRes.points >= 4 ? '📈' : '⚠️',
+      };
+    } else {
+      let fallback = { grade: 'F', points: 0, performance: 'Fail', rowIdx: 7, icon: '⚠️' };
+      if (roundedPercent >= 90) {
+        fallback = { grade: 'O', points: 10, performance: 'Outstanding', rowIdx: 0, icon: '🏆' };
+      } else if (roundedPercent >= 80) {
+        fallback = { grade: 'A+', points: 9, performance: 'Excellent', rowIdx: 1, icon: '🏆' };
+      } else if (roundedPercent >= 70) {
+        fallback = { grade: 'A', points: 8, performance: 'Very Good', rowIdx: 2, icon: '🌟' };
+      } else if (roundedPercent >= 60) {
+        fallback = { grade: 'B+', points: 7, performance: 'Good', rowIdx: 3, icon: '🌟' };
+      } else if (roundedPercent >= 50) {
+        fallback = { grade: 'B', points: 6, performance: 'Above Average', rowIdx: 4, icon: '📈' };
+      } else if (roundedPercent >= 40) {
+        fallback = { grade: 'C', points: 5, performance: 'Average', rowIdx: 5, icon: '📈' };
+      } else if (roundedPercent >= 30) {
+        fallback = { grade: 'D', points: 4, performance: 'Pass', rowIdx: 6, icon: '📈' };
+      }
+      evaluated = fallback;
     }
 
     const circumference = 2 * Math.PI * 64; // ~402.12
@@ -126,7 +173,7 @@ export default function GradeCalculator() {
       strokeDashoffset,
       ...evaluated,
     };
-  }, [maxMarks, obtainedMarks]);
+  }, [maxMarks, obtainedMarks, catalogConfig]);
 
   const handleSaveResult = () => {
     const calcRecord = {
@@ -472,7 +519,7 @@ export default function GradeCalculator() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border/50 font-medium">
-                    {GRADING_TABLE_DATA.map((row, idx) => {
+                    {displayedGradingTable.map((row, idx) => {
                       const isActive = idx === result.rowIdx;
                       return (
                         <tr

@@ -29,6 +29,10 @@ import {
   RESOURCES_DATA,
   filterResources
 } from '../../data/resourcesData';
+import {
+  resourceManagementService,
+  RESOURCE_UPDATED_EVENT
+} from '../../services/resourceManagementService';
 import { useToast } from '../../context/ToastContext';
 
 export default function ResourcesPage() {
@@ -37,17 +41,43 @@ export default function ResourcesPage() {
   const [submittedSearch, setSubmittedSearch] = useState('');
   const [sortBy, setSortBy] = useState('latest');
 
+  // Dynamic published resources from canonical service
+  const [publishedResources, setPublishedResources] = useState(() => {
+    try {
+      return resourceManagementService.getPublicResources();
+    } catch {
+      return RESOURCES_DATA;
+    }
+  });
+
+  useEffect(() => {
+    const handleUpdate = () => {
+      try {
+        setPublishedResources(resourceManagementService.getPublicResources());
+      } catch (err) {
+        console.warn('Failed to refresh resources:', err);
+      }
+    };
+
+    window.addEventListener(RESOURCE_UPDATED_EVENT, handleUpdate);
+    window.addEventListener('storage', handleUpdate);
+    return () => {
+      window.removeEventListener(RESOURCE_UPDATED_EVENT, handleUpdate);
+      window.removeEventListener('storage', handleUpdate);
+    };
+  }, []);
+
   const { showToast } = useToast();
   const navigate = useNavigate();
 
   // Filtered & sorted resources
   const visibleResources = useMemo(() => {
-    return filterResources(RESOURCES_DATA, {
+    return filterResources(publishedResources, {
       category: selectedCategory,
       searchQuery: submittedSearch,
       sortBy
     });
-  }, [selectedCategory, submittedSearch, sortBy]);
+  }, [publishedResources, selectedCategory, submittedSearch, sortBy]);
 
   // Handle Search Submission
   const handleSearchSubmit = (e) => {
@@ -92,6 +122,9 @@ export default function ResourcesPage() {
   // Download Action Handler
   const handleDownload = (e, resource) => {
     e.stopPropagation();
+    if (resource.id) {
+      resourceManagementService.incrementDownloadCount(resource.id);
+    }
     if (resource.fileUrl) {
       showToast(`Opening download portal for: ${resource.title}`);
       window.open(resource.fileUrl, '_blank', 'noopener,noreferrer');
@@ -102,6 +135,9 @@ export default function ResourcesPage() {
 
   // Read Action Handler
   const handleRead = (resource) => {
+    if (resource.id) {
+      resourceManagementService.incrementViewCount(resource.id);
+    }
     if (resource.detailRoute) {
       navigate(resource.detailRoute);
     } else {

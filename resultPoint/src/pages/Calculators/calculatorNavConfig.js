@@ -26,7 +26,7 @@ export const CALCULATOR_CATEGORIES = [
     items: [
       { key: 'grade', name: 'Grade Calculator', path: '/calculators/grade', icon: FileCheck, color: 'text-brandPurple' },
       { key: 'marks-grade', name: 'Marks Convert', path: '/calculators/marks-convert', icon: Award, color: 'text-brandCyan' },
-      { key: 'credits', name: 'Credits Calculator', path: '/calculators/credite-calculate', icon: Layers, color: 'text-brandBlue' },
+      { key: 'credits', name: 'Credits Calculator', path: '/calculators/credit-calculate', icon: Layers, color: 'text-brandBlue' },
     ],
   },
   {

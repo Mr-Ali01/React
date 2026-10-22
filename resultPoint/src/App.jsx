@@ -24,6 +24,14 @@ import MarksConvert from './pages/Calculators/MarksConvert';
 import TargetCGPACalculator from './pages/Calculators/TargetCGPA';
 import BacklogCalculator from './pages/Calculators/Backlog';
 import ResultAnalysis from './pages/Calculators/ResultAnalysis';
+import PlaceholderToolPage from './pages/tools/PlaceholderToolPage';
+import SGPAToCGPACalculator from './pages/tools/SGPAToCGPACalculator';
+import GPAScaleConverter from './pages/tools/GPAScaleConverter';
+import GradePredictor from './pages/tools/GradePredictor';
+import AttendanceCalculator from './pages/tools/AttendanceCalculator';
+import ResultPdfGenerator from './pages/tools/ResultPdfGenerator';
+import CGPAInfoFinder from './pages/tools/CGPAInfoFinder';
+import CGPAImprovementGuide from './pages/tools/CGPAImprovementGuide';
 import Universities from './pages/Universities';
 import UniversityDetails from './pages/Universities/UniversityDetails';
 import ResourcesDirectory from './pages/Resources';
@@ -56,6 +64,17 @@ import AdminLayout from './pages/admin/AdminLayout';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import AcademicCatalogManager from './pages/admin/AcademicCatalogManager';
 import AdminManagementPage from './pages/admin/AdminManagementPage';
+import UsersManager from './pages/admin/UsersManager';
+import SupportQueriesManager from './pages/admin/SupportQueriesManager';
+import AnnouncementsManager from './pages/admin/AnnouncementsManager';
+import ReportsAnalyticsManager from './pages/admin/ReportsAnalyticsManager';
+import ToolsManager from './pages/admin/ToolsManager';
+import ResourcesManager from './pages/admin/ResourcesManager';
+import BlogsManager from './pages/admin/BlogsManager';
+import SettingsManager from './pages/admin/SettingsManager';
+import BlogPage from './pages/Blog';
+import ActiveAnnouncementBanner from './components/common/ActiveAnnouncementBanner';
+import CalculatorRouteGuard from './components/common/CalculatorRouteGuard';
 import {
   Users,
   Wrench,
@@ -75,6 +94,9 @@ function PublicLayout({ mobileMenuOpen, setMobileMenuOpen }) {
     <div className="selection:bg-accent selection:text-white flex flex-col min-h-screen antialiased relative">
       <Header onOpenMobileMenu={() => setMobileMenuOpen(true)} />
       <PendingCalculationBanner />
+      <div className="max-w-7xl mx-auto w-full px-4 pt-2">
+        <ActiveAnnouncementBanner isPublicOnly={true} />
+      </div>
       <MobileDrawer isOpen={mobileMenuOpen} onClose={() => setMobileMenuOpen(false)} />
 
       <main className="flex-grow">
@@ -153,20 +175,20 @@ export default function App() {
             >
               <Route index element={<AdminDashboard />} />
               <Route path="dashboard" element={<AdminDashboard />} />
-              <Route path="users" element={<AdminManagementPage title="Users Management" icon={Users} description="View and manage student accounts, verification statuses, and credentials." />} />
+              <Route path="users" element={<UsersManager />} />
               <Route path="universities" element={<AcademicCatalogManager initialTab="universities" />} />
               <Route path="courses" element={<AcademicCatalogManager initialTab="courses" />} />
               <Route path="regulations" element={<AcademicCatalogManager initialTab="regulations" />} />
               <Route path="subjects" element={<AcademicCatalogManager initialTab="subjects" />} />
               <Route path="grading-rules" element={<AcademicCatalogManager initialTab="grading" />} />
               <Route path="calculation-rules" element={<AcademicCatalogManager initialTab="calculations" />} />
-              <Route path="tools" element={<AdminManagementPage title="Tools Management" icon={Wrench} description="Configure platform calculators, conversion algorithms, and tool availability." />} />
-              <Route path="resources" element={<AdminManagementPage title="Resources Management" icon={FolderOpen} description="Manage academic guides, syllabus PDFs, and study materials." />} />
-              <Route path="blogs" element={<AdminManagementPage title="Blog Management" icon={Newspaper} description="Publish articles, student advice, and academic performance strategies." />} />
-              <Route path="announcements" element={<AdminManagementPage title="Announcements" icon={Bell} description="Broadcast platform notices and institutional schedule changes." />} />
-              <Route path="reports" element={<AdminManagementPage title="Reports & Analytics" icon={BarChart2} description="View deep dive calculation analytics, conversion frequency, and university rankings." />} />
-              <Route path="support" element={<AdminManagementPage title="Support Queries" icon={MessageSquare} description="Respond to student calculation questions, grade discrepancies, and feedback." badge="12 Open" />} />
-              <Route path="settings" element={<AdminManagementPage title="Settings & Activity Logs" icon={Settings} description="Configure platform permissions, institutional security, and audit trails." />} />
+              <Route path="tools" element={<ToolsManager />} />
+              <Route path="resources" element={<ResourcesManager />} />
+              <Route path="blogs" element={<BlogsManager />} />
+              <Route path="announcements" element={<AnnouncementsManager />} />
+              <Route path="reports" element={<ReportsAnalyticsManager />} />
+              <Route path="support" element={<SupportQueriesManager />} />
+              <Route path="settings" element={<SettingsManager />} />
               <Route path="catalog" element={<AcademicCatalogManager />} />
               <Route path="curriculum" element={<AcademicCatalogManager initialTab="subjects" />} />
             </Route>
@@ -185,16 +207,32 @@ export default function App() {
             >
               <Route path="/" element={<Home />} />
               <Route path="/calculators" element={<ToolsDirectory />} />
-              <Route path="/calculators/cgpa" element={<CGPACalculators />} />
-              <Route path="/calculators/sgpa" element={<SGPACalculator />} />
-              <Route path="/calculators/gpa" element={<GPACalculator />} />
-              <Route path="/calculators/percentage" element={<PercentageCalculator />} />
-              <Route path="/calculators/grade" element={<GradeCalculator />} />
-              <Route path="/calculators/credite-calculate" element={<CreditsCalculator />} />
-              <Route path="/calculators/marks-convert" element={<MarksConvert />} />
-              <Route path="/calculators/target-cgpa" element={<TargetCGPACalculator />} />
-              <Route path="/calculators/backlog" element={<BacklogCalculator />} />
-              <Route path="/calculators/result-analysis" element={<ResultAnalysis />} />
+              <Route path="/calculators/cgpa" element={<CalculatorRouteGuard toolId="cgpa-calculator"><CGPACalculators /></CalculatorRouteGuard>} />
+              <Route path="/calculators/sgpa" element={<CalculatorRouteGuard toolId="sgpa-calculator"><SGPACalculator /></CalculatorRouteGuard>} />
+              <Route path="/calculators/gpa" element={<CalculatorRouteGuard toolId="cgpa-converter"><GPACalculator /></CalculatorRouteGuard>} />
+              <Route path="/calculators/percentage" element={<CalculatorRouteGuard toolId="percentage-calculator"><PercentageCalculator /></CalculatorRouteGuard>} />
+              <Route path="/calculators/grade" element={<CalculatorRouteGuard toolId="grade-calculator"><GradeCalculator /></CalculatorRouteGuard>} />
+              <Route path="/calculators/credit-calculate" element={<CalculatorRouteGuard toolId="credits-calculator"><CreditsCalculator /></CalculatorRouteGuard>} />
+              <Route path="/calculators/credite-calculate" element={<Navigate to="/calculators/credit-calculate" replace />} />
+              <Route path="/calculators/marks-convert" element={<CalculatorRouteGuard toolId="cgpa-converter"><MarksConvert /></CalculatorRouteGuard>} />
+              <Route path="/calculators/target-cgpa" element={<CalculatorRouteGuard toolId="target-cgpa"><TargetCGPACalculator /></CalculatorRouteGuard>} />
+              <Route path="/calculators/backlog" element={<CalculatorRouteGuard toolId="backlog-calculator"><BacklogCalculator /></CalculatorRouteGuard>} />
+              <Route path="/calculators/result-analysis" element={<CalculatorRouteGuard toolId="result-analyzer"><ResultAnalysis /></CalculatorRouteGuard>} />
+
+              {/* Academic Tools & Utilities (Functional Standalone Tools & Future Placeholders) */}
+              <Route path="/tools" element={<Navigate to="/calculators" replace />} />
+              <Route path="/tools/predictor" element={<CalculatorRouteGuard toolId="cgpa-predictor"><PlaceholderToolPage toolId="cgpa-predictor" /></CalculatorRouteGuard>} />
+              <Route path="/tools/sgpa-to-cgpa" element={<CalculatorRouteGuard toolId="sgpa-to-cgpa"><SGPAToCGPACalculator /></CalculatorRouteGuard>} />
+              <Route path="/tools/study-planner" element={<CalculatorRouteGuard toolId="study-planner"><PlaceholderToolPage toolId="study-planner" /></CalculatorRouteGuard>} />
+              <Route path="/tools/performance-trend" element={<CalculatorRouteGuard toolId="performance-trend"><PlaceholderToolPage toolId="performance-trend" /></CalculatorRouteGuard>} />
+              <Route path="/tools/scale-converter" element={<CalculatorRouteGuard toolId="gpa-scale-converter"><GPAScaleConverter /></CalculatorRouteGuard>} />
+              <Route path="/tools/grade-predictor" element={<CalculatorRouteGuard toolId="grade-predictor"><GradePredictor /></CalculatorRouteGuard>} />
+              <Route path="/tools/attendance" element={<CalculatorRouteGuard toolId="attendance-calculator"><AttendanceCalculator /></CalculatorRouteGuard>} />
+              <Route path="/tools/semester-planner" element={<CalculatorRouteGuard toolId="semester-planner"><PlaceholderToolPage toolId="semester-planner" /></CalculatorRouteGuard>} />
+              <Route path="/tools/cgpa-info" element={<CalculatorRouteGuard toolId="cgpa-info-finder"><CGPAInfoFinder /></CalculatorRouteGuard>} />
+              <Route path="/tools/pdf-gen" element={<CalculatorRouteGuard toolId="result-pdf-generator"><ResultPdfGenerator /></CalculatorRouteGuard>} />
+              <Route path="/tools/improvement" element={<CalculatorRouteGuard toolId="cgpa-improvement"><CGPAImprovementGuide /></CalculatorRouteGuard>} />
+
               <Route path="/universities" element={<Universities />} />
               <Route path="/universities/details" element={<UniversityDetails />} />
               <Route path="/universities/:id" element={<UniversityDetails />} />
@@ -202,6 +240,8 @@ export default function App() {
               <Route path="/resources/details" element={<ResourceDetail />} />
               <Route path="/resources/resource-details" element={<ResourceDetail />} />
               <Route path="/resources/jntuh-r18-guide" element={<ResourceDetail />} />
+              <Route path="/blog" element={<BlogPage />} />
+              <Route path="/blogs" element={<BlogPage />} />
               <Route path="/about" element={<About />} />
               <Route path="/contact" element={<Contact />} />
             </Route>

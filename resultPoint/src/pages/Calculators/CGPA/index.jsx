@@ -37,6 +37,8 @@ import { saveCalculationToHistory } from '../../../features/calculation/calculat
 import { calculationSaveService } from '../../../services/calculationSaveService';
 import { downloadCalculatorPdf } from '../../../services/calculatorPdfService';
 import { shareCalculationResult } from '../../../services/calculatorShareService';
+import { academicCatalogService } from '../../../services/academicCatalogService';
+import { academicCalculationEngine } from '../../../services/academicCalculationEngine';
 import { useToast } from '../../../context/ToastContext';
 
 export default function CGPACalculator() {
@@ -55,7 +57,15 @@ export default function CGPACalculator() {
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
 
-  // Active Regulation Data
+  // Active Regulation Data & Central Catalog Configuration
+  const catalogConfig = useMemo(() => {
+    try {
+      return academicCatalogService.getFullConfiguration(selectedUni, selectedCourse, selectedRegulation);
+    } catch {
+      return null;
+    }
+  }, [selectedUni, selectedCourse, selectedRegulation]);
+
   const activeReg = useMemo(() => {
     return UNIVERSITY_DATA[selectedUni]?.courses[selectedCourse]?.regulations[selectedRegulation] || null;
   }, [selectedUni, selectedCourse, selectedRegulation]);
@@ -67,6 +77,10 @@ export default function CGPACalculator() {
   });
 
   const getPointsForGrade = (gradeSymbol) => {
+    if (catalogConfig?.gradeScale) {
+      const found = catalogConfig.gradeScale.find((g) => g.grade === gradeSymbol);
+      if (found) return Number(found.points);
+    }
     if (!activeReg) return 0;
     const found = activeReg.grades.find((g) => g.grade === gradeSymbol);
     return found ? found.points : 0;
@@ -130,18 +144,24 @@ export default function CGPACalculator() {
     });
 
     const cgpa = totalCredits > 0 ? totalPoints / totalCredits : 0;
-    const percentage = cgpa * 10;
+    
+    // Wire to central Academic Calculation Engine with regulation's rule
+    const percentRes = academicCalculationEngine.convertCGPAToPercentage(
+      cgpa,
+      catalogConfig?.calculationRule || (selectedUni === 'jntuh' ? '(CGPA - 0.5) * 10' : 'CGPA * 10')
+    );
+    const percentage = percentRes.percentage;
 
     let letterGrade = 'F';
-    if (cgpa >= 9.0) letterGrade = 'A+';
+    if (cgpa >= 9.0) letterGrade = catalogConfig?.gradeScale?.[0]?.grade || 'A+';
     else if (cgpa >= 8.0) letterGrade = 'A';
     else if (cgpa >= 7.0) letterGrade = 'B+';
     else if (cgpa >= 6.0) letterGrade = 'B';
     else if (cgpa >= 5.0) letterGrade = 'C';
     else if (cgpa >= 4.0) letterGrade = 'D';
 
-    return { totalCredits, totalPoints, cgpa, percentage, letterGrade };
-  }, [subjects, activeReg]);
+    return { totalCredits, totalPoints, cgpa, percentage, letterGrade, formulaUsed: percentRes.formulaUsed };
+  }, [subjects, activeReg, catalogConfig, selectedUni]);
 
   const handleSaveResult = () => {
     const calcRecord = {

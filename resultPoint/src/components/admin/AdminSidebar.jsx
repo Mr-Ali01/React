@@ -67,10 +67,12 @@ export default function AdminSidebar({
     };
 
     window.addEventListener('storage', handleUpdate);
+    window.addEventListener('rp_queries_updated', handleUpdate);
     window.addEventListener('focus', handleUpdate);
 
     return () => {
       window.removeEventListener('storage', handleUpdate);
+      window.removeEventListener('rp_queries_updated', handleUpdate);
       window.removeEventListener('focus', handleUpdate);
     };
   }, []);

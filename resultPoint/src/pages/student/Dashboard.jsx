@@ -14,6 +14,7 @@ import RecentResults from '../../components/student/RecentResults';
 import AcademicGoalCard from '../../components/student/AcademicGoalCard';
 import PerformanceInsights from '../../components/student/PerformanceInsights';
 import AcademicProfileGate from '../../components/student/AcademicProfileGate';
+import ActiveAnnouncementBanner from '../../components/common/ActiveAnnouncementBanner';
 import { useAppSelector } from '../../hooks/useAppSelector';
 import { useAppDispatch } from '../../hooks/useAppDispatch';
 import { selectAcademicProfile, fetchAcademicProfile } from '../../features/academicProfile/academicProfileSlice';
@@ -75,6 +76,9 @@ export default function StudentDashboard() {
       description="Before accessing your student dashboard and academic metrics, please configure your University, Course, and Regulation so ResultPoint can calculate your SGPA, CGPA, and degree credits accurately."
     >
       <div className={`${dashboardView === 'compact' ? 'space-y-3.5 sm:space-y-4' : dashboardView === 'expanded' ? 'space-y-7 sm:space-y-8' : 'space-y-5 sm:space-y-6'} max-w-7xl mx-auto w-full min-w-0 transition-all duration-200`}>
+      {/* Active Academic Announcements Banner */}
+      <ActiveAnnouncementBanner />
+
       {/* Wide Welcome Banner */}
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-card via-card to-accent/10 dark:from-[#0D141F] dark:via-[#111A26] dark:to-[#1f1915] border border-border p-4 sm:p-6 shadow-subtle">
         

@@ -73,6 +73,9 @@ export default function MobileDrawer({ isOpen, onClose }) {
             <Link onClick={onClose} to="/resources" className="px-3 py-2.5 rounded-lg text-text-h hover:bg-bg-sec transition-colors">
               Resources
             </Link>
+            <Link onClick={onClose} to="/blog" className="px-3 py-2.5 rounded-lg text-text-h hover:bg-bg-sec transition-colors">
+              Articles
+            </Link>
             <Link onClick={onClose} to="/about" className="px-3 py-2.5 rounded-lg text-text-h hover:bg-bg-sec transition-colors">
               About Us
             </Link>

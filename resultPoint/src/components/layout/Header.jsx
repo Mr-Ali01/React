@@ -143,6 +143,17 @@ export default function Header({ onOpenMobileMenu }) {
           </div>
 
           <Link
+            to="/blog"
+            className={`py-1.5 transition-colors ${
+              isActive('/blog') || isActive('/blogs')
+                ? 'text-accent font-bold border-b-2 border-accent'
+                : 'text-text-m hover:text-text-h'
+            }`}
+          >
+            Articles
+          </Link>
+
+          <Link
             to="/about"
             className={`py-1.5 transition-colors ${
               isActive('/about')

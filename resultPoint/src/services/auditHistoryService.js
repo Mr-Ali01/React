@@ -62,7 +62,7 @@ function generateSeedAuditEvents() {
 export const auditHistoryService = {
   initialize() {
     const existing = safeGet(STORAGE_KEYS.AUDIT_HISTORY, null);
-    if (!existing || !Array.isArray(existing) || existing.length === 0) {
+    if (existing === null || !Array.isArray(existing)) {
       const seeded = generateSeedAuditEvents();
       safeSet(STORAGE_KEYS.AUDIT_HISTORY, seeded);
     }
@@ -105,6 +105,12 @@ export const auditHistoryService = {
         ? `${entityName || entityId || 'Grading Scale'} ${action}`
         : entityType === 'calculation_rule'
         ? `${entityName || entityId || 'Calculation Rule'} ${action}`
+        : entityType === 'user'
+        ? `${entityName || entityId || 'User'} ${action}`
+        : entityType === 'support_query'
+        ? `${entityName || entityId || 'Support Ticket'} ${action}`
+        : entityType === 'announcement'
+        ? `${entityName || entityId || 'Announcement'} ${action}`
         : semesterLabel
         ? `${semesterLabel} ${action}`
         : `${action}`);
@@ -139,16 +145,150 @@ export const auditHistoryService = {
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new Event('academic_history_updated'));
       window.dispatchEvent(new Event('activity_history_updated'));
+      try {
+        window.dispatchEvent(
+          new CustomEvent('rp_audit_updated', {
+            detail: { action, event: newEvent, timestamp: new Date().toISOString() }
+          })
+        );
+      } catch {}
       window.dispatchEvent(new Event('storage'));
     }
 
     return newEvent;
   },
 
+  getFilteredAuditEvents(options = {}) {
+    const events = this.getAllAuditEvents();
+    const {
+      search = '',
+      entityType = 'all',
+      action = 'all',
+      actor = 'all',
+      dateRange = 'all',
+      sortBy = 'latest',
+      page = 1,
+      pageSize = 15
+    } = options;
+
+    let filtered = [...events];
+
+    // Entity Type filter
+    if (entityType && entityType !== 'all') {
+      filtered = filtered.filter((e) => (e.entityType || '').toLowerCase() === entityType.toLowerCase());
+    }
+
+    // Action filter
+    if (action && action !== 'all') {
+      filtered = filtered.filter((e) => (e.action || '').toUpperCase() === action.toUpperCase());
+    }
+
+    // Actor filter
+    if (actor && actor !== 'all') {
+      filtered = filtered.filter((e) => (e.actor || '').toLowerCase() === actor.toLowerCase());
+    }
+
+    // Date Range filter
+    if (dateRange && dateRange !== 'all') {
+      const now = new Date();
+      let threshold = null;
+      if (dateRange === 'today') {
+        threshold = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      } else if (dateRange === '7d') {
+        threshold = new Date(now.getTime() - 7 * 86400000);
+      } else if (dateRange === '30d') {
+        threshold = new Date(now.getTime() - 30 * 86400000);
+      } else if (dateRange === '90d') {
+        threshold = new Date(now.getTime() - 90 * 86400000);
+      }
+
+      if (threshold) {
+        filtered = filtered.filter((e) => {
+          if (!e.timestamp) return false;
+          return new Date(e.timestamp) >= threshold;
+        });
+      }
+    }
+
+    // Search term
+    if (search && search.trim()) {
+      const q = search.trim().toLowerCase();
+      filtered = filtered.filter((e) => {
+        const inTitle = (e.title || '').toLowerCase().includes(q);
+        const inAction = (e.action || '').toLowerCase().includes(q);
+        const inActor = (e.actor || '').toLowerCase().includes(q);
+        const inEntity = (e.entityType || '').toLowerCase().includes(q);
+        const inEntityName = (e.entityName || '').toLowerCase().includes(q);
+        const inEntityId = (e.entityId || '').toLowerCase().includes(q);
+        const inDetails = (e.details || '').toLowerCase().includes(q);
+        return inTitle || inAction || inActor || inEntity || inEntityName || inEntityId || inDetails;
+      });
+    }
+
+    // Sorting
+    if (sortBy === 'latest') {
+      filtered.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    } else if (sortBy === 'oldest') {
+      filtered.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+    }
+
+    // Pagination
+    const totalCount = filtered.length;
+    const totalPages = Math.ceil(totalCount / pageSize) || 1;
+    const currentPage = Math.max(1, Math.min(page, totalPages));
+    const startIndex = (currentPage - 1) * pageSize;
+    const paginatedEvents = filtered.slice(startIndex, startIndex + pageSize);
+
+    return {
+      events: paginatedEvents,
+      totalCount,
+      totalPages,
+      currentPage,
+      pageSize
+    };
+  },
+
+  getAuditStats() {
+    const events = this.getAllAuditEvents();
+    const totalEvents = events.length;
+
+    const actors = new Set();
+    const entityTypes = new Set();
+    const actionCounts = {};
+
+    events.forEach((e) => {
+      if (e.actor) actors.add(e.actor);
+      if (e.entityType) entityTypes.add(e.entityType);
+      const act = e.action || 'UNKNOWN';
+      actionCounts[act] = (actionCounts[act] || 0) + 1;
+    });
+
+    const now = Date.now();
+    const eventsLast24h = events.filter((e) => {
+      if (!e.timestamp) return false;
+      return now - new Date(e.timestamp).getTime() <= 86400000;
+    }).length;
+
+    return {
+      totalEvents,
+      distinctActors: Array.from(actors),
+      distinctEntityTypes: Array.from(entityTypes),
+      actionCounts,
+      eventsLast24h
+    };
+  },
+
   clearAuditHistory() {
     safeSet(STORAGE_KEYS.AUDIT_HISTORY, []);
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new Event('academic_history_updated'));
+      try {
+        window.dispatchEvent(
+          new CustomEvent('rp_audit_updated', {
+            detail: { action: 'CLEAR', timestamp: new Date().toISOString() }
+          })
+        );
+      } catch {}
     }
   },
 

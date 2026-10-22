@@ -1,0 +1,4 @@
+-------------------------------------------------------------------------------
+Test set: com.resultpoint.Phase1MigrationValidationTest
+-------------------------------------------------------------------------------
+Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.509 s -- in com.resultpoint.Phase1MigrationValidationTest

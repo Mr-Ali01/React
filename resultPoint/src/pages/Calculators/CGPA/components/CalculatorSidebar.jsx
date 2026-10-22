@@ -76,7 +76,7 @@ export default function CalculatorSidebar() {
             <span>Marks to Grade</span>
           </Link>
           <Link
-            to="/calculators/credite-calculate"
+            to="/calculators/credit-calculate"
             className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-xs font-medium text-text-secondary hover:text-text-primary hover:bg-surface transition-all"
           >
             <Layers className="w-3.5 h-3.5 text-indigo-500" />

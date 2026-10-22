@@ -17,5 +17,9 @@ export const STORAGE_KEYS = {
   ACTIVE_EDUCATION_ID: 'resultpoint_active_education_id',
   PENDING_CALCULATION: 'resultpoint_pending_calculation',
   SUPPORT_QUERIES: 'resultpoint_support_queries',
+  ANNOUNCEMENTS: 'resultpoint_announcements',
+  TOOLS: 'resultpoint_tools',
+  RESOURCES: 'resultpoint_resources',
+  BLOGS: 'resultpoint_blogs',
 };
 

@@ -33,6 +33,9 @@ export default function SubjectFormTable({
   maxSubjects = 12,
   infoBannerText = 'Enter your subjects, credits and grades to calculate your result.',
   actionButtonText = 'Calculate & Save',
+  universityOptions,
+  courseOptions,
+  regulationOptions,
 }) {
   return (
     <div className="lg:col-span-6 xl:col-span-7 space-y-3.5">
@@ -48,10 +51,18 @@ export default function SubjectFormTable({
                 onChange={(e) => setUniversity(e.target.value)}
                 className="calc-input w-full px-3 py-2 rounded-xl text-xs font-medium cursor-pointer appearance-none pr-8"
               >
-                <option value="jntuh">JNTU Hyderabad</option>
-                <option value="anna">Anna University</option>
-                <option value="osmania">Osmania University</option>
-                <option value="generic">Standard 10-Point Scale</option>
+                {universityOptions && universityOptions.length > 0 ? (
+                  universityOptions.map((u) => (
+                    <option key={u.id} value={u.id}>{u.name || u.shortName}</option>
+                  ))
+                ) : (
+                  <>
+                    <option value="jntuh">JNTU Hyderabad</option>
+                    <option value="anna">Anna University</option>
+                    <option value="osmania">Osmania University</option>
+                    <option value="generic">Standard 10-Point Scale</option>
+                  </>
+                )}
               </select>
               <ChevronDown className="w-3.5 h-3.5 absolute right-2.5 top-3 pointer-events-none text-text-light" />
             </div>
@@ -65,10 +76,18 @@ export default function SubjectFormTable({
                 onChange={(e) => setCourse(e.target.value)}
                 className="calc-input w-full px-3 py-2 rounded-xl text-xs font-medium cursor-pointer appearance-none pr-8"
               >
-                <option value="btech-cse">B.Tech - Computer Science</option>
-                <option value="btech-ece">B.Tech - Electronics & Comm</option>
-                <option value="btech-it">B.Tech - Information Tech</option>
-                <option value="btech-mech">B.Tech - Mechanical Engg</option>
+                {courseOptions && courseOptions.length > 0 ? (
+                  courseOptions.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name || c.shortName}</option>
+                  ))
+                ) : (
+                  <>
+                    <option value="btech-cse">B.Tech - Computer Science</option>
+                    <option value="btech-ece">B.Tech - Electronics & Comm</option>
+                    <option value="btech-it">B.Tech - Information Tech</option>
+                    <option value="btech-mech">B.Tech - Mechanical Engg</option>
+                  </>
+                )}
               </select>
               <ChevronDown className="w-3.5 h-3.5 absolute right-2.5 top-3 pointer-events-none text-text-light" />
             </div>
@@ -82,9 +101,17 @@ export default function SubjectFormTable({
                 onChange={(e) => setRegulation(e.target.value)}
                 className="calc-input w-full px-3 py-2 rounded-xl text-xs font-medium cursor-pointer appearance-none pr-8"
               >
-                <option value="r18">R18</option>
-                <option value="r22">R22</option>
-                <option value="r16">R16</option>
+                {regulationOptions && regulationOptions.length > 0 ? (
+                  regulationOptions.map((r) => (
+                    <option key={r.id} value={r.id}>{r.name || r.code}</option>
+                  ))
+                ) : (
+                  <>
+                    <option value="r18">R18</option>
+                    <option value="r22">R22</option>
+                    <option value="r16">R16</option>
+                  </>
+                )}
               </select>
               <ChevronDown className="w-3.5 h-3.5 absolute right-2.5 top-3 pointer-events-none text-text-light" />
             </div>

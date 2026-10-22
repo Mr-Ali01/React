@@ -28,12 +28,18 @@ export default function AdminDashboard() {
 
     window.addEventListener('storage', handleUpdate);
     window.addEventListener('rp_catalog_updated', handleUpdate);
+    window.addEventListener('rp_users_updated', handleUpdate);
+    window.addEventListener('rp_queries_updated', handleUpdate);
+    window.addEventListener('rp_announcements_updated', handleUpdate);
     window.addEventListener('activity_history_updated', handleUpdate);
     window.addEventListener('focus', handleUpdate);
 
     return () => {
       window.removeEventListener('storage', handleUpdate);
       window.removeEventListener('rp_catalog_updated', handleUpdate);
+      window.removeEventListener('rp_users_updated', handleUpdate);
+      window.removeEventListener('rp_queries_updated', handleUpdate);
+      window.removeEventListener('rp_announcements_updated', handleUpdate);
       window.removeEventListener('activity_history_updated', handleUpdate);
       window.removeEventListener('focus', handleUpdate);
     };

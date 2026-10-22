@@ -132,9 +132,12 @@ export default function ResultGaugeCard({
         const payload = shareData || {
           toolName: title,
           score: numScore.toFixed(2),
+          maxScale: numMax,
           scaleText: `out of ${numMax}`,
+          standing: standing,
           metrics: metrics.map((m) => ({ label: m.label || m.name, value: m.value })),
-          metadata: metadata
+          metadata: metadata,
+          subjectRows: subjectRows
         };
         const result = await shareCalculationResult(payload);
         if (result.success) {
@@ -270,7 +273,7 @@ export default function ResultGaugeCard({
                 ) : (
                   <Share2 className="w-3.5 h-3.5" />
                 )}
-                <span>Share</span>
+                <span>{isSharing ? 'Sharing...' : 'Share'}</span>
               </button>
             </div>
           </div>

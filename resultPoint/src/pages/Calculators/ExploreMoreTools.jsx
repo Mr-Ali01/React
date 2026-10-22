@@ -16,7 +16,7 @@ const TOOLS = [
   { to: '/calculators/percentage', name: 'Percentage Calculator', desc: 'Convert your marks to percentage accurately', icon: Percent, color: 'text-brandAmber bg-amber-500/10 border-brandAmber/20' },
   { to: '/calculators/grade', name: 'Grade Calculator', desc: 'Find your letter grades based on university rules', icon: FileText, color: 'text-brandPurple bg-purple-500/10 border-brandPurple/20' },
   { to: '/calculators/marks-grade', name: 'Marks to Grade', desc: 'Convert examination marks to grade points', icon: Award, color: 'text-brandPink bg-pink-500/10 border-brandPink/20' },
-  { to: '/calculators/credite-calculate', name: 'Credits Calculator', desc: 'Calculate your earned total degree credits', icon: Layers, color: 'text-brandBlue bg-blue-500/10 border-brandBlue/20' }
+  { to: '/calculators/credit-calculate', name: 'Credits Calculator', desc: 'Calculate your earned total degree credits', icon: Layers, color: 'text-brandBlue bg-blue-500/10 border-brandBlue/20' }
 ];
 
 export default function ExploreMoreTools() {

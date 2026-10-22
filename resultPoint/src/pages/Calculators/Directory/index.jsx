@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Home,
@@ -42,7 +42,8 @@ import {
   Bell,
   Grid
 } from 'lucide-react';
-import { CATEGORIES_CONFIG, TOOLS_DATA } from '../../../data/toolsData';
+import { CATEGORIES_CONFIG } from '../../../data/toolsData';
+import { toolManagementService, TOOL_UPDATED_EVENT } from '../../../services/toolManagementService';
 import { useToast } from '../../../context/ToastContext';
 
 // Icon Dynamic Resolver
@@ -90,6 +91,21 @@ export default function ToolsDirectory() {
   const [requestModalOpen, setRequestModalOpen] = useState(false);
   const [reqToolName, setReqToolName] = useState('');
 
+  // Dynamic tool registry integration
+  const [activeTools, setActiveTools] = useState(() => toolManagementService.getActiveTools());
+
+  useEffect(() => {
+    const handleUpdate = () => {
+      setActiveTools(toolManagementService.getActiveTools());
+    };
+    window.addEventListener(TOOL_UPDATED_EVENT, handleUpdate);
+    window.addEventListener('storage', handleUpdate);
+    return () => {
+      window.removeEventListener(TOOL_UPDATED_EVENT, handleUpdate);
+      window.removeEventListener('storage', handleUpdate);
+    };
+  }, []);
+
   const navigate = useNavigate();
   const { showToast } = useToast();
   const ITEMS_PER_PAGE = 12;
@@ -98,7 +114,7 @@ export default function ToolsDirectory() {
   const filteredTools = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
 
-    const list = TOOLS_DATA.filter((tool) => {
+    const list = activeTools.filter((tool) => {
       if (currentCategory !== 'All Tools' && tool.category !== currentCategory) {
         return false;
       }
@@ -120,7 +136,7 @@ export default function ToolsDirectory() {
       return list.sort((a, b) => a.name.localeCompare(b.name));
     }
     return list.sort((a, b) => b.popularity - a.popularity);
-  }, [currentCategory, searchTerm, sortOrder]);
+  }, [activeTools, currentCategory, searchTerm, sortOrder]);
 
   // Pagination calculation
   const totalItems = filteredTools.length;
@@ -339,12 +355,12 @@ export default function ToolsDirectory() {
             <div className="rounded-2xl bg-card border border-border p-3.5 shadow-subtle">
               <div className="pb-2.5 mb-2.5 border-b border-border flex items-center justify-between">
                 <h2 className="text-xs font-bold uppercase tracking-wider text-text-h">Categories</h2>
-                <span className="text-[10.5px] font-semibold text-text-light">{TOOLS_DATA.length}</span>
+                <span className="text-[10.5px] font-semibold text-text-light">{activeTools.length}</span>
               </div>
 
               <div className="space-y-1 text-xs font-medium">
                 {CATEGORIES_CONFIG.map((cat) => {
-                  const count = cat.name === 'All Tools' ? TOOLS_DATA.length : TOOLS_DATA.filter((t) => t.category === cat.name).length;
+                  const count = cat.name === 'All Tools' ? activeTools.length : activeTools.filter((t) => t.category === cat.name).length;
                   const isActive = cat.name === currentCategory;
                   const Icon = ICON_COMPONENTS[cat.icon] || Grid;
 
@@ -432,7 +448,7 @@ export default function ToolsDirectory() {
                 </Link>
 
                 <Link
-                  to="/calculators/cgpa#target-cgpa"
+                  to="/calculators/target-cgpa"
                   className="w-full p-2 rounded-xl hover:bg-bg-sec flex items-start gap-2.5 text-left text-text-m hover:text-accent transition-colors group"
                 >
                   <div className="w-6 h-6 rounded-md bg-orange-500/10 text-accent flex items-center justify-center shrink-0 mt-0.5">
@@ -784,7 +800,7 @@ export default function ToolsDirectory() {
                 type="button"
                 onClick={() => {
                   setFinderModalOpen(false);
-                  navigate('/calculators/cgpa#target-cgpa');
+                  navigate('/calculators/target-cgpa');
                 }}
                 className="w-full p-2.5 rounded-xl border border-border hover:border-accent hover:bg-accent-soft text-left font-medium text-text-h flex items-center justify-between transition-colors"
               >

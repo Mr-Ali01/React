@@ -22,7 +22,7 @@ const tools = [
   {
     title: 'Credits Calculator',
     desc: 'Calculate total credits earned, distinguish core vs elective weightings, and verify requirements.',
-    to: '/calculators/credite-calculate',
+    to: '/calculators/credit-calculate',
     icon: Layers,
     color: 'bg-blue-500/10 text-brandBlue border-brandBlue/20',
     hoverBorder: 'hover:border-brandBlue/50',

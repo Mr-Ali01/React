@@ -1359,10 +1359,10 @@ export const academicCatalogService = {
     const regulation = this.getRegulation(univId, courseId, regulationId);
     if (!regulation) return null;
 
-    const isMcaOrBca = ['mca', 'bca'].includes(String(course.id).toLowerCase());
+    const isOuMcaOrBca = (univ.id === 'osmania' || univ.id === 'ou') && ['mca', 'bca'].includes(String(course.id).toLowerCase());
 
     const gradeScale = (regulation.gradeScale || []).map((g) => {
-      if (isMcaOrBca && (g.grade === 'O' || g.desc?.toLowerCase().includes('outstanding'))) {
+      if (isOuMcaOrBca && (g.grade === 'O' || g.desc?.toLowerCase().includes('outstanding'))) {
         return {
           ...g,
           grade: 'S',
@@ -1372,9 +1372,48 @@ export const academicCatalogService = {
       return g;
     });
 
-    const gradingSystem = isMcaOrBca
+    const gradingSystem = isOuMcaOrBca
       ? (regulation.gradingSystem || '10-point (S-Grade Scheme)').replace(/O-Grade/gi, 'S-Grade')
       : (regulation.gradingSystem || '10-point');
+
+    let resolvedCalcRule = null;
+    if (regulation.calculationRuleId) {
+      const foundRule = this.getCalculationRule(regulation.calculationRuleId);
+      if (foundRule) {
+        resolvedCalcRule = {
+          id: foundRule.id,
+          name: foundRule.name,
+          sgpaFormula: foundRule.sgpaFormula,
+          cgpaFormula: foundRule.cgpaFormula,
+          percentageFormula: foundRule.percentageFormula,
+          formulaDescription: foundRule.formulaDescription
+        };
+      }
+    }
+    if (!resolvedCalcRule && regulation.calculationRule) {
+      resolvedCalcRule = { ...regulation.calculationRule };
+    }
+    if (!resolvedCalcRule) {
+      if (univ.id === 'jntuh' || univ.id === 'jntu') {
+        resolvedCalcRule = {
+          id: 'jntuh-r18-r22-rule',
+          name: 'JNTUH Standard Formula',
+          sgpaFormula: 'WEIGHTED_CREDIT_SUM',
+          cgpaFormula: 'CUMULATIVE_WEIGHTED_CREDIT_SUM',
+          percentageFormula: '(CGPA - 0.5) * 10',
+          formulaDescription: 'Percentage = (CGPA - 0.5) × 10'
+        };
+      } else {
+        resolvedCalcRule = {
+          id: 'ou-cbcs-standard-rule',
+          name: 'OU Standard CBCS Formula',
+          sgpaFormula: 'WEIGHTED_CREDIT_SUM',
+          cgpaFormula: 'CUMULATIVE_WEIGHTED_CREDIT_SUM',
+          percentageFormula: 'CGPA * 10',
+          formulaDescription: 'Percentage = CGPA × 10'
+        };
+      }
+    }
 
     return {
       university: {
@@ -1399,14 +1438,11 @@ export const academicCatalogService = {
         ruleVersion: regulation.ruleVersion,
         effectiveBatches: regulation.effectiveBatches,
         gradingSystem,
+        calculationRuleId: regulation.calculationRuleId || resolvedCalcRule?.id,
         verificationStatus: regulation.verificationStatus || 'verified'
       },
       gradeScale,
-      calculationRule: regulation.calculationRule || {
-        sgpaFormula: 'WEIGHTED_CREDIT_SUM',
-        cgpaFormula: 'CUMULATIVE_WEIGHTED_CREDIT_SUM',
-        percentageFormula: 'CGPA * 10'
-      },
+      calculationRule: resolvedCalcRule,
       semesters: regulation.semesters || {}
     };
   },

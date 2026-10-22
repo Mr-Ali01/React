@@ -1,0 +1,24 @@
+spring:
+  datasource:
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:resultpoint_dev}?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true&characterEncoding=UTF-8
+    username: ${DB_APP_USER:resultpoint_app}
+    password: ${DB_APP_PASSWORD:App_Secret_2026!}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: none
+    open-in-view: false
+  flyway:
+    enabled: false
+
+resultpoint:
+  jwt:
+    secret: ${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
+    access-token-expiration-seconds: 900
+  cors:
+    allowed-origins: http://localhost:5173,http://localhost:3000
+
+logging:
+  level:
+    root: INFO
+    com.resultpoint: DEBUG

@@ -6,12 +6,62 @@
 
 import { academicCatalogService } from './academicCatalogService.js';
 
+/**
+ * Canonical Academic Rounding Function
+ * Guarantees cross-platform mathematical parity with Java BigDecimal (HALF_UP, FLOOR, CEILING)
+ * and resolves IEEE-754 binary floating-point representation drift (e.g., 1.005 -> 1.01).
+ *
+ * @param {number} value - The numeric value to round
+ * @param {number} precision - Number of decimal places (default 2)
+ * @param {string} mode - 'HALF_UP' | 'FLOOR' | 'CEILING' | 'round' | 'floor' | 'ceil' | 'truncate'
+ * @returns {number}
+ */
+export function roundAcademic(value, precision = 2, mode = 'HALF_UP') {
+  if (value === null || value === undefined || isNaN(value)) return 0;
+  const numPrec = Number(precision);
+  const prec = Number.isFinite(numPrec) ? Math.max(0, Math.min(6, Math.floor(numPrec))) : 2;
+  const normMode = String(mode || 'HALF_UP').toUpperCase();
+  const factor = Math.pow(10, prec);
+
+  if (normMode === 'FLOOR') {
+    return Math.floor(value * factor) / factor;
+  }
+  if (normMode === 'CEILING' || normMode === 'CEIL') {
+    return Math.ceil(value * factor) / factor;
+  }
+  if (normMode === 'TRUNCATE') {
+    return Math.trunc(value * factor) / factor;
+  }
+
+  // HALF_UP (and legacy 'ROUND'):
+  // Tie-breaking away from zero with exponential shift to defeat binary representation drift
+  const sign = value < 0 ? -1 : 1;
+  const absValue = Math.abs(value);
+  const shifted = Number(Math.round(Number(absValue + 'e' + prec)) + 'e-' + prec);
+  return sign * shifted;
+}
+
 export const academicCalculationEngine = {
+  /**
+   * Helper reference to canonical rounding
+   */
+  roundAcademic,
+
   /**
    * Calculates SGPA for a list of course results using the configured grade scale.
    * Standard formula: SGPA = Σ(Credit_i × GradePoint_i) / Σ(Credit_i)
+   *
+   * @param {Array} subjects - List of course objects { credits, grade, points, name }
+   * @param {Array} gradeScale - Regulation grade scale definitions
+   * @param {Object} options - Optional calculation parameters { decimalPrecision, roundingMode }
    */
-  calculateSGPA(subjects = [], gradeScale = []) {
+  calculateSGPA(subjects = [], gradeScale = [], options = {}) {
+    const decimalPrecision =
+      options && Number.isInteger(options.decimalPrecision) && options.decimalPrecision >= 0
+        ? options.decimalPrecision
+        : 2;
+    const roundingMode = options && options.roundingMode ? options.roundingMode : 'HALF_UP';
+
     const gradePointMap = {};
     const passStatusMap = {};
 
@@ -83,7 +133,7 @@ export const academicCalculationEngine = {
     });
 
     const rawSgpa = totalRegisteredCredits > 0 ? weightedPointsSum / totalRegisteredCredits : 0;
-    const sgpa = Number(rawSgpa.toFixed(2));
+    const sgpa = roundAcademic(rawSgpa, decimalPrecision, roundingMode);
 
     // Determine performance standing
     let status = 'Passed';
@@ -115,8 +165,17 @@ export const academicCalculationEngine = {
   /**
    * Calculates true Cumulative Grade Point Average (CGPA) over all completed semesters.
    * Standard formula: CGPA = Σ(Semester_Credits × Semester_SGPA) / Σ(Semester_Credits)
+   *
+   * @param {Array} historicalResults - List of completed semester result objects
+   * @param {Object} options - Optional calculation parameters { decimalPrecision, roundingMode }
    */
-  calculateCGPA(historicalResults = []) {
+  calculateCGPA(historicalResults = [], options = {}) {
+    const decimalPrecision =
+      options && Number.isInteger(options.decimalPrecision) && options.decimalPrecision >= 0
+        ? options.decimalPrecision
+        : 2;
+    const roundingMode = options && options.roundingMode ? options.roundingMode : 'HALF_UP';
+
     if (!Array.isArray(historicalResults) || historicalResults.length === 0) {
       return {
         cgpa: 0,
@@ -137,7 +196,7 @@ export const academicCalculationEngine = {
     });
 
     const rawCgpa = totalDegreeCredits > 0 ? totalWeightedPoints / totalDegreeCredits : 0;
-    const cgpa = Number(rawCgpa.toFixed(2));
+    const cgpa = roundAcademic(rawCgpa, decimalPrecision, roundingMode);
 
     return {
       cgpa,
@@ -156,7 +215,7 @@ export const academicCalculationEngine = {
     let ruleObj = null;
     let formulaString = '(CGPA - 0.5) * 10';
     let decimalPrecision = 2;
-    let roundingMode = 'round';
+    let roundingMode = 'HALF_UP';
 
     if (typeof formulaOrRule === 'object' && formulaOrRule !== null) {
       ruleObj = formulaOrRule;
@@ -203,18 +262,8 @@ export const academicCalculationEngine = {
       percent = Math.min(100, val * 10);
     }
 
-    // Apply configured rounding mode
-    const factor = Math.pow(10, decimalPrecision);
-    let finalPercentage;
-    if (roundingMode === 'floor') {
-      finalPercentage = Math.floor(percent * factor) / factor;
-    } else if (roundingMode === 'ceil') {
-      finalPercentage = Math.ceil(percent * factor) / factor;
-    } else if (roundingMode === 'truncate') {
-      finalPercentage = Math.trunc(percent * factor) / factor;
-    } else {
-      finalPercentage = Number(percent.toFixed(decimalPrecision));
-    }
+    // Apply configured rounding mode with exponential shifting to defeat binary representation drift
+    const finalPercentage = roundAcademic(percent, decimalPrecision, roundingMode);
 
     return {
       percentage: finalPercentage,

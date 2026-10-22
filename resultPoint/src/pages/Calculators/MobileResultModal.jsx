@@ -184,7 +184,7 @@ export default function MobileResultModal({
                 ) : (
                   <Share2 className="w-3.5 h-3.5" />
                 )}
-                <span>Share</span>
+                <span>{isSharing ? 'Sharing...' : 'Share'}</span>
               </button>
             </div>
           </div>

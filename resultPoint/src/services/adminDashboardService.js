@@ -65,7 +65,7 @@ export const adminDashboardService = {
     // 1. Users & Students
     const allUsers = authService.getAllUsers();
     const students = allUsers.filter((u) => u.role === 'student');
-    const activeUsers = allUsers.filter((u) => u.status !== 'Inactive');
+    const activeUsers = allUsers.filter((u) => (u.status || 'Active').toLowerCase() === 'active');
 
     // 2. Universities & Courses from Academic Catalog
     const universities = academicCatalogService.getUniversities();
@@ -89,7 +89,9 @@ export const adminDashboardService = {
     // 4. Support Queries
     const queries = contactService.getAllQueries();
     const openQueries = queries.filter((q) => (q.status || 'open').toLowerCase() === 'open');
+    const inProgressQueries = queries.filter((q) => (q.status || '').toLowerCase() === 'in progress');
     const resolvedQueries = queries.filter((q) => (q.status || '').toLowerCase() === 'resolved');
+    const pendingQueries = openQueries.length + inProgressQueries.length;
 
     return {
       totalStudents: {
@@ -127,9 +129,24 @@ export const adminDashboardService = {
       },
       supportQueries: {
         value: String(queries.length),
-        growth: openQueries.length > 0 ? `${openQueries.length} pending` : 'All clear',
-        subtitle: queries.length > 0 ? `Open: ${openQueries.length} • Resolved: ${resolvedQueries.length}` : 'No queries logged yet',
-        trend: openQueries.length > 0 ? 'down' : 'up'
+        growth: pendingQueries > 0 ? `${pendingQueries} pending` : 'All clear',
+        subtitle:
+          queries.length > 0
+            ? `Open: ${openQueries.length} • In Progress: ${inProgressQueries.length} • Resolved: ${resolvedQueries.length}`
+            : 'No queries logged yet',
+        trend: pendingQueries > 0 ? 'down' : 'up'
+      },
+      resources: {
+        value: String(safeGet(STORAGE_KEYS.RESOURCES, []).length),
+        growth: 'Catalog',
+        subtitle: `${safeGet(STORAGE_KEYS.RESOURCES, []).filter((r) => (r.status || 'published').toLowerCase() === 'published').length} published resources`,
+        trend: 'up'
+      },
+      blogs: {
+        value: String(safeGet(STORAGE_KEYS.BLOGS, []).length),
+        growth: 'Editorial',
+        subtitle: `${safeGet(STORAGE_KEYS.BLOGS, []).filter((b) => (b.status || 'published').toLowerCase() === 'published').length} published articles`,
+        trend: 'up'
       }
     };
   },
@@ -216,7 +233,13 @@ export const adminDashboardService = {
    * Retrieve real registered accounts, safely sanitized
    */
   getRecentUsers() {
-    const allUsers = authService.getAllUsers();
+    const allUsers = [...authService.getAllUsers()].sort((a, b) => {
+      const dateA = a.joinedDate || a.createdAt || '';
+      const dateB = b.joinedDate || b.createdAt || '';
+      if (dateA < dateB) return 1;
+      if (dateA > dateB) return -1;
+      return 0;
+    });
     const avatarBgs = [
       'bg-orange-100 text-orange-600 dark:bg-orange-950/50 dark:text-orange-400',
       'bg-blue-100 text-blue-600 dark:bg-blue-950/50 dark:text-blue-400',
@@ -286,13 +309,29 @@ export const adminDashboardService = {
 
     auditEvents.forEach((evt) => {
       let iconColor = 'bg-emerald-500';
-      if (evt.action === 'UPDATED') iconColor = 'bg-purple-500';
-      else if (evt.action === 'DELETED') iconColor = 'bg-rose-500';
+      if (evt.entityType === 'support_query') {
+        if (evt.action.includes('RESOLVED')) iconColor = 'bg-emerald-500';
+        else if (evt.action.includes('CLOSED')) iconColor = 'bg-slate-500';
+        else if (evt.action.includes('RESPONDED')) iconColor = 'bg-blue-500';
+      } else if (evt.entityType === 'announcement') {
+        if (evt.action.includes('PUBLISHED')) iconColor = 'bg-emerald-500';
+        else if (evt.action.includes('ARCHIVED')) iconColor = 'bg-slate-500';
+        else if (evt.action.includes('DELETED')) iconColor = 'bg-rose-500';
+        else iconColor = 'bg-amber-500';
+      } else if (evt.entityType === 'settings') {
+        if (evt.action.includes('RESTORED') || evt.action.includes('EXPORTED')) iconColor = 'bg-indigo-500';
+        else if (evt.action.includes('RESET')) iconColor = 'bg-amber-500';
+        else iconColor = 'bg-blue-500';
+      } else if (evt.action.includes('UPDATED')) {
+        iconColor = 'bg-purple-500';
+      } else if (evt.action.includes('DELETED')) {
+        iconColor = 'bg-rose-500';
+      }
 
       list.push({
         id: evt.id,
         type: 'audit',
-        title: `${evt.semesterLabel || `Semester ${evt.semesterNumber}`} ${evt.action || 'Event'}`,
+        title: evt.title || (evt.semesterLabel ? `${evt.semesterLabel} ${evt.action}` : `${evt.action || 'Event'}`),
         detail: evt.details || `SGPA ${evt.sgpa || 0} • CGPA ${evt.cgpa || 0}`,
         timestamp: evt.timestamp || new Date().toISOString(),
         time: formatRelativeTime(evt.timestamp),

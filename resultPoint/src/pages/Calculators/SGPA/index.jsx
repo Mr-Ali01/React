@@ -12,6 +12,8 @@ import { useAuth } from '../../../hooks/useAuth';
 import { useAppDispatch } from '../../../hooks/useAppDispatch';
 import { saveCalculationToHistory } from '../../../features/calculation/calculationSlice';
 import { calculationSaveService } from '../../../services/calculationSaveService';
+import { academicCatalogService } from '../../../services/academicCatalogService';
+import { academicCalculationEngine } from '../../../services/academicCalculationEngine';
 
 const GRADE_POINTS_MAP = {
   S: 10,
@@ -79,31 +81,56 @@ export default function SGPACalculator() {
     showToast('Form reset to default subjects');
   };
 
-  // Live Metrics Calculation
+  // Live Catalog Configuration & Metrics Calculation
+  const catalogConfig = useMemo(() => {
+    try {
+      return academicCatalogService.getFullConfiguration(university, course, regulation);
+    } catch {
+      return null;
+    }
+  }, [university, course, regulation]);
+
+  const effectiveGradePointsMap = useMemo(() => {
+    if (catalogConfig?.gradeScale && Array.isArray(catalogConfig.gradeScale) && catalogConfig.gradeScale.length > 0) {
+      const map = {};
+      catalogConfig.gradeScale.forEach((g) => {
+        map[g.grade] = Number(g.points);
+      });
+      return map;
+    }
+    return GRADE_POINTS_MAP;
+  }, [catalogConfig]);
+
   const metrics = useMemo(() => {
     let totalCredits = 0;
     let totalPoints = 0;
 
     subjects.forEach((s) => {
       const cr = parseFloat(s.credits) || 0;
-      const pts = GRADE_POINTS_MAP[s.grade] ?? 0;
+      const pts = effectiveGradePointsMap[s.grade] ?? (GRADE_POINTS_MAP[s.grade] ?? 0);
       totalCredits += cr;
       totalPoints += cr * pts;
     });
 
     const sgpa = totalCredits > 0 ? totalPoints / totalCredits : 0;
-    const percentage = sgpa * 10;
+    
+    // Wire to central Academic Calculation Engine with regulation's rule
+    const percentRes = academicCalculationEngine.convertCGPAToPercentage(
+      sgpa,
+      catalogConfig?.calculationRule || (university === 'jntuh' ? '(CGPA - 0.5) * 10' : 'CGPA * 10')
+    );
+    const percentage = percentRes.percentage;
 
     let letterGrade = 'F';
-    if (sgpa >= 9.0) letterGrade = 'A+';
+    if (sgpa >= 9.0) letterGrade = catalogConfig?.gradeScale?.[0]?.grade || 'A+';
     else if (sgpa >= 8.0) letterGrade = 'A';
     else if (sgpa >= 7.0) letterGrade = 'B+';
     else if (sgpa >= 6.0) letterGrade = 'B';
     else if (sgpa >= 5.0) letterGrade = 'C';
     else if (sgpa >= 4.0) letterGrade = 'D';
 
-    return { totalCredits, totalPoints, sgpa, percentage, letterGrade };
-  }, [subjects]);
+    return { totalCredits, totalPoints, sgpa, percentage, letterGrade, formulaUsed: percentRes.formulaUsed };
+  }, [subjects, effectiveGradePointsMap, catalogConfig, university]);
 
   const handleSaveResult = () => {
     const calcRecord = {

@@ -1,0 +1,18 @@
+-------------------------------------------------------------------------------
+Test set: com.resultpoint.AppExecuteProbeTest
+-------------------------------------------------------------------------------
+Tests run: 1, Failures: 0, Errors: 1, Skipped: 0, Time elapsed: 0.497 s <<< FAILURE! -- in com.resultpoint.AppExecuteProbeTest
+com.resultpoint.AppExecuteProbeTest.testAppGrants -- Time elapsed: 0.436 s <<< ERROR!
+java.sql.SQLException: Parameter number 2 is not an OUT parameter
+	at com.mysql.cj.jdbc.exceptions.SQLError.createSQLException(SQLError.java:121)
+	at com.mysql.cj.jdbc.exceptions.SQLError.createSQLException(SQLError.java:89)
+	at com.mysql.cj.jdbc.exceptions.SQLError.createSQLException(SQLError.java:81)
+	at com.mysql.cj.jdbc.exceptions.SQLError.createSQLException(SQLError.java:55)
+	at com.mysql.cj.jdbc.CallableStatement.checkIsOutputParam(CallableStatement.java:648)
+	at com.mysql.cj.jdbc.CallableStatement.registerOutParameter(CallableStatement.java:2012)
+	at com.mysql.cj.jdbc.CallableStatement.registerOutParameter(CallableStatement.java:2020)
+	at com.resultpoint.AppExecuteProbeTest.testAppGrants(AppExecuteProbeTest.java:42)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+

@@ -12,6 +12,8 @@ import { useAuth } from '../../../hooks/useAuth';
 import { useAppDispatch } from '../../../hooks/useAppDispatch';
 import { saveCalculationToHistory } from '../../../features/calculation/calculationSlice';
 import { calculationSaveService } from '../../../services/calculationSaveService';
+import { academicCatalogService } from '../../../services/academicCatalogService';
+import { academicCalculationEngine } from '../../../services/academicCalculationEngine';
 
 const GRADE_POINTS_MAP = {
   S: 10, 'A+': 9, A: 8, 'B+': 7, B: 6, C: 5, D: 4, F: 0
@@ -82,7 +84,13 @@ export default function GPACalculator() {
     });
 
     const gpa = totalCredits > 0 ? totalPoints / totalCredits : 0;
-    const percentage = gpa * 10;
+    
+    // Wire to central Academic Calculation Engine with university rule
+    const percentRes = academicCalculationEngine.convertCGPAToPercentage(
+      gpa,
+      university === 'jntuh' ? '(CGPA - 0.5) * 10' : 'CGPA * 10'
+    );
+    const percentage = percentRes.percentage;
 
     let letterGrade = 'F';
     if (gpa >= 9.0) letterGrade = 'A+';
@@ -92,8 +100,8 @@ export default function GPACalculator() {
     else if (gpa >= 5.0) letterGrade = 'C';
     else if (gpa >= 4.0) letterGrade = 'D';
 
-    return { totalCredits, totalPoints, gpa, percentage, letterGrade };
-  }, [subjects]);
+    return { totalCredits, totalPoints, gpa, percentage, letterGrade, formulaUsed: percentRes.formulaUsed };
+  }, [subjects, university]);
 
   const standing = useMemo(() => {
     if (metrics.gpa >= 9.0) {

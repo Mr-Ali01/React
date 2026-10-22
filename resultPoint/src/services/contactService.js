@@ -1,4 +1,5 @@
 import { STORAGE_KEYS } from './storageKeys.js';
+import { supportQueryService } from './supportQueryService.js';
 
 /**
  * ResultPoint Contact & Support Submission Service
@@ -130,27 +131,17 @@ export const contactService = {
 
     // 2. Separated honest local support queue storage when backend API is not configured
     try {
-      const rawStored = localStorage.getItem(STORAGE_KEYS.SUPPORT_QUERIES);
-      const existing = rawStored ? JSON.parse(rawStored) : [];
-      
-      const newQuery = {
-        id: `query_${Date.now()}`,
+      const created = supportQueryService.createQuery({
         ticketId,
         fullName: data.fullName.trim(),
         email: data.email.trim().toLowerCase(),
         subject: data.subject,
+        category: data.subject,
         message: data.message.trim(),
         status: 'Open',
-        source: 'Public Contact Form',
-        createdAt: timestamp
-      };
-
-      existing.unshift(newQuery);
-      // Keep up to 50 latest queries
-      if (existing.length > 50) {
-        existing.splice(50);
-      }
-      localStorage.setItem(STORAGE_KEYS.SUPPORT_QUERIES, JSON.stringify(existing));
+        priority: 'Medium',
+        source: 'Public Contact Form'
+      });
 
       // Emulate brief realistic network handshake
       await new Promise((res) => setTimeout(res, 450));
@@ -158,15 +149,15 @@ export const contactService = {
       return {
         success: true,
         mode: 'local_queue',
-        ticketId,
-        message: `Your query has been securely logged with Reference Ticket #${ticketId}. ResultPoint support has queued your message for review.`
+        ticketId: created.ticketId,
+        message: `Your query has been securely logged with Reference Ticket #${created.ticketId}. ResultPoint support has queued your message for review.`
       };
     } catch (storageError) {
       console.error('Failed to store support query:', storageError);
       return {
         success: false,
         mode: 'local_queue',
-        error: 'Unable to save support query to local session. Please check your browser storage permissions.'
+        error: storageError.message || 'Unable to save support query to local session. Please check your browser storage permissions.'
       };
     }
   },
@@ -176,8 +167,7 @@ export const contactService = {
    */
   getAllQueries() {
     try {
-      const raw = localStorage.getItem(STORAGE_KEYS.SUPPORT_QUERIES);
-      return raw ? JSON.parse(raw) : [];
+      return supportQueryService.getAllQueries();
     } catch {
       return [];
     }

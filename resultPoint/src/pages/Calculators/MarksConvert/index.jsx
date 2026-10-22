@@ -36,6 +36,7 @@ import { saveCalculationToHistory } from '../../../features/calculation/calculat
 import { calculationSaveService } from '../../../services/calculationSaveService';
 import { downloadCalculatorPdf } from '../../../services/calculatorPdfService';
 import { shareCalculationResult } from '../../../services/calculatorShareService';
+import { academicCalculationEngine } from '../../../services/academicCalculationEngine';
 
 const CONVERSION_SPECS = {
   'percentage-to-cgpa': {
@@ -52,11 +53,16 @@ const CONVERSION_SPECS = {
       const pct = parseFloat(inputs.input_percentage);
       if (isNaN(pct) || pct < 0 || pct > 100) return null;
       let cgpa, formula, calc, note;
-      if (uni === 'osmania') {
-        cgpa = (pct / 9.32).toFixed(2);
-        formula = 'CGPA = Percentage / 9.32 (Osmania CBCS)';
-        calc = `${cgpa} = ${pct.toFixed(2)} / 9.32`;
-        note = 'Calculated using Osmania University official CBCS conversion factor.';
+      if (uni === 'jntuh') {
+        cgpa = ((pct / 10) + 0.5).toFixed(2);
+        formula = 'CGPA = (Percentage / 10) + 0.5 (JNTUH R18/R22)';
+        calc = `${cgpa} = (${pct.toFixed(2)} / 10) + 0.5`;
+        note = 'Calculated using JNTU Hyderabad official R18/R22 conversion formula.';
+      } else if (uni === 'osmania') {
+        cgpa = (pct / 10).toFixed(2);
+        formula = 'CGPA = Percentage / 10 (Osmania CBCS)';
+        calc = `${cgpa} = ${pct.toFixed(2)} / 10`;
+        note = 'Calculated using Osmania University official CBCS conversion standard.';
       } else {
         cgpa = (pct / 10).toFixed(2);
         formula = 'CGPA = Percentage / 10';
@@ -80,13 +86,21 @@ const CONVERSION_SPECS = {
       const cgpa = parseFloat(inputs.input_cgpa);
       if (isNaN(cgpa) || cgpa < 0 || cgpa > 10) return null;
       let pct, formula, calc, note;
-      if (uni === 'osmania') {
-        pct = (cgpa * 9.32).toFixed(2);
-        formula = 'Percentage = CGPA × 9.32 (Osmania CBCS)';
-        calc = `${pct}% = ${cgpa.toFixed(2)} × 9.32`;
+      if (uni === 'jntuh') {
+        const res = academicCalculationEngine.convertCGPAToPercentage(cgpa, 'jntuh-r18-r22-rule');
+        pct = res.percentage.toFixed(2);
+        formula = 'Percentage = (CGPA - 0.5) × 10 (JNTUH R18/R22)';
+        calc = `${pct}% = (${cgpa.toFixed(2)} - 0.5) × 10`;
+        note = 'Official JNTU Hyderabad academic regulation formula.';
+      } else if (uni === 'osmania') {
+        const res = academicCalculationEngine.convertCGPAToPercentage(cgpa, 'ou-cbcs-standard-rule');
+        pct = res.percentage.toFixed(2);
+        formula = 'Percentage = CGPA × 10 (Osmania CBCS)';
+        calc = `${pct}% = ${cgpa.toFixed(2)} × 10`;
         note = 'Verified Osmania University CBCS regulations standard.';
       } else {
-        pct = (cgpa * 10).toFixed(2);
+        const res = academicCalculationEngine.convertCGPAToPercentage(cgpa, 'CGPA * 10');
+        pct = res.percentage.toFixed(2);
         formula = 'Percentage = CGPA × 10';
         calc = `${pct}% = ${cgpa.toFixed(2)} × 10`;
         note = 'Calculated using standard 10-point linear equivalence.';
