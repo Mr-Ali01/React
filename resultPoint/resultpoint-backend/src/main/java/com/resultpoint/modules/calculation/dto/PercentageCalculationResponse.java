@@ -17,5 +17,7 @@ public class PercentageCalculationResponse {
     private String formulaExpression;
     private String formulaExplanation;
     private String universityName;
+    private String verificationStatus;
     private String notes;
+    private String warning;
 }

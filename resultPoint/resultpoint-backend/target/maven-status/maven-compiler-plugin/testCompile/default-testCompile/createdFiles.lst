@@ -1,0 +1,17 @@
+com\resultpoint\ProductionConfigValidationTest.class
+com\resultpoint\TestSecurityEndpointsController.class
+com\resultpoint\CatalogIntegrationTest.class
+com\resultpoint\IdGeneratorTest.class
+com\resultpoint\CalculationIntegrationTest.class
+com\resultpoint\Phase2SecurityVerificationTest.class
+com\resultpoint\AcademicCalculationEngineTest.class
+com\resultpoint\ImportExportReportingIntegrationTest.class
+com\resultpoint\CommonDtoAndExceptionTest.class
+com\resultpoint\FlywayParserTest.class
+com\resultpoint\JwtTokenProviderTest.class
+com\resultpoint\StudentIntegrationTest.class
+com\resultpoint\Phase1MigrationValidationTest.class
+com\resultpoint\SecurityFoundationIntegrationTest.class
+com\resultpoint\AuthIntegrationTest.class
+com\resultpoint\FormulaEvaluatorTest.class
+com\resultpoint\Phase1ExecutionSuiteTest.class

@@ -33,7 +33,6 @@ public class AcademicCatalogService {
     private final CourseRepository courseRepository;
     private final RegulationRepository regulationRepository;
     private final RegulationSubjectRepository regulationSubjectRepository;
-    private final AdmissionBatchRepository admissionBatchRepository;
     private final GradingScaleRepository gradingScaleRepository;
     private final CalculationRuleRepository calculationRuleRepository;
 

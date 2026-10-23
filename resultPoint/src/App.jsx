@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route, Outlet, Navigate } from 'react-router-dom
 import { ThemeProvider } from './context/ThemeContext';
 import { ToastProvider } from './context/ToastContext';
 import { useAppDispatch } from './hooks/useAppDispatch';
-import { checkAuthSession } from './features/auth/authSlice';
+import { checkAuthSession, logout } from './features/auth/authSlice';
 
 // Public Layout Components
 import Header from './components/layout/Header';
@@ -75,16 +75,6 @@ import SettingsManager from './pages/admin/SettingsManager';
 import BlogPage from './pages/Blog';
 import ActiveAnnouncementBanner from './components/common/ActiveAnnouncementBanner';
 import CalculatorRouteGuard from './components/common/CalculatorRouteGuard';
-import {
-  Users,
-  Wrench,
-  FolderOpen,
-  Newspaper,
-  Bell,
-  BarChart2,
-  MessageSquare,
-  Settings
-} from 'lucide-react';
 
 import PendingCalculationBanner from './components/common/PendingCalculationBanner';
 
@@ -121,11 +111,17 @@ export default function App() {
       dispatch(checkAuthSession());
     };
 
+    const handleSessionExpired = () => {
+      dispatch(logout());
+    };
+
     window.addEventListener('auth_session_changed', handleAuthChange);
+    window.addEventListener('auth_session_expired', handleSessionExpired);
     window.addEventListener('storage', handleAuthChange);
 
     return () => {
       window.removeEventListener('auth_session_changed', handleAuthChange);
+      window.removeEventListener('auth_session_expired', handleSessionExpired);
       window.removeEventListener('storage', handleAuthChange);
     };
   }, [dispatch]);

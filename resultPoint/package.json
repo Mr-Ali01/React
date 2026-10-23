@@ -7,6 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
+    "test": "node --test tests/auth/*.test.js",
+    "test:auth": "node --test tests/auth/*.test.js",
     "preview": "vite preview",
     "docs:resolve": "npx -y ctx7 library",
     "docs:query": "npx -y ctx7 docs",

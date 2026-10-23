@@ -293,6 +293,18 @@ To prevent accidental data overwrites and avoid duplicate entries upon network r
 - `POST /api/v1/telemetry/events`: Lightweight beacon ingestion for page views and calculator events.
 - `GET /api/v1/admin/analytics/overview`: Admin rollup metrics (unique visitors, sessions, top routes, tool completions).
 
-#### Document Export (`/api/v1/export`)
-- `POST /api/v1/export/semester-pdf`: Generates authenticated, tamper-evident PDF scorecard using server-side OpenPDF.
-- `POST /api/v1/export/transcript-pdf`: Generates complete multi-semester official consolidated academic transcript.
+#### Document Export & PDF Generation (`/api/v1/student`)
+- `GET /api/v1/student/results/{semesterNumber}/pdf`: Streams authenticated, tamper-evident PDF semester scorecard using server-side OpenPDF (`application/pdf`).
+- `GET /api/v1/student/results/history/pdf`: Streams consolidated multi-semester official academic transcript PDF.
+- `GET /api/v1/student/goals/report/pdf`: Streams student academic goals, milestone progress, and target SGPA forecast PDF.
+
+#### External Data Import Engine (`/api/v1/catalog/import`)
+- `POST /api/v1/catalog/import/subjects`: **Admin-Only** bulk JSON import of syllabus curriculum subjects mapped to regulation and semester.
+- `POST /api/v1/catalog/import/subjects/csv`: **Admin-Only** multipart CSV upload with line-by-line validation, error reporting, and 5MB size limit.
+- `POST /api/v1/catalog/import/regulations`: **Admin-Only** bulk import of academic regulations with referential integrity verification and immutable baseline protection.
+
+#### Academic Reporting Engine (`/api/v1/student/reports`, `/api/v1/admin/reports`)
+- `GET /api/v1/student/reports/performance`: Student-specific semester trends, SGPA/CGPA progression, and cumulative credit metrics.
+- `GET /api/v1/student/reports/backlogs`: Student-specific active backlogs, clearance history, and total academic credits at risk.
+- `GET /api/v1/student/reports/projections`: Evaluates student goals against current academic trajectory to determine required future SGPA and feasibility.
+- `GET /api/v1/admin/reports/catalog-summary`: **Admin-Only** high-level summary counts and breakdown of universities, courses, and regulations.

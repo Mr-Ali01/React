@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Home,
@@ -14,7 +14,7 @@ import {
   Lightbulb,
   Download,
   Share2,
-  Loader2
+  Loader2,
 } from 'lucide-react';
 import CalculatorDirectorySidebar from '../CalculatorDirectorySidebar';
 import ExploreMoreTools from '../ExploreMoreTools';
@@ -30,9 +30,10 @@ import { downloadCalculatorPdf } from '../../../services/calculatorPdfService';
 import { shareCalculationResult } from '../../../services/calculatorShareService';
 import { academicCatalogService } from '../../../services/academicCatalogService';
 import { academicCalculationEngine } from '../../../services/academicCalculationEngine';
+import { catalogApi } from '../../../services/api/catalogApi';
 
 const GRADING_TABLE_DATA = [
-  { range: '90 - 100', grade: 'S', points: 10, performance: 'Outstanding', badgeClass: 'bg-emerald-500/10 text-brandGreen' },
+  { range: '90 - 100', grade: 'O', points: 10, performance: 'Outstanding', badgeClass: 'bg-emerald-500/10 text-brandGreen' },
   { range: '80 - 89', grade: 'A+', points: 9, performance: 'Excellent', badgeClass: 'bg-emerald-500/10 text-brandGreen' },
   { range: '70 - 79', grade: 'A', points: 8, performance: 'Very Good', badgeClass: 'bg-blue-500/10 text-brandBlue' },
   { range: '60 - 69', grade: 'B+', points: 7, performance: 'Good', badgeClass: 'bg-blue-500/10 text-brandBlue' },
@@ -59,6 +60,115 @@ export default function GradeCalculator() {
   const [validationError, setValidationError] = useState('');
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
+
+  // Dynamic Catalog States
+  const [universities, setUniversities] = useState([]);
+  const [courses, setCourses] = useState([]);
+  const [regulations, setRegulations] = useState([]);
+  const [activeRegDetail, setActiveRegDetail] = useState(null);
+  const [isLoadingCatalog, setIsLoadingCatalog] = useState(false);
+  // 1. Fetch Universities on Mount
+  useEffect(() => {
+    let ignore = false;
+    async function loadUniversities() {
+      setIsLoadingCatalog(true);
+      try {
+        const data = await catalogApi.getUniversities();
+        if (!ignore && Array.isArray(data) && data.length > 0) {
+          setUniversities(data);
+        }
+      } catch {
+        if (!ignore) {
+          console.warn('Catalog API unavailable, using fallback data');
+          const fallbackUnis = academicCatalogService.getUniversities();
+          setUniversities(fallbackUnis.map((u) => ({ id: u.id, name: u.name, code: u.code })));
+        }
+      } finally {
+        if (!ignore) setIsLoadingCatalog(false);
+      }
+    }
+    loadUniversities();
+    return () => { ignore = true; };
+  }, []);
+
+  // 2. Fetch Courses when University changes
+  useEffect(() => {
+    let ignore = false;
+    async function loadCourses() {
+      if (!university) return;
+      try {
+        const data = await catalogApi.getCoursesByUniversity(university);
+        if (!ignore && Array.isArray(data) && data.length > 0) {
+          setCourses(data);
+          setCourse((prev) => (data.some((c) => c.id === prev || c.code?.toLowerCase() === prev?.toLowerCase()) ? prev : (data[0].id || data[0].code?.toLowerCase())));
+        }
+      } catch {
+        if (!ignore) {
+          const fallbackCourses = academicCatalogService.getCourses(university);
+          setCourses(fallbackCourses.map((c) => ({ id: c.id, name: c.name, code: c.code })));
+        }
+      }
+    }
+    loadCourses();
+    return () => { ignore = true; };
+  }, [university]);
+
+  // 3. Fetch Regulations when Course changes
+  useEffect(() => {
+    let ignore = false;
+    async function loadRegulations() {
+      if (!course) return;
+      try {
+        const data = await catalogApi.getRegulationsByCourse(course);
+        if (!ignore && Array.isArray(data) && data.length > 0) {
+          setRegulations(data);
+          setRegulation((prev) => (data.some((r) => r.id === prev || r.code?.toLowerCase() === prev?.toLowerCase()) ? prev : (data[0].id || data[0].code?.toLowerCase())));
+        }
+      } catch {
+        if (!ignore) {
+          const fallbackRegs = academicCatalogService.getRegulations(university, course);
+          setRegulations(fallbackRegs.map((r) => ({ id: r.id, name: r.name, code: r.code })));
+        }
+      }
+    }
+    loadRegulations();
+    return () => { ignore = true; };
+  }, [university, course]);
+
+  // 4. Fetch Regulation Details (including Grading Scale) when Regulation changes
+  useEffect(() => {
+    let ignore = false;
+    async function loadRegulationDetail() {
+      if (!regulation) return;
+      try {
+        const detail = await catalogApi.getRegulationById(regulation);
+        if (!ignore && detail) {
+          setActiveRegDetail(detail);
+        }
+      } catch {
+        if (!ignore) {
+          // Fallback to local catalog service
+          const localConfig = academicCatalogService.getFullConfiguration(university, course, regulation);
+          setActiveRegDetail(localConfig ? {
+            id: regulation,
+            gradingScale: localConfig.gradeScale ? {
+              id: 'local_scale',
+              name: localConfig.university?.name + ' Scale',
+              boundaries: localConfig.gradeScale.map(b => ({
+                grade: b.grade,
+                gradePoints: b.points,
+                minPercentage: b.minPercentage,
+                maxPercentage: b.maxPercentage || 100,
+                description: b.desc
+              }))
+            } : null
+          } : null);
+        }
+      }
+    }
+    loadRegulationDetail();
+    return () => { ignore = true; };
+  }, [regulation, university, course]);
 
   const handleCalculate = () => {
     if (isNaN(obtainedMarks) || obtainedMarks < 0) {
@@ -97,18 +207,30 @@ export default function GradeCalculator() {
     showToast('Form reset to default marks (85 / 100)');
   };
 
-  // Live Catalog Configuration & Dynamic Grading Scale
-  const catalogConfig = useMemo(() => {
-    try {
-      return academicCatalogService.getFullConfiguration(university, course, regulation);
-    } catch {
-      return null;
+  // Resolved Grade Scale (Prioritizes Dynamic API Scale, e.g. Osmania Super S grade)
+  const resolvedGradeScale = useMemo(() => {
+    if (activeRegDetail?.gradingScale?.boundaries && Array.isArray(activeRegDetail.gradingScale.boundaries)) {
+      return activeRegDetail.gradingScale.boundaries.map((b) => ({
+        grade: b.grade,
+        points: Number(b.gradePoints),
+        minPercentage: Number(b.minPercentage),
+        maxPercentage: Number(b.maxPercentage || 100),
+        desc: b.description || (b.gradePoints >= 9 ? 'Outstanding' : b.gradePoints >= 8 ? 'Excellent' : b.gradePoints >= 7 ? 'Very Good' : b.gradePoints >= 6 ? 'Good' : b.gradePoints >= 5 ? 'Average' : b.gradePoints >= 4 ? 'Pass' : 'Fail')
+      }));
     }
-  }, [university, course, regulation]);
+    // Fallback: check local catalog service
+    try {
+      const local = academicCatalogService.getFullConfiguration(university, course, regulation);
+      if (local?.gradeScale) return local.gradeScale;
+    } catch {
+      // ignore
+    }
+    return null;
+  }, [activeRegDetail, university, course, regulation]);
 
   const displayedGradingTable = useMemo(() => {
-    if (catalogConfig?.gradeScale && Array.isArray(catalogConfig.gradeScale) && catalogConfig.gradeScale.length > 0) {
-      return catalogConfig.gradeScale.map((tier) => ({
+    if (resolvedGradeScale && Array.isArray(resolvedGradeScale) && resolvedGradeScale.length > 0) {
+      return resolvedGradeScale.map((tier) => ({
         range: `${tier.minPercentage} - ${tier.maxPercentage || 100}%`,
         grade: tier.grade,
         points: tier.points,
@@ -124,19 +246,19 @@ export default function GradeCalculator() {
       }));
     }
     return GRADING_TABLE_DATA;
-  }, [catalogConfig]);
+  }, [resolvedGradeScale]);
 
   // Grade Evaluation Calculation
   const result = useMemo(() => {
     const percentage = maxMarks > 0 ? (obtainedMarks / maxMarks) * 100 : 0;
     const roundedPercent = parseFloat(percentage.toFixed(2));
 
-    let evaluated = null;
-    let activeRowIdx = -1;
+    let evaluated;
+    let activeRowIdx;
 
-    if (catalogConfig?.gradeScale && Array.isArray(catalogConfig.gradeScale) && catalogConfig.gradeScale.length > 0) {
-      const engineRes = academicCalculationEngine.getGradeFromMarks(obtainedMarks, maxMarks, catalogConfig.gradeScale);
-      activeRowIdx = catalogConfig.gradeScale.findIndex((g) => g.grade === engineRes.grade);
+    if (resolvedGradeScale && Array.isArray(resolvedGradeScale) && resolvedGradeScale.length > 0) {
+      const engineRes = academicCalculationEngine.getGradeFromMarks(obtainedMarks, maxMarks, resolvedGradeScale);
+      activeRowIdx = resolvedGradeScale.findIndex((g) => g.grade === engineRes.grade);
       evaluated = {
         grade: engineRes.grade,
         points: engineRes.points,
@@ -173,7 +295,7 @@ export default function GradeCalculator() {
       strokeDashoffset,
       ...evaluated,
     };
-  }, [maxMarks, obtainedMarks, catalogConfig]);
+  }, [maxMarks, obtainedMarks, resolvedGradeScale]);
 
   const handleSaveResult = () => {
     const calcRecord = {
@@ -331,33 +453,30 @@ export default function GradeCalculator() {
               {/* Selectors Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pb-3.5 border-b border-border/80">
                 <div>
-                  <label className="block text-xs font-semibold text-text-h mb-1">Select University</label>
+                  <label className="block text-xs font-semibold text-text-h mb-1 flex items-center justify-between">
+                    <span>Select University</span>
+                    {isLoadingCatalog && <Loader2 className="w-3 h-3 animate-spin text-accent" />}
+                  </label>
                   <div className="relative">
                     <select
                       value={university}
                       onChange={(e) => setUniversity(e.target.value)}
                       className="calc-input w-full px-3 py-2 rounded-xl text-xs font-medium cursor-pointer appearance-none pr-8"
                     >
-                      <option value="jntuh">JNTU Hyderabad</option>
-                      <option value="anna">Anna University</option>
-                      <option value="osmania">Osmania University</option>
-                      <option value="generic">Standard 10-Point Scale</option>
-                    </select>
-                    <ChevronDown className="w-3.5 h-3.5 absolute right-2.5 top-3 pointer-events-none text-text-light" />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-text-h mb-1">Select Regulation</label>
-                  <div className="relative">
-                    <select
-                      value={regulation}
-                      onChange={(e) => setRegulation(e.target.value)}
-                      className="calc-input w-full px-3 py-2 rounded-xl text-xs font-medium cursor-pointer appearance-none pr-8"
-                    >
-                      <option value="r18">R18</option>
-                      <option value="r22">R22</option>
-                      <option value="r16">R16</option>
+                      {universities.length > 0 ? (
+                        universities.map((u) => (
+                          <option key={u.id} value={u.id}>
+                            {u.name} ({u.code})
+                          </option>
+                        ))
+                      ) : (
+                        <>
+                          <option value="jntuh">JNTU Hyderabad</option>
+                          <option value="anna">Anna University</option>
+                          <option value="osmania">Osmania University</option>
+                          <option value="generic">Standard 10-Point Scale</option>
+                        </>
+                      )}
                     </select>
                     <ChevronDown className="w-3.5 h-3.5 absolute right-2.5 top-3 pointer-events-none text-text-light" />
                   </div>
@@ -371,10 +490,46 @@ export default function GradeCalculator() {
                       onChange={(e) => setCourse(e.target.value)}
                       className="calc-input w-full px-3 py-2 rounded-xl text-xs font-medium cursor-pointer appearance-none pr-8"
                     >
-                      <option value="btech-cse">B.Tech - Computer Science</option>
-                      <option value="btech-ece">B.Tech - Electronics & Comm</option>
-                      <option value="btech-it">B.Tech - Information Tech</option>
-                      <option value="btech-mech">B.Tech - Mechanical Engg</option>
+                      {courses.length > 0 ? (
+                        courses.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name} ({c.code})
+                          </option>
+                        ))
+                      ) : (
+                        <>
+                          <option value="btech-cse">B.Tech - Computer Science</option>
+                          <option value="btech-ece">B.Tech - Electronics & Comm</option>
+                          <option value="btech-it">B.Tech - Information Tech</option>
+                          <option value="btech-mech">B.Tech - Mechanical Engg</option>
+                        </>
+                      )}
+                    </select>
+                    <ChevronDown className="w-3.5 h-3.5 absolute right-2.5 top-3 pointer-events-none text-text-light" />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-text-h mb-1">Select Regulation</label>
+                  <div className="relative">
+                    <select
+                      value={regulation}
+                      onChange={(e) => setRegulation(e.target.value)}
+                      className="calc-input w-full px-3 py-2 rounded-xl text-xs font-medium cursor-pointer appearance-none pr-8"
+                    >
+                      {regulations.length > 0 ? (
+                        regulations.map((r) => (
+                          <option key={r.id} value={r.id}>
+                            {r.name} ({r.code})
+                          </option>
+                        ))
+                      ) : (
+                        <>
+                          <option value="r18">R18</option>
+                          <option value="r22">R22</option>
+                          <option value="r16">R16</option>
+                        </>
+                      )}
                     </select>
                     <ChevronDown className="w-3.5 h-3.5 absolute right-2.5 top-3 pointer-events-none text-text-light" />
                   </div>

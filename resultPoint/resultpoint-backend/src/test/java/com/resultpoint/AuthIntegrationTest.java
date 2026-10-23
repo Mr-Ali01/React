@@ -12,6 +12,8 @@ import com.resultpoint.modules.user.entity.UserRole;
 import com.resultpoint.modules.user.repository.UserRepository;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
+
+import static org.junit.jupiter.api.Assertions.*;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
@@ -381,6 +383,7 @@ public class AuthIntegrationTest {
                 .filter(t -> t.getUser().getId().equals(user.getId()) && !t.isUsed())
                 .findFirst()
                 .orElseThrow();
+        assertNotNull(userResetToken);
 
         // 3. Reset password using invalid token -> returns 400
         mockMvc.perform(post("/api/v1/auth/reset-password")

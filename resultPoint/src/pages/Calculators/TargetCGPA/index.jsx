@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Home,
@@ -11,7 +11,8 @@ import {
   Target,
   History,
   Lightbulb,
-  TrendingUp
+  TrendingUp,
+  Loader2
 } from 'lucide-react';
 import CalculatorDirectorySidebar from '../CalculatorDirectorySidebar';
 import ExploreMoreTools from '../ExploreMoreTools';
@@ -23,6 +24,9 @@ import { useAuth } from '../../../hooks/useAuth';
 import { useAppDispatch } from '../../../hooks/useAppDispatch';
 import { saveCalculationToHistory } from '../../../features/calculation/calculationSlice';
 import { calculationSaveService } from '../../../services/calculationSaveService';
+import { catalogApi } from '../../../services/api/catalogApi';
+import { calculationApi } from '../../../services/api/calculationApi';
+import { academicCatalogService } from '../../../services/academicCatalogService';
 
 export default function TargetCGPACalculator() {
   const { user, isAuthenticated } = useAuth();
@@ -43,6 +47,82 @@ export default function TargetCGPACalculator() {
   const [isResultModalOpen, setIsResultModalOpen] = useState(false);
   const [pendingCalc, setPendingCalc] = useState(null);
   const [validationError, setValidationError] = useState('');
+  const [isCalculating, setIsCalculating] = useState(false);
+
+  // Dynamic Catalog States
+  const [universities, setUniversities] = useState([]);
+  const [courses, setCourses] = useState([]);
+  const [regulations, setRegulations] = useState([]);
+  const [isLoadingCatalog, setIsLoadingCatalog] = useState(false);
+  const [apiResult, setApiResult] = useState(null);
+
+  // 1. Fetch Universities on Mount
+  useEffect(() => {
+    let ignore = false;
+    async function loadUniversities() {
+      setIsLoadingCatalog(true);
+      try {
+        const data = await catalogApi.getUniversities();
+        if (!ignore && Array.isArray(data) && data.length > 0) {
+          setUniversities(data);
+        }
+      } catch (err) {
+        if (!ignore) {
+          console.warn('Catalog API unavailable, using fallback data:', err);
+          const fallbackUnis = academicCatalogService.getUniversities();
+          setUniversities(fallbackUnis.map((u) => ({ id: u.id, name: u.name, code: u.code })));
+        }
+      } finally {
+        if (!ignore) setIsLoadingCatalog(false);
+      }
+    }
+    loadUniversities();
+    return () => { ignore = true; };
+  }, []);
+
+  // 2. Fetch Courses when University changes
+  useEffect(() => {
+    let ignore = false;
+    async function loadCourses() {
+      if (!university) return;
+      try {
+        const data = await catalogApi.getCoursesByUniversity(university);
+        if (!ignore && Array.isArray(data) && data.length > 0) {
+          setCourses(data);
+          setCourse((prev) => (data.some((c) => c.id === prev || c.code?.toLowerCase() === prev?.toLowerCase()) ? prev : (data[0].id || data[0].code?.toLowerCase())));
+        }
+      } catch {
+        if (!ignore) {
+          const fallbackCourses = academicCatalogService.getCourses(university);
+          setCourses(fallbackCourses.map((c) => ({ id: c.id, name: c.name, code: c.code })));
+        }
+      }
+    }
+    loadCourses();
+    return () => { ignore = true; };
+  }, [university]);
+
+  // 3. Fetch Regulations when Course changes
+  useEffect(() => {
+    let ignore = false;
+    async function loadRegulations() {
+      if (!course) return;
+      try {
+        const data = await catalogApi.getRegulationsByCourse(course);
+        if (!ignore && Array.isArray(data) && data.length > 0) {
+          setRegulations(data);
+          setRegulation((prev) => (data.some((r) => r.id === prev || r.code?.toLowerCase() === prev?.toLowerCase()) ? prev : (data[0].id || data[0].code?.toLowerCase())));
+        }
+      } catch {
+        if (!ignore) {
+          const fallbackRegs = academicCatalogService.getRegulations(university, course);
+          setRegulations(fallbackRegs.map((r) => ({ id: r.id, name: r.name, code: r.code })));
+        }
+      }
+    }
+    loadRegulations();
+    return () => { ignore = true; };
+  }, [university, course]);
 
   const handleReset = () => {
     setCurrentCgpa(7.5);
@@ -50,10 +130,11 @@ export default function TargetCGPACalculator() {
     setTargetCgpa(8.5);
     setTotalCourseCredits(160);
     setValidationError('');
+    setApiResult(null);
     showToast('Reset to default target parameters (Target: 8.50)');
   };
 
-  // Target Computation Engine
+  // Target Computation Engine (incorporating backend calculation if available)
   const metrics = useMemo(() => {
     const cur = parseFloat(currentCgpa) || 0;
     const comp = parseFloat(completedCredits) || 0;
@@ -66,23 +147,50 @@ export default function TargetCGPACalculator() {
         errorMsg: 'Completed credits must be strictly less than total course credits.',
         remainingCredits: 0,
         requiredCgpa: 0,
-        formattedRequired: '0.00'
+        formattedRequired: '0.00',
+        maxPossibleCgpa: cur.toFixed(2),
+        isAchievable: false,
+        feasibility: 'Impossible',
+        recommendation: 'Completed credits cannot be equal or greater than total course credits.'
       };
     }
 
     const remainingCredits = tot - comp;
-    // Formula: ((Target * Total) - (Current * Completed)) / Remaining
+    
+    // If backend returned result, use authoritative figures
+    if (apiResult) {
+      return {
+        hasError: false,
+        errorMsg: '',
+        remainingCredits: Math.round(remainingCredits),
+        requiredCgpa: Number(apiResult.requiredSgpa ?? apiResult.requiredCgpa ?? 0),
+        formattedRequired: Number(apiResult.requiredSgpa ?? apiResult.requiredCgpa ?? 0).toFixed(2),
+        maxPossibleCgpa: apiResult.maxPossibleCgpa != null ? Number(apiResult.maxPossibleCgpa).toFixed(2) : null,
+        isAchievable: apiResult.isAchievable ?? (Number(apiResult.requiredSgpa ?? 0) <= 10.0),
+        feasibility: apiResult.feasibility || (Number(apiResult.requiredSgpa ?? 0) <= 8.5 ? 'Achievable' : Number(apiResult.requiredSgpa ?? 0) <= 10 ? 'Challenging' : 'Impossible'),
+        recommendation: apiResult.recommendation,
+        formulaExplanation: apiResult.formulaExplanation
+      };
+    }
+
+    // Client fallback Formula: ((Target * Total) - (Current * Completed)) / Remaining
     const requiredCgpa = ((tgt * tot) - (cur * comp)) / remainingCredits;
     const formattedRequired = requiredCgpa.toFixed(2);
+    const maxPossible = ((cur * comp) + (10.0 * remainingCredits)) / tot;
 
     return {
       hasError: false,
       errorMsg: '',
       remainingCredits: Math.round(remainingCredits),
       requiredCgpa,
-      formattedRequired
+      formattedRequired,
+      maxPossibleCgpa: maxPossible.toFixed(2),
+      isAchievable: requiredCgpa <= 10.0,
+      feasibility: requiredCgpa <= 7.5 ? 'Achievable' : requiredCgpa <= 8.5 ? 'Moderate' : requiredCgpa <= 10.0 ? 'Challenging' : 'Impossible',
+      recommendation: null,
+      formulaExplanation: null
     };
-  }, [currentCgpa, completedCredits, targetCgpa, totalCourseCredits]);
+  }, [currentCgpa, completedCredits, targetCgpa, totalCourseCredits, apiResult]);
 
   // Determine status and narrative guidance
   const standing = useMemo(() => {
@@ -178,7 +286,7 @@ export default function TargetCGPACalculator() {
     }
   };
 
-  const handleCalculate = () => {
+  const handleCalculate = async () => {
     if (metrics.errorMsg) {
       setValidationError(metrics.errorMsg);
       return;
@@ -194,7 +302,25 @@ export default function TargetCGPACalculator() {
       return;
     }
     setValidationError('');
-    setIsResultModalOpen(true);
+
+    setIsCalculating(true);
+    try {
+      const remaining = parseFloat(totalCourseCredits) - parseFloat(completedCredits);
+      const res = await calculationApi.calculateTargetCgpa({
+        currentCgpa: cur,
+        targetCgpa: tgt,
+        completedCredits: parseFloat(completedCredits),
+        remainingCredits: remaining > 0 ? remaining : 0,
+      });
+      if (res) {
+        setApiResult(res);
+      }
+    } catch (err) {
+      console.warn('Backend target CGPA calculation API failed, using client calculation:', err);
+    } finally {
+      setIsCalculating(false);
+      setIsResultModalOpen(true);
+    }
   };
 
   return (
@@ -242,17 +368,30 @@ export default function TargetCGPACalculator() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                   <div>
-                    <label className="block text-xs font-semibold text-text-h mb-1">University</label>
+                    <label className="block text-xs font-semibold text-text-h mb-1 flex items-center justify-between">
+                      <span>University</span>
+                      {isLoadingCatalog && <Loader2 className="w-3 h-3 animate-spin text-accent" />}
+                    </label>
                     <div className="relative">
                       <select
                         value={university}
                         onChange={(e) => setUniversity(e.target.value)}
                         className="calc-input w-full px-3 py-2 rounded-xl text-xs font-medium cursor-pointer appearance-none pr-8"
                       >
-                        <option value="jntuh">JNTU Hyderabad</option>
-                        <option value="anna">Anna University</option>
-                        <option value="osmania">Osmania University</option>
-                        <option value="generic">Standard 10-Point Scale</option>
+                        {universities.length > 0 ? (
+                          universities.map((u) => (
+                            <option key={u.id} value={u.id}>
+                              {u.name} ({u.code})
+                            </option>
+                          ))
+                        ) : (
+                          <>
+                            <option value="jntuh">JNTU Hyderabad</option>
+                            <option value="anna">Anna University</option>
+                            <option value="osmania">Osmania University</option>
+                            <option value="generic">Standard 10-Point Scale</option>
+                          </>
+                        )}
                       </select>
                       <ChevronDown className="w-3.5 h-3.5 absolute right-2.5 top-3 pointer-events-none text-text-light" />
                     </div>
@@ -266,9 +405,19 @@ export default function TargetCGPACalculator() {
                         onChange={(e) => setRegulation(e.target.value)}
                         className="calc-input w-full px-3 py-2 rounded-xl text-xs font-medium cursor-pointer appearance-none pr-8"
                       >
-                        <option value="r18">R18</option>
-                        <option value="r22">R22</option>
-                        <option value="r16">R16</option>
+                        {regulations.length > 0 ? (
+                          regulations.map((r) => (
+                            <option key={r.id} value={r.id}>
+                              {r.name} ({r.code})
+                            </option>
+                          ))
+                        ) : (
+                          <>
+                            <option value="r18">R18</option>
+                            <option value="r22">R22</option>
+                            <option value="r16">R16</option>
+                          </>
+                        )}
                       </select>
                       <ChevronDown className="w-3.5 h-3.5 absolute right-2.5 top-3 pointer-events-none text-text-light" />
                     </div>
@@ -282,10 +431,20 @@ export default function TargetCGPACalculator() {
                         onChange={(e) => setCourse(e.target.value)}
                         className="calc-input w-full px-3 py-2 rounded-xl text-xs font-medium cursor-pointer appearance-none pr-8"
                       >
-                        <option value="btech-cse">B.Tech - Computer Science</option>
-                        <option value="btech-ece">B.Tech - Electronics & Comm</option>
-                        <option value="btech-it">B.Tech - Information Tech</option>
-                        <option value="btech-mech">B.Tech - Mechanical Engg</option>
+                        {courses.length > 0 ? (
+                          courses.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.name} ({c.code})
+                            </option>
+                          ))
+                        ) : (
+                          <>
+                            <option value="btech-cse">B.Tech - Computer Science</option>
+                            <option value="btech-ece">B.Tech - Electronics & Comm</option>
+                            <option value="btech-it">B.Tech - Information Tech</option>
+                            <option value="btech-mech">B.Tech - Mechanical Engg</option>
+                          </>
+                        )}
                       </select>
                       <ChevronDown className="w-3.5 h-3.5 absolute right-2.5 top-3 pointer-events-none text-text-light" />
                     </div>
@@ -396,8 +555,8 @@ export default function TargetCGPACalculator() {
                   <span>The calculator estimates the minimum semester average required in remaining credits to hit your goal.</span>
                 </div>
 
-                {metrics.hasError && (
-                  <p className="text-[11px] text-brandPink mt-1.5 text-center font-medium">{metrics.errorMsg}</p>
+                {(metrics.hasError || validationError) && (
+                  <p className="text-[11px] text-brandPink mt-1.5 text-center font-medium">{metrics.errorMsg || validationError}</p>
                 )}
 
                 {/* Form Buttons */}
@@ -414,11 +573,21 @@ export default function TargetCGPACalculator() {
                   <button
                     type="button"
                     onClick={handleCalculate}
-                    className="px-6 py-2.5 rounded-xl bg-accent hover:bg-accent-hover text-white text-xs font-bold shadow-accent transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
+                    disabled={isCalculating}
+                    className="px-6 py-2.5 rounded-xl bg-accent hover:bg-accent-hover disabled:opacity-70 text-white text-xs font-bold shadow-accent transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
                   >
-                    <BarChart2 className="w-3.5 h-3.5" />
-                    <span>Calculate Target</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
+                    {isCalculating ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>Calculating...</span>
+                      </>
+                    ) : (
+                      <>
+                        <BarChart2 className="w-3.5 h-3.5" />
+                        <span>Calculate Target</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </>
+                    )}
                   </button>
                 </div>
               </div>
@@ -553,10 +722,7 @@ export default function TargetCGPACalculator() {
                   regulation: regulation.toUpperCase()
                 }
               }}
-              onSave={(record) => {
-                setPendingCalc(record);
-                setIsModalOpen(true);
-              }}
+              onSave={handleSaveResult}
             />
 
             {/* Recent Targets Card */}

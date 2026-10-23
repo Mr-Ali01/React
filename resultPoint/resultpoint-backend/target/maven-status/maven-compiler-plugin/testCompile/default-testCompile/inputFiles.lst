@@ -6,10 +6,12 @@ C:\React\resultPoint\resultpoint-backend\src\test\java\com\resultpoint\CommonDto
 C:\React\resultPoint\resultpoint-backend\src\test\java\com\resultpoint\FlywayParserTest.java
 C:\React\resultPoint\resultpoint-backend\src\test\java\com\resultpoint\FormulaEvaluatorTest.java
 C:\React\resultPoint\resultpoint-backend\src\test\java\com\resultpoint\IdGeneratorTest.java
+C:\React\resultPoint\resultpoint-backend\src\test\java\com\resultpoint\ImportExportReportingIntegrationTest.java
 C:\React\resultPoint\resultpoint-backend\src\test\java\com\resultpoint\JwtTokenProviderTest.java
 C:\React\resultPoint\resultpoint-backend\src\test\java\com\resultpoint\Phase1ExecutionSuiteTest.java
 C:\React\resultPoint\resultpoint-backend\src\test\java\com\resultpoint\Phase1MigrationValidationTest.java
 C:\React\resultPoint\resultpoint-backend\src\test\java\com\resultpoint\Phase2SecurityVerificationTest.java
 C:\React\resultPoint\resultpoint-backend\src\test\java\com\resultpoint\ProductionConfigValidationTest.java
 C:\React\resultPoint\resultpoint-backend\src\test\java\com\resultpoint\SecurityFoundationIntegrationTest.java
+C:\React\resultPoint\resultpoint-backend\src\test\java\com\resultpoint\StudentIntegrationTest.java
 C:\React\resultPoint\resultpoint-backend\src\test\java\com\resultpoint\TestSecurityEndpointsController.java

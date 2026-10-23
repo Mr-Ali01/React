@@ -2,7 +2,6 @@ package com.resultpoint;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.resultpoint.modules.catalog.dto.CreateCourseRequest;
-import com.resultpoint.modules.catalog.dto.CreateRegulationRequest;
 import com.resultpoint.modules.catalog.dto.CreateUniversityRequest;
 import com.resultpoint.modules.catalog.entity.CourseLevel;
 import com.resultpoint.security.UserPrincipal;

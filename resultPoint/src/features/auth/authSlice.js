@@ -1,5 +1,5 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import { authService } from '../../services/authService';
+import { authService } from '../../services/authService.js';
 
 const getInitialUser = () => {
   try {
@@ -46,40 +46,16 @@ export const loginUser = createAsyncThunk(
   'auth/loginUser',
   async ({ email, password, expectedRole }, { rejectWithValue }) => {
     try {
-      const result = authService.login({ email, password, expectedRole });
+      const result = await authService.login({ email, password, expectedRole });
       if (!result.success) {
         return rejectWithValue(result.error || 'Authentication failed');
       }
 
-      const user = result.user;
-      if (expectedRole && user.role !== expectedRole) {
-        if (expectedRole === 'admin') {
-          return rejectWithValue('Access denied: Administrator privileges required. Please switch to Student Login.');
-        }
-        if (expectedRole === 'student') {
-          return rejectWithValue('Access denied: This login is for students. Please switch to Admin Login.');
-        }
-      }
-
-      // Return sanitized user (exclude password if any)
-      const sanitized = {
-        id: user.id,
-        fullName: user.fullName,
-        email: user.email,
-        role: user.role || 'student',
-        hasCompletedProfile: Boolean(user.hasCompletedProfile),
-        avatar: user.avatar || null,
-        universityId: user.universityId || null,
-        courseId: user.courseId || null,
-        regulationId: user.regulationId || null,
-        course: user.course || null,
-        university: user.university || null,
-        currentSemester: user.currentSemester || 1,
-        totalSemesters: user.totalSemesters || 8,
-        regulation: user.regulation || null,
+      return {
+        user: result.user,
+        token: result.token,
+        refreshToken: result.refreshToken,
       };
-
-      return { user: sanitized, token: `token_${Date.now()}` };
     } catch (err) {
       return rejectWithValue(err.message || 'Login request encountered an error');
     }
@@ -90,30 +66,16 @@ export const registerUser = createAsyncThunk(
   'auth/registerUser',
   async ({ fullName, email, password }, { rejectWithValue }) => {
     try {
-      const result = authService.register({ fullName, email, password });
+      const result = await authService.register({ fullName, email, password });
       if (!result.success) {
         return rejectWithValue(result.error || 'Registration failed');
       }
 
-      const user = result.user;
-      const sanitized = {
-        id: user.id,
-        fullName: user.fullName,
-        email: user.email,
-        role: user.role || 'student',
-        hasCompletedProfile: Boolean(user.hasCompletedProfile),
-        avatar: user.avatar || null,
-        universityId: user.universityId || null,
-        courseId: user.courseId || null,
-        regulationId: user.regulationId || null,
-        course: user.course || null,
-        university: user.university || null,
-        currentSemester: user.currentSemester || 1,
-        totalSemesters: user.totalSemesters || 8,
-        regulation: user.regulation || null,
+      return {
+        user: result.user,
+        token: result.token,
+        refreshToken: result.refreshToken,
       };
-
-      return { user: sanitized, token: `token_${Date.now()}` };
     } catch (err) {
       return rejectWithValue(err.message || 'Registration request encountered an error');
     }
@@ -121,34 +83,17 @@ export const registerUser = createAsyncThunk(
 );
 
 export const logoutUser = createAsyncThunk('auth/logoutUser', async () => {
-  authService.logout();
+  await authService.logout();
   return true;
 });
 
-export const checkAuthSession = createAsyncThunk('auth/checkAuthSession', async () => {
-  const current = authService.getCurrentUser();
-  if (!current || (current.role !== 'student' && current.role !== 'admin')) {
-    return null;
+export const checkAuthSession = createAsyncThunk('auth/checkAuthSession', async (_, { rejectWithValue }) => {
+  try {
+    const session = await authService.checkSession();
+    return session;
+  } catch (err) {
+    return rejectWithValue(err.message || 'Session verification failed');
   }
-  return {
-    user: {
-      id: current.id,
-      fullName: current.fullName,
-      email: current.email,
-      role: current.role,
-      hasCompletedProfile: Boolean(current.hasCompletedProfile),
-      avatar: current.avatar || null,
-      universityId: current.universityId || null,
-      courseId: current.courseId || null,
-      regulationId: current.regulationId || null,
-      course: current.course || null,
-      university: current.university || null,
-      currentSemester: current.currentSemester || 1,
-      totalSemesters: current.totalSemesters || 8,
-      regulation: current.regulation || null,
-    },
-    token: authService.getToken(),
-  };
 });
 
 export const authSlice = createSlice({

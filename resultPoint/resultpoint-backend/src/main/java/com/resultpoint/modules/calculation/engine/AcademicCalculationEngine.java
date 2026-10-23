@@ -4,7 +4,6 @@ import com.resultpoint.modules.calculation.dto.*;
 import com.resultpoint.modules.calculation.entity.CalculationRule;
 import com.resultpoint.modules.calculation.entity.GradeBoundary;
 import com.resultpoint.modules.calculation.entity.GradingScale;
-import com.resultpoint.modules.calculation.entity.RuleRoundingMode;
 import com.resultpoint.modules.calculation.formula.FormulaEvaluator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -195,44 +194,132 @@ public class AcademicCalculationEngine {
 
     /**
      * Calculates Required Future SGPA for target CGPA.
+     * Supports both credit-weighted and semester-count aggregations, zero-remaining conditions, and feasibility scoring.
      */
     public TargetCgpaResponse calculateTargetCgpa(TargetCgpaRequest request) {
         BigDecimal currentCgpa = request.getCurrentCgpa();
-        BigDecimal completedCredits = request.getCompletedCredits();
         BigDecimal targetCgpa = request.getTargetCgpa();
-        BigDecimal remainingCredits = request.getRemainingCredits();
 
-        BigDecimal currentCreditPoints = currentCgpa.multiply(completedCredits, MC);
-        BigDecimal totalCredits = completedCredits.add(remainingCredits);
-        BigDecimal requiredTotalCreditPoints = targetCgpa.multiply(totalCredits, MC);
+        BigDecimal completedUnits;
+        BigDecimal remainingUnits;
+        String unitType;
+        Integer remainingSemestersOut = null;
+        BigDecimal remainingCreditsOut = null;
 
-        BigDecimal requiredFutureCreditPoints = requiredTotalCreditPoints.subtract(currentCreditPoints);
-        BigDecimal requiredSgpa = requiredFutureCreditPoints.divide(remainingCredits, 2, RoundingMode.HALF_UP);
-
-        boolean isAchievable = requiredSgpa.compareTo(BigDecimal.TEN) <= 0;
-        String message;
-
-        if (requiredSgpa.compareTo(BigDecimal.TEN) > 0) {
-            message = String.format("Target of %s is mathematically unachievable on a 10.0 scale. Required SGPA (%s) exceeds 10.00.",
-                    targetCgpa, requiredSgpa);
-        } else if (requiredSgpa.compareTo(BigDecimal.ZERO) <= 0) {
-            isAchievable = true;
-            message = String.format("Target of %s already secured by existing academic performance. Any passing SGPA will satisfy your target.",
-                    targetCgpa);
+        if (request.getCompletedCredits() != null && request.getRemainingCredits() != null) {
+            completedUnits = request.getCompletedCredits();
+            remainingUnits = request.getRemainingCredits();
+            unitType = "credits";
+            remainingCreditsOut = remainingUnits;
+            remainingSemestersOut = request.getRemainingSemesters();
+        } else if (request.getCompletedSemesters() != null && request.getTotalSemesters() != null) {
+            int compSem = request.getCompletedSemesters();
+            int totSem = request.getTotalSemesters();
+            if (compSem > totSem) {
+                throw new IllegalArgumentException(String.format("Completed semesters (%d) cannot exceed total semesters (%d)", compSem, totSem));
+            }
+            int remSem = totSem - compSem;
+            completedUnits = BigDecimal.valueOf(compSem);
+            remainingUnits = BigDecimal.valueOf(remSem);
+            unitType = "semesters";
+            remainingSemestersOut = remSem;
+        } else if (request.getCompletedSemesters() != null && request.getRemainingSemesters() != null) {
+            completedUnits = BigDecimal.valueOf(request.getCompletedSemesters());
+            remainingUnits = BigDecimal.valueOf(request.getRemainingSemesters());
+            unitType = "semesters";
+            remainingSemestersOut = request.getRemainingSemesters();
         } else {
-            message = String.format("Achievable! You need an average SGPA of %s across your remaining %s credits.",
-                    requiredSgpa, remainingCredits);
+            throw new IllegalArgumentException("Either (completedCredits and remainingCredits) or (completedSemesters and totalSemesters) must be provided");
         }
 
-        String explanation = String.format("Required SGPA = [(Target CGPA × Total Credits) - (Current CGPA × Completed Credits)] / Remaining Credits = [(%s × %s) - (%s × %s)] / %s = %s",
-                targetCgpa, totalCredits, currentCgpa, completedCredits, remainingCredits, requiredSgpa);
+        BigDecimal totalUnits = completedUnits.add(remainingUnits);
+        if (totalUnits.compareTo(BigDecimal.ZERO) == 0) {
+            throw new IllegalArgumentException("Total academic units (credits or semesters) cannot be zero");
+        }
+
+        // Division by zero guard: When remaining units is zero
+        if (remainingUnits.compareTo(BigDecimal.ZERO) == 0) {
+            boolean achieved = currentCgpa.compareTo(targetCgpa) >= 0;
+            return TargetCgpaResponse.builder()
+                    .currentCgpa(currentCgpa)
+                    .targetCgpa(targetCgpa)
+                    .requiredSgpa(achieved ? BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP) : null)
+                    .isAchievable(achieved)
+                    .feasibility(achieved ? "TARGET_ALREADY_ACHIEVED" : "ZERO_REMAINING_SEMESTERS")
+                    .remainingSemesters(remainingSemestersOut)
+                    .remainingCredits(remainingCreditsOut)
+                    .maxPossibleCgpa(currentCgpa)
+                    .statusMessage(achieved
+                            ? String.format("Target of %s already achieved with your current CGPA of %s. No remaining %s.", targetCgpa, currentCgpa, unitType)
+                            : String.format("Target of %s cannot be achieved because there are 0 remaining %s and current CGPA is %s.", targetCgpa, unitType, currentCgpa))
+                    .recommendation(achieved
+                            ? String.format("Congratulations! Your current CGPA (%s) satisfies or exceeds your target of %s.", currentCgpa, targetCgpa)
+                            : String.format("Degree coursework is completed. Your final cumulative CGPA is %s.", currentCgpa))
+                    .formulaExplanation(String.format("Target calculation with 0 remaining %s. Final CGPA is %s.", unitType, currentCgpa))
+                    .build();
+        }
+
+        BigDecimal currentPoints = currentCgpa.multiply(completedUnits, MC);
+        BigDecimal requiredTotalPoints = targetCgpa.multiply(totalUnits, MC);
+        BigDecimal requiredFuturePoints = requiredTotalPoints.subtract(currentPoints);
+        BigDecimal rawRequiredSgpa = requiredFuturePoints.divide(remainingUnits, 2, RoundingMode.HALF_UP);
+
+        BigDecimal maxFuturePoints = BigDecimal.TEN.multiply(remainingUnits, MC);
+        BigDecimal maxPossibleCgpa = currentPoints.add(maxFuturePoints).divide(totalUnits, 2, RoundingMode.HALF_UP);
+
+        boolean isAchievable;
+        String feasibility;
+        BigDecimal requiredSgpa;
+        String statusMessage;
+        String recommendation;
+
+        if (rawRequiredSgpa.compareTo(BigDecimal.ZERO) <= 0) {
+            isAchievable = true;
+            feasibility = "TARGET_ALREADY_ACHIEVED";
+            requiredSgpa = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+            statusMessage = String.format("Target of %s already secured by existing academic performance. Any passing SGPA will satisfy your target.", targetCgpa);
+            recommendation = "Maintain minimum passing grades across remaining courses to secure your degree.";
+        } else if (rawRequiredSgpa.compareTo(new BigDecimal("8.50")) <= 0) {
+            isAchievable = true;
+            feasibility = "ACHIEVABLE";
+            requiredSgpa = rawRequiredSgpa;
+            statusMessage = String.format("Achievable! You need an average SGPA of %s across your remaining %s %s.", rawRequiredSgpa, remainingUnits.toPlainString(), unitType);
+            recommendation = String.format("Maintain an average SGPA of %s across remaining %s to reach your %s target.", rawRequiredSgpa, unitType, targetCgpa);
+        } else if (rawRequiredSgpa.compareTo(new BigDecimal("9.50")) <= 0) {
+            isAchievable = true;
+            feasibility = "CHALLENGING";
+            requiredSgpa = rawRequiredSgpa;
+            statusMessage = String.format("Challenging! You need an average SGPA of %s across your remaining %s %s.", rawRequiredSgpa, remainingUnits.toPlainString(), unitType);
+            recommendation = String.format("Maintain an average SGPA of %s across remaining %s to reach your %s target.", rawRequiredSgpa, unitType, targetCgpa);
+        } else if (rawRequiredSgpa.compareTo(BigDecimal.TEN) <= 0) {
+            isAchievable = true;
+            feasibility = "VERY_CHALLENGING";
+            requiredSgpa = rawRequiredSgpa;
+            statusMessage = String.format("Very challenging! Target of %s requires near-perfect performance (average SGPA of %s).%s",
+                    targetCgpa, rawRequiredSgpa, rawRequiredSgpa.compareTo(BigDecimal.TEN) == 0 ? " Maximum possible 10.00 SGPA required." : "");
+            recommendation = String.format("A maximum or near-maximum grade (10.00 SGPA) is required in all remaining %s to achieve your target.", unitType);
+        } else {
+            isAchievable = false;
+            feasibility = "NOT_ACHIEVABLE";
+            requiredSgpa = rawRequiredSgpa;
+            statusMessage = String.format("Target of %s is mathematically unachievable on a 10.0 scale. Required SGPA (%s) exceeds 10.00.", targetCgpa, rawRequiredSgpa);
+            recommendation = String.format("Your maximum achievable final CGPA is %s. Consider revising your target CGPA accordingly.", maxPossibleCgpa);
+        }
+
+        String explanation = String.format("Required SGPA = [(Target CGPA × Total %s) - (Current CGPA × Completed %s)] / Remaining %s = [(%s × %s) - (%s × %s)] / %s = %s",
+                unitType, unitType, unitType, targetCgpa, totalUnits, currentCgpa, completedUnits, remainingUnits, requiredSgpa);
 
         return TargetCgpaResponse.builder()
                 .currentCgpa(currentCgpa)
                 .targetCgpa(targetCgpa)
                 .requiredSgpa(requiredSgpa)
                 .isAchievable(isAchievable)
-                .statusMessage(message)
+                .feasibility(feasibility)
+                .remainingSemesters(remainingSemestersOut)
+                .remainingCredits(remainingCreditsOut)
+                .maxPossibleCgpa(maxPossibleCgpa)
+                .statusMessage(statusMessage)
+                .recommendation(recommendation)
                 .formulaExplanation(explanation)
                 .build();
     }

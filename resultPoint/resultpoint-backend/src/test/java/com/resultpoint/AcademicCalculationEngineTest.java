@@ -21,7 +21,6 @@ public class AcademicCalculationEngineTest {
     private GradingScale ouScale;
     private GradingScale standardScale;
     private CalculationRule ouRule;
-    private CalculationRule jntuhRule;
     private CalculationRule ugcRule;
 
     @BeforeEach
@@ -66,15 +65,6 @@ public class AcademicCalculationEngineTest {
                 .name("Osmania University CBCS Rule")
                 .percentageFormulaExpression("CGPA * 10")
                 .percentageFormulaDesc("Direct 10 multiplier per OU CBCS conventions")
-                .roundingMode(RuleRoundingMode.HALF_UP)
-                .decimalPlaces(2)
-                .build();
-
-        jntuhRule = CalculationRule.builder()
-                .id("rule_jntuh_r18")
-                .name("JNTUH R18/R22 Rule")
-                .percentageFormulaExpression("(CGPA - 0.5) * 10")
-                .percentageFormulaDesc("Offset multiplier per JNTU academic regulations")
                 .roundingMode(RuleRoundingMode.HALF_UP)
                 .decimalPlaces(2)
                 .build();
@@ -227,6 +217,127 @@ public class AcademicCalculationEngineTest {
         assertFalse(response.isAchievable());
         assertEquals(new BigDecimal("21.00"), response.getRequiredSgpa());
         assertTrue(response.getStatusMessage().contains("mathematically unachievable"));
+    }
+
+    @Test
+    @DisplayName("Target CGPA: Scenario requiring exact maximum possible SGPA (10.00)")
+    void shouldCalculateTargetCgpaRequiringExactMaxSgpa() {
+        // Current: 8.00 CGPA on 50 credits -> 400 CP
+        // Target: 9.00 CGPA on 100 total credits (50 remaining) -> 900 CP
+        // Required: 900 - 400 = 500 CP / 50 credits = 10.00 SGPA
+        TargetCgpaRequest request = TargetCgpaRequest.builder()
+                .currentCgpa(new BigDecimal("8.00"))
+                .completedCredits(new BigDecimal("50.0"))
+                .targetCgpa(new BigDecimal("9.00"))
+                .remainingCredits(new BigDecimal("50.0"))
+                .build();
+
+        TargetCgpaResponse response = engine.calculateTargetCgpa(request);
+
+        assertTrue(response.isAchievable());
+        assertEquals(new BigDecimal("10.00"), response.getRequiredSgpa());
+        assertEquals("VERY_CHALLENGING", response.getFeasibility());
+        assertTrue(response.getStatusMessage().contains("10.00"));
+    }
+
+    @Test
+    @DisplayName("Target CGPA: Target already achieved scenario")
+    void shouldHandleTargetCgpaAlreadyAchieved() {
+        // Current: 9.50 CGPA on 60 credits -> 570 CP
+        // Target: 8.00 CGPA on 100 credits (40 remaining) -> 800 CP
+        // Required: 800 - 570 = 230 CP / 40 credits = 5.75 SGPA
+        TargetCgpaRequest request = TargetCgpaRequest.builder()
+                .currentCgpa(new BigDecimal("9.50"))
+                .completedCredits(new BigDecimal("60.0"))
+                .targetCgpa(new BigDecimal("8.00"))
+                .remainingCredits(new BigDecimal("40.0"))
+                .build();
+
+        TargetCgpaResponse response = engine.calculateTargetCgpa(request);
+
+        assertTrue(response.isAchievable());
+        assertEquals(new BigDecimal("5.75"), response.getRequiredSgpa());
+        assertEquals("ACHIEVABLE", response.getFeasibility());
+
+        // Extreme case: Target 5.00 on 80 total credits (20 remaining) -> 400 CP
+        // Current: 9.00 on 60 credits -> 540 CP (already > 400)
+        TargetCgpaRequest extremeReq = TargetCgpaRequest.builder()
+                .currentCgpa(new BigDecimal("9.00"))
+                .completedCredits(new BigDecimal("60.0"))
+                .targetCgpa(new BigDecimal("5.00"))
+                .remainingCredits(new BigDecimal("20.0"))
+                .build();
+
+        TargetCgpaResponse extremeResp = engine.calculateTargetCgpa(extremeReq);
+
+        assertTrue(extremeResp.isAchievable());
+        assertEquals(new BigDecimal("0.00"), extremeResp.getRequiredSgpa());
+        assertEquals("TARGET_ALREADY_ACHIEVED", extremeResp.getFeasibility());
+    }
+
+    @Test
+    @DisplayName("Target CGPA: Zero remaining semesters / credits - Division by zero guard")
+    void shouldHandleZeroRemainingUnits() {
+        // Case A: 0 remaining credits and already achieved
+        TargetCgpaRequest achievedReq = TargetCgpaRequest.builder()
+                .currentCgpa(new BigDecimal("8.50"))
+                .completedCredits(new BigDecimal("120.0"))
+                .targetCgpa(new BigDecimal("8.00"))
+                .remainingCredits(BigDecimal.ZERO)
+                .build();
+
+        TargetCgpaResponse achievedResp = engine.calculateTargetCgpa(achievedReq);
+        assertTrue(achievedResp.isAchievable());
+        assertEquals("TARGET_ALREADY_ACHIEVED", achievedResp.getFeasibility());
+        assertEquals(new BigDecimal("0.00"), achievedResp.getRequiredSgpa());
+
+        // Case B: 0 remaining credits and target NOT achieved
+        TargetCgpaRequest unachievedReq = TargetCgpaRequest.builder()
+                .currentCgpa(new BigDecimal("7.50"))
+                .completedCredits(new BigDecimal("120.0"))
+                .targetCgpa(new BigDecimal("8.00"))
+                .remainingCredits(BigDecimal.ZERO)
+                .build();
+
+        TargetCgpaResponse unachievedResp = engine.calculateTargetCgpa(unachievedReq);
+        assertFalse(unachievedResp.isAchievable());
+        assertNull(unachievedResp.getRequiredSgpa());
+        assertEquals("ZERO_REMAINING_SEMESTERS", unachievedResp.getFeasibility());
+    }
+
+    @Test
+    @DisplayName("Target CGPA: Semester-based input (per API specification)")
+    void shouldCalculateTargetCgpaUsingSemesters() {
+        // Current: 7.42 CGPA, 4 completed semesters, 8 total semesters, Target: 8.50
+        // Total points = 8.50 * 8 = 68.00
+        // Current points = 7.42 * 4 = 29.68
+        // Required future = 68.00 - 29.68 = 38.32 / 4 = 9.58 SGPA
+        TargetCgpaRequest request = TargetCgpaRequest.builder()
+                .currentCgpa(new BigDecimal("7.42"))
+                .completedSemesters(4)
+                .totalSemesters(8)
+                .targetCgpa(new BigDecimal("8.50"))
+                .build();
+
+        TargetCgpaResponse response = engine.calculateTargetCgpa(request);
+
+        assertTrue(response.isAchievable());
+        assertEquals(new BigDecimal("9.58"), response.getRequiredSgpa());
+        assertEquals("VERY_CHALLENGING", response.getFeasibility());
+        assertEquals(4, response.getRemainingSemesters());
+    }
+
+    @Test
+    @DisplayName("Target CGPA: Reject when completed semesters exceed total semesters")
+    void shouldRejectInvalidSemesterCount() {
+        TargetCgpaRequest request = TargetCgpaRequest.builder()
+                .currentCgpa(new BigDecimal("7.00"))
+                .completedSemesters(9)
+                .totalSemesters(8)
+                .targetCgpa(new BigDecimal("8.00"))
+                .build();
+
+        assertThrows(IllegalArgumentException.class, () -> engine.calculateTargetCgpa(request));
     }
 
     @Test

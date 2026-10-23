@@ -100,4 +100,16 @@ public final class IdGenerator {
     public static String generateCalculationRuleId() {
         return generate("rule");
     }
+
+    public static String generateSubjectResultId() {
+        return generate("subres");
+    }
+
+    public static String generateBacklogId() {
+        return generate("backlog");
+    }
+
+    public static String generateEducationRecordId() {
+        return generate("edurec");
+    }
 }

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Home,
@@ -10,24 +10,9 @@ import {
   TrendingUp,
   ArrowRight,
   Trash2,
-  Bookmark,
-  Lightbulb,
-  X,
-  Lock,
-  Table,
-  Binary,
-  Percent,
-  FileCheck,
-  Award,
-  Layers,
-  Target,
-  AlertTriangle,
-  PieChart,
-  Download,
-  Share2,
   Loader2,
+  AlertCircle,
 } from 'lucide-react';
-import { UNIVERSITY_DATA } from '../../../data/universityData';
 import SaveModal from './components/SaveModal';
 import CalculatorDirectorySidebar from '../CalculatorDirectorySidebar';
 import ResultGaugeCard from '../ResultGaugeCard';
@@ -35,78 +20,227 @@ import { useAuth } from '../../../hooks/useAuth';
 import { useAppDispatch } from '../../../hooks/useAppDispatch';
 import { saveCalculationToHistory } from '../../../features/calculation/calculationSlice';
 import { calculationSaveService } from '../../../services/calculationSaveService';
-import { downloadCalculatorPdf } from '../../../services/calculatorPdfService';
-import { shareCalculationResult } from '../../../services/calculatorShareService';
 import { academicCatalogService } from '../../../services/academicCatalogService';
 import { academicCalculationEngine } from '../../../services/academicCalculationEngine';
+import { catalogApi } from '../../../services/api/catalogApi';
+import { calculationApi } from '../../../services/api/calculationApi';
 import { useToast } from '../../../context/ToastContext';
+
+const DEFAULT_SUBJECTS = [
+  { id: '1', name: 'Data Structures', credits: 4, grade: 'A' },
+  { id: '2', name: 'Database Management Systems', credits: 4, grade: 'A+' },
+  { id: '3', name: 'Operating Systems', credits: 4, grade: 'B+' },
+  { id: '4', name: 'Computer Networks', credits: 3, grade: 'A' },
+  { id: '5', name: 'Software Engineering', credits: 3, grade: 'B+' },
+  { id: '6', name: 'Mathematics-IV', credits: 4, grade: 'A' },
+];
 
 export default function CGPACalculator() {
   const { user, isAuthenticated } = useAuth();
   const dispatch = useAppDispatch();
   const { showToast } = useToast();
 
-  const [selectedUni, setSelectedUni] = useState('jntuh');
-  const [selectedCourse, setSelectedCourse] = useState('btech-cse');
-  const [selectedRegulation, setSelectedRegulation] = useState('r18');
-  const [selectedSem, setSelectedSem] = useState('sem4');
+  const [selectedUni, setSelectedUni] = useState('uni_jntuh');
+  const [selectedCourse, setSelectedCourse] = useState('course_jntuh_btech_cse');
+  const [selectedRegulation, setSelectedRegulation] = useState('reg_jntuh_r18');
+  const [selectedSem, setSelectedSem] = useState('Semester 4');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isResultModalOpen, setIsResultModalOpen] = useState(false);
   const [pendingCalc, setPendingCalc] = useState(null);
   const [validationError, setValidationError] = useState('');
-  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
-  const [isSharing, setIsSharing] = useState(false);
 
-  // Active Regulation Data & Central Catalog Configuration
-  const catalogConfig = useMemo(() => {
-    try {
-      return academicCatalogService.getFullConfiguration(selectedUni, selectedCourse, selectedRegulation);
-    } catch {
-      return null;
+  // WP-2 Dynamic catalog & calculation state
+  const [universityOptions, setUniversityOptions] = useState([]);
+  const [courseOptions, setCourseOptions] = useState([]);
+  const [regulationOptions, setRegulationOptions] = useState([]);
+  const [activeRegulationDetail, setActiveRegulationDetail] = useState(null);
+  const [backendResult, setBackendResult] = useState(null);
+  const [isCatalogLoading, setIsCatalogLoading] = useState(false);
+  const [isCalculating, setIsCalculating] = useState(false);
+  const [apiNotice, setApiNotice] = useState('');
+
+  // Initial subjects
+  const [subjects, setSubjects] = useState(DEFAULT_SUBJECTS);
+
+  // 1. Fetch Universities from Backend Catalog API
+  useEffect(() => {
+    let ignore = false;
+    async function loadUniversities() {
+      try {
+        setIsCatalogLoading(true);
+        const res = await catalogApi.getUniversities({ size: 50 });
+        if (!ignore) {
+          const list = res?.content || res || [];
+          if (Array.isArray(list) && list.length > 0) {
+            setUniversityOptions(list);
+            setSelectedUni((prev) => (list.some((u) => u.id === prev) ? prev : list[0].id));
+          }
+        }
+      } catch {
+        if (!ignore) {
+          const fallback = academicCatalogService.getUniversities();
+          if (fallback.length > 0) {
+            setUniversityOptions(fallback);
+            setSelectedUni((prev) => (fallback.some((u) => u.id === prev) ? prev : fallback[0].id));
+          }
+          setApiNotice('Operating in offline mode using verified catalog cache.');
+        }
+      } finally {
+        if (!ignore) setIsCatalogLoading(false);
+      }
     }
-  }, [selectedUni, selectedCourse, selectedRegulation]);
+    loadUniversities();
+    return () => { ignore = true; };
+  }, []);
 
-  const activeReg = useMemo(() => {
-    return UNIVERSITY_DATA[selectedUni]?.courses[selectedCourse]?.regulations[selectedRegulation] || null;
-  }, [selectedUni, selectedCourse, selectedRegulation]);
-
-  // Initial subjects populated from regulation defaults
-  const [subjects, setSubjects] = useState(() => {
-    const defaults = UNIVERSITY_DATA.jntuh.courses['btech-cse'].regulations.r18.defaultSubjects;
-    return defaults.map((s, idx) => ({ ...s, id: String(idx + 1) }));
-  });
-
-  const getPointsForGrade = (gradeSymbol) => {
-    if (catalogConfig?.gradeScale) {
-      const found = catalogConfig.gradeScale.find((g) => g.grade === gradeSymbol);
-      if (found) return Number(found.points);
+  // 2. Fetch Courses when University changes
+  useEffect(() => {
+    let ignore = false;
+    async function loadCourses() {
+      if (!selectedUni) return;
+      try {
+        setIsCatalogLoading(true);
+        const res = await catalogApi.getCoursesByUniversity(selectedUni);
+        if (!ignore) {
+          const list = res?.content || res || [];
+          if (Array.isArray(list) && list.length > 0) {
+            setCourseOptions(list);
+            setSelectedCourse((prev) => (list.some((c) => c.id === prev) ? prev : list[0].id));
+          } else {
+            const fallback = academicCatalogService.getCoursesByUniversity(selectedUni);
+            setCourseOptions(fallback);
+            setSelectedCourse((prev) => (fallback.length > 0 && fallback.some((c) => c.id === prev) ? prev : (fallback[0]?.id || '')));
+          }
+        }
+      } catch {
+        if (!ignore) {
+          const fallback = academicCatalogService.getCoursesByUniversity(selectedUni);
+          setCourseOptions(fallback);
+          setSelectedCourse((prev) => (fallback.length > 0 && fallback.some((c) => c.id === prev) ? prev : (fallback[0]?.id || '')));
+        }
+      } finally {
+        if (!ignore) setIsCatalogLoading(false);
+      }
     }
-    if (!activeReg) return 0;
-    const found = activeReg.grades.find((g) => g.grade === gradeSymbol);
-    return found ? found.points : 0;
+    loadCourses();
+    return () => { ignore = true; };
+  }, [selectedUni]);
+
+  // 3. Fetch Regulations when Course changes
+  useEffect(() => {
+    let ignore = false;
+    async function loadRegulations() {
+      if (!selectedCourse) return;
+      try {
+        setIsCatalogLoading(true);
+        const res = await catalogApi.getRegulationsByCourse(selectedCourse);
+        if (!ignore) {
+          const list = res?.content || res || [];
+          if (Array.isArray(list) && list.length > 0) {
+            setRegulationOptions(list);
+            setSelectedRegulation((prev) => (list.some((r) => r.id === prev) ? prev : list[0].id));
+          } else {
+            const fallback = academicCatalogService.getRegulationsByCourse(selectedUni, selectedCourse);
+            setRegulationOptions(fallback);
+            setSelectedRegulation((prev) => (fallback.length > 0 && fallback.some((r) => r.id === prev) ? prev : (fallback[0]?.id || '')));
+          }
+        }
+      } catch {
+        if (!ignore) {
+          const fallback = academicCatalogService.getRegulationsByCourse(selectedUni, selectedCourse);
+          setRegulationOptions(fallback);
+          setSelectedRegulation((prev) => (fallback.length > 0 && fallback.some((r) => r.id === prev) ? prev : (fallback[0]?.id || '')));
+        }
+      } finally {
+        if (!ignore) setIsCatalogLoading(false);
+      }
+    }
+    loadRegulations();
+    return () => { ignore = true; };
+  }, [selectedCourse, selectedUni]);
+
+  // 4. Fetch Full Regulation Detail
+  useEffect(() => {
+    let ignore = false;
+    async function loadRegulationDetail() {
+      if (!selectedRegulation) return;
+      try {
+        const detail = await catalogApi.getRegulationById(selectedRegulation);
+        if (!ignore && detail) {
+          setActiveRegulationDetail(detail);
+        }
+      } catch {
+        if (!ignore) {
+          const local = academicCatalogService.getFullConfiguration(selectedUni, selectedCourse, selectedRegulation);
+          setActiveRegulationDetail(local);
+        }
+      }
+    }
+    loadRegulationDetail();
+    return () => { ignore = true; };
+  }, [selectedRegulation, selectedCourse, selectedUni]);
+
+  // Derive dynamic grading scale tiers (supporting Osmania S-grade scheme)
+  const availableGrades = useMemo(() => {
+    if (activeRegulationDetail?.gradingScale?.boundaries?.length > 0) {
+      return activeRegulationDetail.gradingScale.boundaries.map((b) => ({
+        grade: b.gradeLetter,
+        points: Number(b.gradePoints),
+        desc: b.qualitativeDesc || ''
+      }));
+    }
+    if (activeRegulationDetail?.gradeScale?.length > 0) {
+      return activeRegulationDetail.gradeScale.map((g) => ({
+        grade: g.grade,
+        points: Number(g.points),
+        desc: g.desc || ''
+      }));
+    }
+    const isOu = selectedUni && (selectedUni.toLowerCase().includes('osmania') || selectedUni.toLowerCase().includes('ou'));
+    if (isOu) {
+      return [
+        { grade: 'S', points: 10, desc: 'Super' },
+        { grade: 'A', points: 9, desc: 'Excellent' },
+        { grade: 'B', points: 8, desc: 'Very Good' },
+        { grade: 'C', points: 7, desc: 'Good' },
+        { grade: 'D', points: 6, desc: 'Fair' },
+        { grade: 'E', points: 5, desc: 'Pass' },
+        { grade: 'F', points: 0, desc: 'Fail' }
+      ];
+    }
+    return [
+      { grade: 'O', points: 10, desc: 'Outstanding' },
+      { grade: 'A+', points: 9, desc: 'Excellent' },
+      { grade: 'A', points: 8, desc: 'Very Good' },
+      { grade: 'B+', points: 7, desc: 'Good' },
+      { grade: 'B', points: 6, desc: 'Above Average' },
+      { grade: 'C', points: 5, desc: 'Pass' },
+      { grade: 'F', points: 0, desc: 'Fail' }
+    ];
+  }, [activeRegulationDetail, selectedUni]);
+
+  const getPointsForGrade = useCallback((gradeSymbol) => {
+    const match = availableGrades.find((g) => g.grade === gradeSymbol);
+    return match ? match.points : 0;
+  }, [availableGrades]);
+
+  const handleUniversityChange = (uniKey) => {
+    setBackendResult(null);
+    setSelectedUni(uniKey);
   };
 
   const handleRegulationChange = (regKey) => {
+    setBackendResult(null);
     setSelectedRegulation(regKey);
-    const newReg = UNIVERSITY_DATA[selectedUni]?.courses[selectedCourse]?.regulations[regKey];
-    if (newReg?.defaultSubjects) {
-      setSubjects(newReg.defaultSubjects.map((s, idx) => ({ ...s, id: String(Date.now() + idx) })));
-    }
-  };
-
-  const handleUniversityChange = (uniKey) => {
-    setSelectedUni(uniKey);
-    const firstCourse = Object.keys(UNIVERSITY_DATA[uniKey]?.courses || {})[0];
-    setSelectedCourse(firstCourse);
-    const firstReg = Object.keys(UNIVERSITY_DATA[uniKey]?.courses[firstCourse]?.regulations || {})[0];
-    handleRegulationChange(firstReg);
   };
 
   const handleAddSubject = () => {
     if (subjects.length >= 12) return;
+    setBackendResult(null);
+    const topGrade = availableGrades[0]?.grade || 'A';
     setSubjects((prev) => [
       ...prev,
-      { id: String(Date.now()), name: '', credits: 3, grade: activeReg?.grades[0]?.grade || 'A' },
+      { id: String(Date.now()), name: '', credits: 3, grade: topGrade },
     ]);
   };
 
@@ -116,23 +250,44 @@ export default function CGPACalculator() {
       setTimeout(() => setValidationError(''), 3000);
       return;
     }
+    setBackendResult(null);
     setSubjects((prev) => prev.filter((s) => s.id !== id));
   };
 
   const handleSubjectChange = (id, field, value) => {
+    setBackendResult(null);
     setSubjects((prev) =>
       prev.map((s) => (s.id === id ? { ...s, [field]: value } : s))
     );
   };
 
   const handleReset = () => {
-    if (activeReg?.defaultSubjects) {
-      setSubjects(activeReg.defaultSubjects.map((s, idx) => ({ ...s, id: String(Date.now() + idx) })));
-    }
+    setBackendResult(null);
+    setSubjects(DEFAULT_SUBJECTS);
+    showToast('Reset to default subjects');
   };
 
   // Live Metrics Calculation
   const metrics = useMemo(() => {
+    if (backendResult) {
+      const cgpa = Number(backendResult.sgpa) || 0;
+      const totalCredits = Number(backendResult.totalCredits) || 0;
+      const totalPoints = Number(backendResult.totalCreditPoints) || 0;
+      const percentRes = academicCalculationEngine.convertCGPAToPercentage(
+        cgpa,
+        activeRegulationDetail?.calculationRule || (selectedUni.includes('jntuh') ? '(CGPA - 0.5) * 10' : 'CGPA * 10')
+      );
+      return {
+        totalCredits,
+        totalPoints,
+        cgpa,
+        percentage: percentRes.percentage,
+        letterGrade: backendResult.subjectResults?.[0]?.letterGrade || availableGrades[0]?.grade || 'A',
+        formulaUsed: backendResult.formulaExplanation || percentRes.formulaUsed,
+        isVerifiedBackend: true
+      };
+    }
+
     let totalCredits = 0;
     let totalPoints = 0;
 
@@ -145,31 +300,77 @@ export default function CGPACalculator() {
 
     const cgpa = totalCredits > 0 ? totalPoints / totalCredits : 0;
     
-    // Wire to central Academic Calculation Engine with regulation's rule
     const percentRes = academicCalculationEngine.convertCGPAToPercentage(
       cgpa,
-      catalogConfig?.calculationRule || (selectedUni === 'jntuh' ? '(CGPA - 0.5) * 10' : 'CGPA * 10')
+      activeRegulationDetail?.calculationRule || (selectedUni.includes('jntuh') ? '(CGPA - 0.5) * 10' : 'CGPA * 10')
     );
     const percentage = percentRes.percentage;
 
     let letterGrade = 'F';
-    if (cgpa >= 9.0) letterGrade = catalogConfig?.gradeScale?.[0]?.grade || 'A+';
+    const topGrade = availableGrades[0]?.grade || 'A+';
+    if (cgpa >= 9.0) letterGrade = topGrade;
     else if (cgpa >= 8.0) letterGrade = 'A';
     else if (cgpa >= 7.0) letterGrade = 'B+';
     else if (cgpa >= 6.0) letterGrade = 'B';
     else if (cgpa >= 5.0) letterGrade = 'C';
     else if (cgpa >= 4.0) letterGrade = 'D';
 
-    return { totalCredits, totalPoints, cgpa, percentage, letterGrade, formulaUsed: percentRes.formulaUsed };
-  }, [subjects, activeReg, catalogConfig, selectedUni]);
+    return { totalCredits, totalPoints, cgpa, percentage, letterGrade, formulaUsed: percentRes.formulaUsed, isVerifiedBackend: false };
+  }, [subjects, activeRegulationDetail, selectedUni, availableGrades, backendResult, getPointsForGrade]);
+
+  const activeUniObj = useMemo(() => {
+    return universityOptions.find((u) => u.id === selectedUni) || null;
+  }, [universityOptions, selectedUni]);
+
+  const activeCourseObj = useMemo(() => {
+    return courseOptions.find((c) => c.id === selectedCourse) || null;
+  }, [courseOptions, selectedCourse]);
+
+  const activeRegObj = useMemo(() => {
+    return regulationOptions.find((r) => r.id === selectedRegulation) || null;
+  }, [regulationOptions, selectedRegulation]);
+
+  const handleCalculate = async () => {
+    if (!subjects || subjects.length === 0) {
+      setValidationError('At least one subject is required to compute CGPA.');
+      return;
+    }
+    const invalidCredits = subjects.some(
+      (s) => !s.credits || isNaN(parseFloat(s.credits)) || parseFloat(s.credits) <= 0
+    );
+    if (invalidCredits) {
+      setValidationError('Please enter valid positive credits for all subjects.');
+      return;
+    }
+    setValidationError('');
+    setIsCalculating(true);
+    setApiNotice('');
+
+    try {
+      const resp = await calculationApi.calculateSgpa({
+        universityId: selectedUni,
+        regulationId: selectedRegulation,
+        subjects
+      });
+      if (resp) {
+        setBackendResult(resp);
+        showToast('CGPA verified by Academic Calculation Engine');
+      }
+    } catch {
+      setApiNotice('Backend calculation service unavailable; evaluated using verified client engine.');
+    } finally {
+      setIsCalculating(false);
+      setIsResultModalOpen(true);
+    }
+  };
 
   const handleSaveResult = () => {
     const calcRecord = {
       calculatorType: 'CGPA',
       title: 'CGPA Calculation',
-      university: UNIVERSITY_DATA[selectedUni]?.name || selectedUni,
-      regulation: activeReg?.name || selectedRegulation,
-      course: selectedCourse,
+      university: activeUniObj?.name || selectedUni,
+      regulation: activeRegObj?.name || selectedRegulation,
+      course: activeCourseObj?.name || selectedCourse,
       semester: selectedSem,
       result: `${metrics.cgpa.toFixed(2)} CGPA`,
       score: metrics.cgpa.toFixed(2),
@@ -200,98 +401,6 @@ export default function CGPACalculator() {
     }
   };
 
-  const handleDownloadPdf = async () => {
-    if (isGeneratingPdf) return;
-    setIsGeneratingPdf(true);
-    try {
-      const pdfData = {
-        calculatorName: 'CGPA Result Card',
-        subtitle: 'Calculated using your subject credits and grades',
-        filename: 'ResultPoint_CGPA_Result.pdf',
-        score: metrics.cgpa.toFixed(2),
-        maxScale: 10,
-        standing: standing?.text,
-        metadata: {
-          university: UNIVERSITY_DATA[selectedUni]?.name || selectedUni,
-          regulation: activeReg?.name || selectedRegulation.toUpperCase(),
-          course: UNIVERSITY_DATA[selectedUni]?.courses[selectedCourse]?.name || selectedCourse,
-          semester: selectedSem.toUpperCase(),
-          calculationMethod: 'Weighted Average (Credit Based)',
-          totalSubjects: subjects.length
-        },
-        subjectRows: subjects.map((s, idx) => ({
-          num: idx + 1,
-          name: s.name || `Subject ${idx + 1}`,
-          credits: s.credits,
-          grade: s.grade,
-          gradePoints: getPointsForGrade(s.grade),
-          creditPoints: (parseFloat(s.credits) || 0) * getPointsForGrade(s.grade)
-        })),
-        metrics: [
-          { label: 'Total Credits', value: metrics.totalCredits },
-          { label: 'Total Grade Points', value: Math.round(metrics.totalPoints) },
-          { label: 'Percentage Equivalent', value: `${metrics.percentage.toFixed(2)}%` },
-          { label: 'Letter Grade', value: metrics.letterGrade }
-        ]
-      };
-      downloadCalculatorPdf(pdfData);
-      showToast('PDF downloaded successfully!');
-    } catch (err) {
-      console.error('PDF error:', err);
-      showToast('Failed to download PDF. Please try again.', 'error');
-    } finally {
-      setIsGeneratingPdf(false);
-    }
-  };
-
-  const handleShareResult = async () => {
-    if (isSharing) return;
-    setIsSharing(true);
-    try {
-      const shareData = {
-        toolName: 'CGPA',
-        score: metrics.cgpa.toFixed(2),
-        scaleText: 'out of 10',
-        metrics: [
-          { label: 'Total Credits', value: metrics.totalCredits },
-          { label: 'Total Grade Points', value: Math.round(metrics.totalPoints) },
-          { label: 'Percentage Equivalent', value: `${metrics.percentage.toFixed(2)}%` },
-          { label: 'Letter Grade', value: metrics.letterGrade }
-        ],
-        metadata: {
-          university: UNIVERSITY_DATA[selectedUni]?.name || selectedUni,
-          regulation: activeReg?.name || selectedRegulation.toUpperCase(),
-          semester: selectedSem.toUpperCase()
-        }
-      };
-      const result = await shareCalculationResult(shareData);
-      if (result.success) {
-        showToast(result.message);
-      } else if (!result.cancelled) {
-        showToast(result.message || 'Unable to share result.', 'error');
-      }
-    } catch (err) {
-      console.error('Share error:', err);
-      showToast('Failed to share result.', 'error');
-    } finally {
-      setIsSharing(false);
-    }
-  };
-
-  const handleCalculate = () => {
-    if (!subjects || subjects.length === 0) {
-      setValidationError('At least one subject is required for CGPA calculation.');
-      return;
-    }
-    const invalid = subjects.some((s) => !s.credits || parseFloat(s.credits) <= 0);
-    if (invalid) {
-      setValidationError('Please enter valid positive credits for all subjects.');
-      return;
-    }
-    setValidationError('');
-    setIsResultModalOpen(true);
-  };
-
   const resultCardsData = useMemo(() => [
     { label: 'Total Credits', value: metrics.totalCredits },
     { label: 'Total Grade Points', value: Math.round(metrics.totalPoints) },
@@ -301,7 +410,7 @@ export default function CGPACalculator() {
   ], [metrics]);
 
   // Standing Narrative & Status
-  const standing = useMemo(() => {
+  const standing = (() => {
     if (metrics.cgpa >= 8.5) {
       return {
         icon: '🏆',
@@ -332,11 +441,8 @@ export default function CGPACalculator() {
       narrative: 'Prioritize fundamentals and consult professors to convert lower credit grades.',
       tips: 'Meet academic mentors to clarify complex subjects before final examinations.',
     };
-  }, [metrics.cgpa]);
+  })();
 
-  const circumference = 2 * Math.PI * 64; // 402.12
-  const fraction = Math.max(0, Math.min(1, metrics.cgpa / 10));
-  const strokeDashoffset = circumference - fraction * circumference;
   const currentChartY = 145 - (Math.max(0, Math.min(10, metrics.cgpa)) / 10) * 125;
 
   return (
@@ -405,9 +511,17 @@ export default function CGPACalculator() {
                     onChange={(e) => handleUniversityChange(e.target.value)}
                     className="calc-input w-full px-3 py-2 rounded-xl text-xs font-medium cursor-pointer"
                   >
-                    {Object.keys(UNIVERSITY_DATA).map((key) => (
-                      <option key={key} value={key}>{UNIVERSITY_DATA[key].name}</option>
-                    ))}
+                    {universityOptions && universityOptions.length > 0 ? (
+                      universityOptions.map((u) => (
+                        <option key={u.id} value={u.id}>{u.name || u.shortName}</option>
+                      ))
+                    ) : (
+                      <>
+                        <option value="uni_jntuh">JNTU Hyderabad</option>
+                        <option value="uni_ou">Osmania University</option>
+                        <option value="uni_anna">Anna University</option>
+                      </>
+                    )}
                   </select>
                 </div>
 
@@ -418,9 +532,13 @@ export default function CGPACalculator() {
                     onChange={(e) => setSelectedCourse(e.target.value)}
                     className="calc-input w-full px-3 py-2 rounded-xl text-xs font-medium cursor-pointer"
                   >
-                    {Object.keys(UNIVERSITY_DATA[selectedUni]?.courses || {}).map((key) => (
-                      <option key={key} value={key}>{UNIVERSITY_DATA[selectedUni].courses[key].name}</option>
-                    ))}
+                    {courseOptions && courseOptions.length > 0 ? (
+                      courseOptions.map((c) => (
+                        <option key={c.id} value={c.id}>{c.name || c.shortName}</option>
+                      ))
+                    ) : (
+                      <option value={selectedCourse}>{selectedCourse}</option>
+                    )}
                   </select>
                 </div>
 
@@ -431,9 +549,13 @@ export default function CGPACalculator() {
                     onChange={(e) => handleRegulationChange(e.target.value)}
                     className="calc-input w-full px-3 py-2 rounded-xl text-xs font-medium cursor-pointer"
                   >
-                    {Object.keys(UNIVERSITY_DATA[selectedUni]?.courses[selectedCourse]?.regulations || {}).map((key) => (
-                      <option key={key} value={key}>{key.toUpperCase()}</option>
-                    ))}
+                    {regulationOptions && regulationOptions.length > 0 ? (
+                      regulationOptions.map((r) => (
+                        <option key={r.id} value={r.id}>{r.name || r.code}</option>
+                      ))
+                    ) : (
+                      <option value={selectedRegulation}>{selectedRegulation.toUpperCase()}</option>
+                    )}
                   </select>
                 </div>
 
@@ -444,20 +566,38 @@ export default function CGPACalculator() {
                     onChange={(e) => setSelectedSem(e.target.value)}
                     className="calc-input w-full px-3 py-2 rounded-xl text-xs font-medium cursor-pointer"
                   >
-                    {activeReg?.semesters?.map((sem) => (
-                      <option key={sem.id} value={sem.id}>{sem.name}</option>
+                    {['Semester 1', 'Semester 2', 'Semester 3', 'Semester 4', 'Semester 5', 'Semester 6', 'Semester 7', 'Semester 8'].map((sem) => (
+                      <option key={sem} value={sem}>{sem}</option>
                     ))}
                   </select>
                 </div>
               </div>
 
-              <div className="my-3.5 p-3 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center gap-2.5 text-xs text-brandBlue">
-                <Info className="w-4 h-4 text-brandBlue shrink-0" />
-                <span>Enter your subjects, credits and grades for the selected semester to calculate your CGPA.</span>
+              {apiNotice && (
+                <div className="my-3.5 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center gap-2.5 text-xs text-amber-700 dark:text-amber-400">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{apiNotice}</span>
+                </div>
+              )}
+
+              <div className="my-3.5 p-3 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-between gap-2.5 text-xs text-brandBlue">
+                <div className="flex items-center gap-2.5">
+                  <Info className="w-4 h-4 text-brandBlue shrink-0" />
+                  <span>Enter your subjects, credits and grades for the selected semester to calculate your CGPA.</span>
+                </div>
+                {isCatalogLoading && (
+                  <div className="flex items-center gap-1.5 text-[11px] font-semibold text-accent">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Loading catalog...</span>
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center justify-between pb-3">
-                <h3 className="text-sm font-bold text-text-h">Enter Subject Details</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-bold text-text-h">Enter Subject Details</h3>
+                  {isCatalogLoading && <Loader2 className="w-3.5 h-3.5 animate-spin text-accent" />}
+                </div>
                 <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-bg-sec border border-border text-text-m">
                   {subjects.length} Subjects
                 </span>
@@ -504,7 +644,7 @@ export default function CGPACalculator() {
                           onChange={(e) => handleSubjectChange(sub.id, 'grade', e.target.value)}
                           className="calc-input w-full px-2 py-1.5 text-center rounded-lg text-xs font-semibold cursor-pointer"
                         >
-                          {activeReg?.grades?.map((g) => (
+                          {availableGrades.map((g) => (
                             <option key={g.grade} value={g.grade}>{g.grade}</option>
                           ))}
                         </select>
@@ -533,8 +673,8 @@ export default function CGPACalculator() {
                           onClick={() => handleRemoveSubject(sub.id)}
                           className="text-xs font-semibold text-brandPink flex items-center gap-1"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          <span>Delete</span>
+                          <Trash2 className="w-3 h-3" />
+                          <span>Remove</span>
                         </button>
                       </div>
                       <input
@@ -563,7 +703,7 @@ export default function CGPACalculator() {
                             onChange={(e) => handleSubjectChange(sub.id, 'grade', e.target.value)}
                             className="calc-input w-full px-2 py-1.5 text-center rounded-lg text-xs font-semibold"
                           >
-                            {activeReg?.grades?.map((g) => (
+                            {availableGrades.map((g) => (
                               <option key={g.grade} value={g.grade}>{g.grade}</option>
                             ))}
                           </select>
@@ -600,12 +740,12 @@ export default function CGPACalculator() {
               <div className="mt-5 pt-4 border-t border-border">
                 <div className="flex items-center justify-between mb-2">
                   <h4 className="text-xs font-bold uppercase tracking-wider text-text-h">
-                    Grade System ({activeReg?.name})
+                    Grade System ({activeRegObj?.name || selectedRegulation.toUpperCase()})
                   </h4>
                   <span className="text-[11px] text-text-light">10 Point Scale</span>
                 </div>
                 <div className="grid grid-cols-4 sm:grid-cols-8 gap-1.5">
-                  {activeReg?.grades?.map((item) => (
+                  {availableGrades.map((item) => (
                     <div key={item.grade} className="p-2 rounded-xl border border-border bg-bg-sec text-center">
                       <div className="text-[11px] font-bold text-accent">{item.grade}</div>
                       <div className="text-xs font-extrabold text-text-h mt-0.5">{item.points}</div>
@@ -628,11 +768,23 @@ export default function CGPACalculator() {
                 <button
                   type="button"
                   onClick={handleCalculate}
-                  className="px-6 py-2.5 rounded-xl bg-accent hover:bg-accent-hover text-white text-xs font-bold shadow-accent transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
+                  disabled={isCalculating}
+                  className={`px-6 py-2.5 rounded-xl bg-accent hover:bg-accent-hover text-white text-xs font-bold shadow-accent transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer ${
+                    isCalculating ? 'opacity-70 cursor-not-allowed' : ''
+                  }`}
                 >
-                  <TrendingUp className="w-3.5 h-3.5" />
-                  <span>Calculate CGPA</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
+                  {isCalculating ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Evaluating...</span>
+                    </>
+                  ) : (
+                    <>
+                      <TrendingUp className="w-3.5 h-3.5" />
+                      <span>Calculate CGPA</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </>
+                  )}
                 </button>
               </div>
             </div>
@@ -647,14 +799,11 @@ export default function CGPACalculator() {
             standing={standing}
             isMobileModalOpen={isResultModalOpen}
             onCloseMobileModal={() => setIsResultModalOpen(false)}
-            onSave={(record) => {
-              setPendingCalc(record);
-              setIsModalOpen(true);
-            }}
+            onSave={handleSaveResult}
             metadata={{
-              university: UNIVERSITY_DATA[selectedUni]?.name || selectedUni.toUpperCase(),
-              regulation: selectedRegulation.toUpperCase(),
-              course: UNIVERSITY_DATA[selectedUni]?.courses[selectedCourse]?.name || selectedCourse.toUpperCase(),
+              university: activeUniObj?.name || selectedUni.toUpperCase(),
+              regulation: activeRegObj?.name || selectedRegulation.toUpperCase(),
+              course: activeCourseObj?.name || selectedCourse.toUpperCase(),
               semester: selectedSem.toUpperCase(),
               calculationMethod: 'Weighted Average (Credit Based)',
               totalSubjects: subjects.length
@@ -675,9 +824,9 @@ export default function CGPACalculator() {
               maxScale: 10,
               standing: standing?.text,
               metadata: {
-                university: UNIVERSITY_DATA[selectedUni]?.name || selectedUni.toUpperCase(),
-                regulation: selectedRegulation.toUpperCase(),
-                course: UNIVERSITY_DATA[selectedUni]?.courses[selectedCourse]?.name || selectedCourse.toUpperCase(),
+                university: activeUniObj?.name || selectedUni.toUpperCase(),
+                regulation: activeRegObj?.name || selectedRegulation.toUpperCase(),
+                course: activeCourseObj?.name || selectedCourse.toUpperCase(),
                 semester: selectedSem.toUpperCase(),
                 calculationMethod: 'Weighted Average (Credit Based)',
                 totalSubjects: subjects.length
@@ -708,8 +857,8 @@ export default function CGPACalculator() {
                 { label: 'Letter Grade', value: metrics.letterGrade }
               ],
               metadata: {
-                university: (UNIVERSITY_DATA[selectedUni]?.name || selectedUni).toUpperCase(),
-                regulation: selectedRegulation.toUpperCase(),
+                university: (activeUniObj?.name || selectedUni).toUpperCase(),
+                regulation: (activeRegObj?.name || selectedRegulation).toUpperCase(),
                 semester: selectedSem.toUpperCase()
               }
             }}

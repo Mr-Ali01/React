@@ -4,7 +4,6 @@ import com.resultpoint.common.exception.ResourceNotFoundException;
 import com.resultpoint.modules.calculation.dto.*;
 import com.resultpoint.modules.calculation.engine.AcademicCalculationEngine;
 import com.resultpoint.modules.calculation.entity.CalculationRule;
-import com.resultpoint.modules.calculation.entity.GradeBoundary;
 import com.resultpoint.modules.calculation.entity.GradingScale;
 import com.resultpoint.modules.calculation.formula.FormulaEvaluator;
 import com.resultpoint.modules.calculation.repository.CalculationRuleRepository;
@@ -128,13 +127,41 @@ public class CalculationService {
                 rule.getPercentageFormulaDesc(),
                 rule.getPercentageFormulaExpression().replace("CGPA", request.getCgpa().toPlainString()));
 
+        String verificationStatus;
+        String notes;
+        String warning = null;
+
+        if ("rule_jntuh_r18".equalsIgnoreCase(rule.getId())) {
+            verificationStatus = "VERIFIED";
+            notes = "Statutory rule per JNTUH B.Tech Academic Regulations R18/R22 Clause 11.2: (CGPA - 0.5) * 10.";
+        } else if ("rule_ou_cbcs_standard".equalsIgnoreCase(rule.getId())) {
+            verificationStatus = "UNVERIFIED";
+            notes = "Institutional convention (CGPA * 10). Osmania University does not publish a statutory percentage formula on official marks cards.";
+        } else if ("rule_standard_ugc".equalsIgnoreCase(rule.getId())) {
+            verificationStatus = "VERIFIED_VTU_LEGACY";
+            notes = "AICTE model & VTU 2015-2018 CBCS Clause 18OB 7.1 linear formula: (CGPA - 0.75) * 10.";
+        } else {
+            verificationStatus = "GENERAL_BASELINE";
+            notes = rule.getName();
+        }
+
+        if (percentage.compareTo(BigDecimal.ZERO) < 0) {
+            warning = String.format("Calculated percentage is negative (%s%%) because input CGPA (%s) is below the formula threshold. Statutory passing CGPA is 5.00.",
+                    percentage.toPlainString(), request.getCgpa().toPlainString());
+        } else if (percentage.compareTo(new BigDecimal("100.00")) > 0) {
+            warning = String.format("Calculated percentage (%s%%) exceeds 100.00%%. Verify input CGPA (%s).",
+                    percentage.toPlainString(), request.getCgpa().toPlainString());
+        }
+
         return PercentageCalculationResponse.builder()
                 .cgpa(request.getCgpa())
                 .percentage(percentage)
                 .formulaExpression(rule.getPercentageFormulaExpression())
                 .formulaExplanation(formulaExplanation)
                 .universityName(universityName)
-                .notes(rule.getName())
+                .verificationStatus(verificationStatus)
+                .notes(notes)
+                .warning(warning)
                 .build();
     }
 

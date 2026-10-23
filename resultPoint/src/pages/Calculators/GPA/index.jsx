@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { Home, ChevronRight, Calculator } from 'lucide-react';
 import CalculatorDirectorySidebar from '../CalculatorDirectorySidebar';
@@ -14,8 +14,10 @@ import { saveCalculationToHistory } from '../../../features/calculation/calculat
 import { calculationSaveService } from '../../../services/calculationSaveService';
 import { academicCatalogService } from '../../../services/academicCatalogService';
 import { academicCalculationEngine } from '../../../services/academicCalculationEngine';
+import { catalogApi } from '../../../services/api/catalogApi';
+import { calculationApi } from '../../../services/api/calculationApi';
 
-const GRADE_POINTS_MAP = {
+const DEFAULT_GRADE_POINTS_MAP = {
   S: 10, 'A+': 9, A: 8, 'B+': 7, B: 6, C: 5, D: 4, F: 0
 };
 
@@ -41,6 +43,120 @@ export default function GPACalculator() {
   const [isResultModalOpen, setIsResultModalOpen] = useState(false);
   const [pendingCalc, setPendingCalc] = useState(null);
   const [validationError, setValidationError] = useState('');
+  const [isCalculating, setIsCalculating] = useState(false);
+  const [apiError, setApiError] = useState(null);
+
+  // Dynamic Catalog States
+  const [universities, setUniversities] = useState([]);
+  const [courses, setCourses] = useState([]);
+  const [regulations, setRegulations] = useState([]);
+  const [activeRegDetail, setActiveRegDetail] = useState(null);
+  const [isLoadingCatalog, setIsLoadingCatalog] = useState(false);
+
+  // 1. Fetch Universities on Mount
+  useEffect(() => {
+    let ignore = false;
+    async function loadUniversities() {
+      setIsLoadingCatalog(true);
+      try {
+        const data = await catalogApi.getUniversities();
+        if (!ignore && Array.isArray(data) && data.length > 0) {
+          setUniversities(data);
+          setApiError(null);
+        }
+      } catch (err) {
+        if (!ignore) {
+          console.warn('Catalog API unavailable, using fallback data:', err);
+          const fallbackUnis = academicCatalogService.getUniversities();
+          setUniversities(fallbackUnis.map((u) => ({ id: u.id, name: u.name, code: u.code })));
+        }
+      } finally {
+        if (!ignore) setIsLoadingCatalog(false);
+      }
+    }
+    loadUniversities();
+    return () => { ignore = true; };
+  }, []);
+
+  // 2. Fetch Courses when University changes
+  useEffect(() => {
+    let ignore = false;
+    async function loadCourses() {
+      if (!university) return;
+      try {
+        const data = await catalogApi.getCoursesByUniversity(university);
+        if (!ignore && Array.isArray(data) && data.length > 0) {
+          setCourses(data);
+          setCourse((prev) => (data.some((c) => c.id === prev || c.code?.toLowerCase() === prev?.toLowerCase()) ? prev : (data[0].id || data[0].code?.toLowerCase())));
+        }
+      } catch {
+        if (!ignore) {
+          const fallbackCourses = academicCatalogService.getCourses(university);
+          setCourses(fallbackCourses.map((c) => ({ id: c.id, name: c.name, code: c.code })));
+        }
+      }
+    }
+    loadCourses();
+    return () => { ignore = true; };
+  }, [university]);
+
+  // 3. Fetch Regulations when Course changes
+  useEffect(() => {
+    let ignore = false;
+    async function loadRegulations() {
+      if (!course) return;
+      try {
+        const data = await catalogApi.getRegulationsByCourse(course);
+        if (!ignore && Array.isArray(data) && data.length > 0) {
+          setRegulations(data);
+          setRegulation((prev) => (data.some((r) => r.id === prev || r.code?.toLowerCase() === prev?.toLowerCase()) ? prev : (data[0].id || data[0].code?.toLowerCase())));
+        }
+      } catch {
+        if (!ignore) {
+          const fallbackRegs = academicCatalogService.getRegulations(university, course);
+          setRegulations(fallbackRegs.map((r) => ({ id: r.id, name: r.name, code: r.code })));
+        }
+      }
+    }
+    loadRegulations();
+    return () => { ignore = true; };
+  }, [university, course]);
+
+  // 4. Fetch Regulation Details when Regulation changes
+  useEffect(() => {
+    let ignore = false;
+    async function loadRegulationDetail() {
+      if (!regulation) return;
+      try {
+        const detail = await catalogApi.getRegulationById(regulation);
+        if (!ignore && detail) {
+          setActiveRegDetail(detail);
+        }
+      } catch {
+        if (!ignore) {
+          setActiveRegDetail(null);
+        }
+      }
+    }
+    loadRegulationDetail();
+    return () => { ignore = true; };
+  }, [regulation, university, course]);
+
+  // Dynamically resolved Grade Points Map
+  const dynamicGradePointsMap = useMemo(() => {
+    if (activeRegDetail?.gradingScale?.boundaries && Array.isArray(activeRegDetail.gradingScale.boundaries)) {
+      const map = {};
+      activeRegDetail.gradingScale.boundaries.forEach((b) => {
+        map[b.grade] = Number(b.gradePoints);
+      });
+      return map;
+    }
+    // Fallback: check Osmania University rule
+    if (university === 'osmania' || university === 'uni_ou') {
+      return { S: 10, A: 9, B: 8, C: 7, D: 6, E: 5, F: 0 };
+    }
+    return DEFAULT_GRADE_POINTS_MAP;
+  }, [activeRegDetail, university]);
 
   const handleAddSubject = () => {
     if (subjects.length >= 12) return;
@@ -78,7 +194,7 @@ export default function GPACalculator() {
 
     subjects.forEach((s) => {
       const cr = parseFloat(s.credits) || 0;
-      const pts = GRADE_POINTS_MAP[s.grade] ?? 0;
+      const pts = dynamicGradePointsMap[s.grade] ?? 0;
       totalCredits += cr;
       totalPoints += cr * pts;
     });
@@ -86,14 +202,15 @@ export default function GPACalculator() {
     const gpa = totalCredits > 0 ? totalPoints / totalCredits : 0;
     
     // Wire to central Academic Calculation Engine with university rule
+    const isJntuh = university === 'jntuh' || university === 'uni_jntuh';
     const percentRes = academicCalculationEngine.convertCGPAToPercentage(
       gpa,
-      university === 'jntuh' ? '(CGPA - 0.5) * 10' : 'CGPA * 10'
+      isJntuh ? '(CGPA - 0.5) * 10' : 'CGPA * 10'
     );
     const percentage = percentRes.percentage;
 
     let letterGrade = 'F';
-    if (gpa >= 9.0) letterGrade = 'A+';
+    if (gpa >= 9.0) letterGrade = dynamicGradePointsMap['S'] ? 'S' : 'A+';
     else if (gpa >= 8.0) letterGrade = 'A';
     else if (gpa >= 7.0) letterGrade = 'B+';
     else if (gpa >= 6.0) letterGrade = 'B';
@@ -101,7 +218,7 @@ export default function GPACalculator() {
     else if (gpa >= 4.0) letterGrade = 'D';
 
     return { totalCredits, totalPoints, gpa, percentage, letterGrade, formulaUsed: percentRes.formulaUsed };
-  }, [subjects, university]);
+  }, [subjects, university, dynamicGradePointsMap]);
 
   const standing = useMemo(() => {
     if (metrics.gpa >= 9.0) {
@@ -154,7 +271,7 @@ export default function GPACalculator() {
     }
   };
 
-  const handleCalculate = () => {
+  const handleCalculate = async () => {
     if (!subjects || subjects.length === 0) {
       setValidationError('At least one subject is required for GPA calculation.');
       return;
@@ -167,7 +284,26 @@ export default function GPACalculator() {
       return;
     }
     setValidationError('');
-    setIsResultModalOpen(true);
+
+    // Call backend SGPA calculation API
+    setIsCalculating(true);
+    try {
+      const payload = {
+        regulationId: regulation,
+        subjects: subjects.map((s) => ({
+          subjectName: s.name,
+          credits: parseFloat(s.credits) || 0,
+          grade: s.grade,
+        })),
+      };
+      await calculationApi.calculateSgpa(payload);
+      setApiError(null);
+    } catch (err) {
+      console.warn('Backend SGPA calculation API failed, using fallback engine:', err);
+    } finally {
+      setIsCalculating(false);
+      setIsResultModalOpen(true);
+    }
   };
 
   const resultCardsData = [
@@ -226,11 +362,17 @@ export default function GPACalculator() {
             onSubjectChange={handleSubjectChange}
             onReset={handleReset}
             onSubmit={handleCalculate}
-            gradePointsMap={GRADE_POINTS_MAP}
-            regulationName={regulation.toUpperCase()}
+            gradePointsMap={dynamicGradePointsMap}
+            regulationName={activeRegDetail?.name || regulation.toUpperCase()}
             validationError={validationError}
             infoBannerText="Enter your subjects, credits and grades to calculate your GPA."
             actionButtonText="Calculate GPA"
+            universityOptions={universities.map((u) => ({ id: u.id, name: u.name, code: u.code }))}
+            courseOptions={courses.map((c) => ({ id: c.id, name: c.name, code: c.code }))}
+            regulationOptions={regulations.map((r) => ({ id: r.id, name: r.name, code: r.code }))}
+            isLoading={isLoadingCatalog}
+            isCalculating={isCalculating}
+            apiError={apiError}
           />
 
           {/* Reusable Result Gauge Card */}
@@ -255,8 +397,8 @@ export default function GPACalculator() {
               name: s.name || `Subject ${idx + 1}`,
               credits: s.credits,
               grade: s.grade,
-              gradePoints: GRADE_POINTS_MAP[s.grade] ?? 0,
-              creditPoints: (parseFloat(s.credits) || 0) * (GRADE_POINTS_MAP[s.grade] ?? 0)
+              gradePoints: dynamicGradePointsMap[s.grade] ?? 0,
+              creditPoints: (parseFloat(s.credits) || 0) * (dynamicGradePointsMap[s.grade] ?? 0)
             }))}
             pdfData={{
               calculatorName: 'GPA Result Card',
@@ -277,8 +419,8 @@ export default function GPACalculator() {
                 name: s.name || `Subject ${idx + 1}`,
                 credits: s.credits,
                 grade: s.grade,
-                gradePoints: GRADE_POINTS_MAP[s.grade] ?? 0,
-                creditPoints: (parseFloat(s.credits) || 0) * (GRADE_POINTS_MAP[s.grade] ?? 0)
+                gradePoints: dynamicGradePointsMap[s.grade] ?? 0,
+                creditPoints: (parseFloat(s.credits) || 0) * (dynamicGradePointsMap[s.grade] ?? 0)
               })),
               metrics: [
                 { label: 'Total Credits', value: metrics.totalCredits },
@@ -302,10 +444,7 @@ export default function GPACalculator() {
                 regulation: regulation.toUpperCase()
               }
             }}
-            onSave={(record) => {
-              setPendingCalc(record);
-              setIsModalOpen(true);
-            }}
+            onSave={handleSaveResult}
           />
         </div>
 

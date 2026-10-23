@@ -19,4 +19,8 @@ public interface RegulationSubjectRepository extends JpaRepository<RegulationSub
            "WHERE rs.regulation.id = :regulationId AND rs.semesterNumber = :semesterNumber ORDER BY rs.displayOrder ASC")
     List<RegulationSubject> findByRegulationIdAndSemesterNumberWithSubject(@Param("regulationId") String regulationId,
                                                                            @Param("semesterNumber") int semesterNumber);
+
+    boolean existsByRegulationIdAndSubjectIdAndSemesterNumber(String regulationId, String subjectId, int semesterNumber);
+
+    java.util.Optional<RegulationSubject> findByRegulationIdAndSubjectIdAndSemesterNumber(String regulationId, String subjectId, int semesterNumber);
 }

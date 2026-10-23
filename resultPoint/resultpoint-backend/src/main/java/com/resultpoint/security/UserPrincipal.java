@@ -7,9 +7,9 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.List;
 
 /**
  * Authenticated User Principal for Spring Security Context.
@@ -19,16 +19,18 @@ import java.util.List;
 @AllArgsConstructor
 public class UserPrincipal implements UserDetails {
 
+    private static final long serialVersionUID = 1L;
+
     private final String id;
     private final String email;
     private final String password;
     private final String role;
-    private final Collection<? extends GrantedAuthority> authorities;
+    private final ArrayList<GrantedAuthority> authorities;
     private final boolean enabled;
 
     public static UserPrincipal create(String id, String email, String role) {
         String normalizedRole = role.toUpperCase().startsWith("ROLE_") ? role.toUpperCase() : "ROLE_" + role.toUpperCase();
-        List<GrantedAuthority> authorities = Collections.singletonList(new SimpleGrantedAuthority(normalizedRole));
+        ArrayList<GrantedAuthority> authorities = new ArrayList<>(Collections.singletonList(new SimpleGrantedAuthority(normalizedRole)));
 
         return UserPrincipal.builder()
                 .id(id)

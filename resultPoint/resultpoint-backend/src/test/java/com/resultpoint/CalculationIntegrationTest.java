@@ -61,6 +61,34 @@ public class CalculationIntegrationTest {
     }
 
     @Test
+    @DisplayName("Public POST /api/v1/calculate/sgpa - OU MCA CBCS: 92 marks resolves to Grade S (10 GP)")
+    void shouldCalculateSgpaWithOuMcaSGrade() throws Exception {
+        SgpaCalculationRequest request = SgpaCalculationRequest.builder()
+                .regulationId("reg_ou_mca_cbcs")
+                .subjects(List.of(
+                        SubjectGradeInput.builder()
+                                .subjectCode("MCA101")
+                                .subjectName("Advanced Java Programming")
+                                .credits(new BigDecimal("4.0"))
+                                .marksObtained(new BigDecimal("92.0"))
+                                .maxMarks(new BigDecimal("100.0"))
+                                .build()
+                ))
+                .build();
+
+        mockMvc.perform(post("/api/v1/calculate/sgpa")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.sgpa").value(10.00))
+                .andExpect(jsonPath("$.data.subjectResults[0].letterGrade").value("S"))
+                .andExpect(jsonPath("$.data.subjectResults[0].gradePoints").value(10.00))
+                .andExpect(jsonPath("$.data.subjectResults[0].qualitativeDesc").value("Super"))
+                .andExpect(jsonPath("$.data.isAllPassed").value(true));
+    }
+
+    @Test
     @DisplayName("Public POST /api/v1/calculate/sgpa - JNTUH R18: 88 marks resolves to Grade A+ (9 GP)")
     void shouldCalculateSgpaWithJntuhAPlusGrade() throws Exception {
         SgpaCalculationRequest request = SgpaCalculationRequest.builder()
@@ -163,7 +191,7 @@ public class CalculationIntegrationTest {
     }
 
     @Test
-    @DisplayName("Public POST /api/v1/calculate/target-cgpa - Calculates required SGPA")
+    @DisplayName("Public POST /api/v1/calculate/target-cgpa - Calculates required SGPA with credit weighting")
     void shouldCalculateTargetCgpa() throws Exception {
         TargetCgpaRequest request = TargetCgpaRequest.builder()
                 .currentCgpa(new BigDecimal("7.50"))
@@ -178,7 +206,47 @@ public class CalculationIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.isAchievable").value(true))
-                .andExpect(jsonPath("$.data.requiredSgpa").value(8.75));
+                .andExpect(jsonPath("$.data.requiredSgpa").value(8.75))
+                .andExpect(jsonPath("$.data.feasibility").value("CHALLENGING"));
+    }
+
+    @Test
+    @DisplayName("Public POST /api/v1/calculate/target-cgpa - Semester-based contract per api-specification.md")
+    void shouldCalculateTargetCgpaSemesterBased() throws Exception {
+        TargetCgpaRequest request = TargetCgpaRequest.builder()
+                .currentCgpa(new BigDecimal("7.42"))
+                .completedSemesters(4)
+                .totalSemesters(8)
+                .targetCgpa(new BigDecimal("8.50"))
+                .build();
+
+        mockMvc.perform(post("/api/v1/calculate/target-cgpa")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.isAchievable").value(true))
+                .andExpect(jsonPath("$.data.requiredSgpa").value(9.58))
+                .andExpect(jsonPath("$.data.remainingSemesters").value(4))
+                .andExpect(jsonPath("$.data.feasibility").value("VERY_CHALLENGING"))
+                .andExpect(jsonPath("$.data.recommendation").value(notNullValue()));
+    }
+
+    @Test
+    @DisplayName("Public POST /api/v1/calculate/percentage - Low CGPA generates negative warning")
+    void shouldGenerateWarningForLowCgpaWithOffsetFormula() throws Exception {
+        // rule_standard_ugc: (CGPA - 0.75) * 10 with CGPA = 0.50 -> -2.50%
+        PercentageCalculationRequest request = PercentageCalculationRequest.builder()
+                .ruleCode("rule_standard_ugc")
+                .cgpa(new BigDecimal("0.50"))
+                .build();
+
+        mockMvc.perform(post("/api/v1/calculate/percentage")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.percentage").value(-2.50))
+                .andExpect(jsonPath("$.data.warning").value(containsString("negative")));
     }
 
     @Test
