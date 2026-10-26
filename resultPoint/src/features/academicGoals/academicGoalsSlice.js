@@ -3,6 +3,7 @@ import { goalService } from '../../services/goalService.js';
 import { studentService } from '../../services/studentService.js';
 import { resultService } from '../../services/resultService.js';
 import { academicCatalogService } from '../../services/academicCatalogService.js';
+import { goalApi } from '../../services/api/goalApi.js';
 
 const getInitialGoalData = () => {
   try {
@@ -42,7 +43,28 @@ export const fetchAcademicGoal = createAsyncThunk(
   'academicGoals/fetchAcademicGoal',
   async (_, { rejectWithValue }) => {
     try {
-      const goal = goalService.getGoal();
+      let goal = goalService.getGoal();
+
+      try {
+        const backendGoals = await goalApi.getGoals();
+        if (Array.isArray(backendGoals) && backendGoals.length > 0) {
+          const active = backendGoals.find((g) => g.active) || backendGoals[0];
+          goal = {
+            ...goal,
+            id: active.id,
+            targetCGPA: active.targetCGPA || active.targetCgpa,
+            targetCgpa: active.targetCgpa || active.targetCGPA,
+            targetSemester: active.targetSemester,
+            requiredSGPA: active.requiredSGPA,
+            feasibilityStatus: active.feasibilityStatus,
+            active: active.active
+          };
+          goalService.updateGoal(goal);
+        }
+      } catch (apiErr) {
+        console.warn('Backend goals fetch failed, using local service fallback:', apiErr.message);
+      }
+
       const profile = studentService.getProfile() || {};
       const results = resultService.getAllResults() || [];
       const catalogConfig = academicCatalogService.getFullConfiguration(
@@ -66,9 +88,37 @@ export const fetchAcademicGoal = createAsyncThunk(
 
 export const saveAcademicGoal = createAsyncThunk(
   'academicGoals/saveAcademicGoal',
-  async (newGoal, { rejectWithValue }) => {
+  async (newGoal, { getState, rejectWithValue }) => {
     try {
-      const updatedGoal = goalService.updateGoal(newGoal);
+      const targetVal = Number(newGoal.targetCGPA ?? newGoal.targetCgpa);
+      const state = getState();
+      const existingGoal = state.academicGoals?.goal;
+
+      let savedBackend = null;
+      try {
+        if (existingGoal?.id) {
+          savedBackend = await goalApi.updateGoal(existingGoal.id, {
+            targetCgpa: targetVal,
+            targetSemester: newGoal.targetSemester || existingGoal.targetSemester || 6,
+            isActive: true
+          });
+        } else {
+          savedBackend = await goalApi.createGoal({
+            targetCgpa: targetVal,
+            targetSemester: newGoal.targetSemester || 6
+          });
+        }
+      } catch (apiErr) {
+        if (apiErr?.status === 400 || apiErr?.status === 401 || apiErr?.status === 404) {
+          return rejectWithValue(apiErr.message || 'Validation error while saving academic goal');
+        }
+        console.warn('API save academic goal failed, using local service fallback:', apiErr.message);
+      }
+
+      const updatedGoal = goalService.updateGoal({
+        ...newGoal,
+        ...(savedBackend ? { id: savedBackend.id, targetCGPA: savedBackend.targetCGPA } : {})
+      });
       const profile = studentService.getProfile() || {};
       const results = resultService.getAllResults() || [];
       const catalogConfig = academicCatalogService.getFullConfiguration(
@@ -143,6 +193,15 @@ export const academicGoalsSlice = createSlice({
       .addCase(saveAcademicGoal.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
+        state.saveSuccess = false;
+      })
+      // auth/logout
+      .addCase('auth/logout', (state) => {
+        state.goal = null;
+        state.metrics = null;
+        state.details = null;
+        state.loading = false;
+        state.error = null;
         state.saveSuccess = false;
       })
       // Synchronize whenever semester results or academic profile change

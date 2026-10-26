@@ -389,6 +389,75 @@ export const backlogService = {
     return this.scanBacklogs().backlogs;
   },
 
+  setBacklogs(backlogsList) {
+    if (!Array.isArray(backlogsList)) return;
+    safeSet(STORAGE_KEYS.BACKLOGS, backlogsList);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('backlogs_data_updated'));
+    }
+  },
+
+  syncBacklogAuthoritative(clearedDto) {
+    const storedBacklogs = safeGet(STORAGE_KEYS.BACKLOGS, []);
+    const semNum = Number(clearedDto.semesterNumber);
+    const existingIndex = storedBacklogs.findIndex(
+      (b) => b.id === clearedDto.id || (b.subjectCode === clearedDto.subjectCode && Number(b.semesterNumber) === semNum)
+    );
+    let updatedList;
+    if (existingIndex !== -1) {
+      updatedList = storedBacklogs.map((b, idx) => (idx === existingIndex ? { ...b, ...clearedDto, status: 'Cleared' } : b));
+    } else {
+      updatedList = [...storedBacklogs, { ...clearedDto, status: 'Cleared' }];
+    }
+    safeSet(STORAGE_KEYS.BACKLOGS, updatedList);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('backlogs_data_updated'));
+    }
+    try {
+      auditHistoryService.recordEvent({
+        action: 'CLEARED_BACKLOG',
+        semesterNumber: semNum,
+        semesterLabel: `Semester ${semNum}`,
+        details: `Cleared backlog for ${clearedDto.subjectCode} (${clearedDto.subjectName || clearedDto.subjectCode}) in Semester ${semNum}. Passed with grade ${clearedDto.clearedGrade || 'Pass'}.`
+      });
+      activityHistoryService.recordActivity({
+        type: 'backlog',
+        action: 'cleared',
+        title: 'Cleared Backlog',
+        description: `Cleared ${clearedDto.subjectCode} (${clearedDto.subjectName}) in Semester ${semNum}`,
+        entityId: clearedDto.id,
+        badgeValues: [`Semester ${semNum}`, clearedDto.subjectCode, `Grade ${clearedDto.clearedGrade || 'Pass'}`],
+        resultMetric: { label: 'Status', value: 'Cleared', color: 'emerald' },
+        metadata: {
+          activityType: 'Backlog Clearance',
+          subjectCode: clearedDto.subjectCode,
+          semesterNumber: semNum,
+          clearedGrade: clearedDto.clearedGrade,
+          clearedPeriod: clearedDto.clearedInPeriod,
+          remarks: 'Supplementary examination cleared.'
+        }
+      });
+      notificationService.notifyBacklogCleared(clearedDto.subjectCode, semNum);
+    } catch (e) {
+      console.warn('Audit/Activity warning:', e);
+    }
+
+    const totalBacklogs = updatedList.length;
+    const activeBacklogs = updatedList.filter((b) => b.status === 'Active').length;
+    const clearedBacklogs = updatedList.filter((b) => b.status === 'Cleared').length;
+    const clearanceRate = totalBacklogs > 0 ? Math.round((clearedBacklogs / totalBacklogs) * 100) : 100;
+    const clearanceStatus = activeBacklogs === 0 ? 'All Clear' : `${activeBacklogs} Active`;
+
+    return {
+      backlogs: updatedList,
+      totalBacklogs,
+      activeBacklogs,
+      clearedBacklogs,
+      clearanceRate,
+      clearanceStatus
+    };
+  },
+
   resetBacklogs() {
     safeSet(STORAGE_KEYS.BACKLOGS, []);
     if (typeof window !== 'undefined') {

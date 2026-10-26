@@ -6,7 +6,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -20,11 +24,17 @@ import java.util.List;
 /**
  * Centralized REST API Exception Handler.
  * Traps framework and domain exceptions and translates them into uniform ApiErrorResponse envelopes.
- * Strictly guarantees that database exceptions, SQL syntax, stack traces, and filesystem paths are never leaked.
+ * Strictly guarantees that database exceptions, SQL syntax, stack traces, passwords, and tokens are never leaked.
  */
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    private static boolean isSensitiveField(String fieldName) {
+        if (fieldName == null) return false;
+        String lower = fieldName.toLowerCase();
+        return lower.contains("password") || lower.contains("token") || lower.contains("secret") || lower.contains("credential");
+    }
 
     @ExceptionHandler(ApiException.class)
     public ResponseEntity<ApiErrorResponse> handleApiException(ApiException ex) {
@@ -38,9 +48,11 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiErrorResponse> handleValidationException(MethodArgumentNotValidException ex) {
         List<ApiErrorResponse.ValidationErrorDetail> details = new ArrayList<>();
         for (FieldError fieldError : ex.getBindingResult().getFieldErrors()) {
+            String field = fieldError.getField();
+            Object safeRejectedValue = isSensitiveField(field) ? null : fieldError.getRejectedValue();
             details.add(ApiErrorResponse.ValidationErrorDetail.builder()
-                    .field(fieldError.getField())
-                    .rejectedValue(fieldError.getRejectedValue())
+                    .field(field)
+                    .rejectedValue(safeRejectedValue)
                     .message(fieldError.getDefaultMessage())
                     .build());
         }
@@ -59,9 +71,11 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiErrorResponse> handleConstraintViolation(ConstraintViolationException ex) {
         List<ApiErrorResponse.ValidationErrorDetail> details = new ArrayList<>();
         ex.getConstraintViolations().forEach(violation -> {
+            String propPath = violation.getPropertyPath().toString();
+            Object safeInvalidValue = isSensitiveField(propPath) ? null : violation.getInvalidValue();
             details.add(ApiErrorResponse.ValidationErrorDetail.builder()
-                    .field(violation.getPropertyPath().toString())
-                    .rejectedValue(violation.getInvalidValue())
+                    .field(propPath)
+                    .rejectedValue(safeInvalidValue)
                     .message(violation.getMessage())
                     .build());
         });
@@ -102,6 +116,38 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
                 .body(ApiErrorResponse.of("BAD_REQUEST", "Malformed or missing request parameters.", HttpStatus.BAD_REQUEST.value()));
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiErrorResponse> handleHttpMessageNotReadable(HttpMessageNotReadableException ex) {
+        log.warn("Malformed or unreadable HTTP request body: {}", ex.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(ApiErrorResponse.of("BAD_REQUEST", "Malformed or missing request body.", HttpStatus.BAD_REQUEST.value()));
+    }
+
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ApiErrorResponse> handleMethodNotSupported(HttpRequestMethodNotSupportedException ex) {
+        log.warn("HTTP method not supported: {}", ex.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.METHOD_NOT_ALLOWED)
+                .body(ApiErrorResponse.of("METHOD_NOT_ALLOWED", "HTTP method is not supported for this endpoint.", HttpStatus.METHOD_NOT_ALLOWED.value()));
+    }
+
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    public ResponseEntity<ApiErrorResponse> handleMediaTypeNotSupported(HttpMediaTypeNotSupportedException ex) {
+        log.warn("HTTP media type not supported: {}", ex.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.UNSUPPORTED_MEDIA_TYPE)
+                .body(ApiErrorResponse.of("UNSUPPORTED_MEDIA_TYPE", "Content-Type is not supported.", HttpStatus.UNSUPPORTED_MEDIA_TYPE.value()));
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ApiErrorResponse> handleDataIntegrityViolation(DataIntegrityViolationException ex) {
+        log.warn("Database constraint/integrity violation: {}", ex.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(ApiErrorResponse.of("DATA_CONFLICT", "A data conflict or unique constraint violation occurred.", HttpStatus.CONFLICT.value()));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

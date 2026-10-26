@@ -1,22 +1,18 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   GraduationCap,
-  Building2,
-  BookOpen,
-  Layers,
-  Calendar,
   CheckCircle2,
   ArrowRight,
   ArrowLeft,
-  ShieldCheck,
   Award,
-  AlertCircle,
   Sparkles,
-  Info
+  Info,
+  Loader2
 } from 'lucide-react';
 import { academicCatalogService } from '../../services/academicCatalogService';
 import { studentService } from '../../services/studentService';
+import { catalogApi } from '../../services/api/catalogApi';
 import { useToast } from '../../context/ToastContext';
 import { useAppDispatch } from '../../hooks/useAppDispatch';
 import { saveAcademicProfile } from '../../features/academicProfile/academicProfileSlice';
@@ -27,11 +23,11 @@ export default function AcademicProfileSetup() {
   const { showToast } = useToast();
 
   const [step, setStep] = useState(1);
-  const universities = academicCatalogService.getUniversities();
+  const [universities, setUniversities] = useState(() => academicCatalogService.getUniversities() || []);
   const initialProfile = studentService.getProfile();
 
   const [selectedUnivId, setSelectedUnivId] = useState(
-    initialProfile?.universityId || universities.find((u) => u.id === 'osmania')?.id || universities[0]?.id || 'osmania'
+    initialProfile?.universityId || universities[0]?.id || 'uni_ou'
   );
   const [courses, setCourses] = useState([]);
   const [selectedCourseId, setSelectedCourseId] = useState(initialProfile?.courseId || '');
@@ -40,51 +36,112 @@ export default function AcademicProfileSetup() {
   const [selectedBatch, setSelectedBatch] = useState(initialProfile?.batch || '');
   const [hallTicketNumber, setHallTicketNumber] = useState(initialProfile?.hallTicketNumber || '');
   const [currentSemester, setCurrentSemester] = useState(initialProfile?.currentSemester || 1);
+  const [isSaving, setIsSaving] = useState(false);
 
-  // When university changes, load its courses
+  // 1. Fetch Universities from Catalog API
   useEffect(() => {
-    if (!selectedUnivId) return;
-    const availableCourses = academicCatalogService.getCoursesByUniversity(selectedUnivId);
-    setCourses(availableCourses);
-    if (availableCourses.length > 0) {
-      if (!availableCourses.some((c) => c.id === selectedCourseId)) {
-        setSelectedCourseId(availableCourses[0].id);
-      }
-    } else {
-      setSelectedCourseId('');
-    }
-  }, [selectedUnivId]);
-
-  // When course changes, load its regulations
-  useEffect(() => {
-    if (!selectedUnivId || !selectedCourseId) return;
-    const availableRegs = academicCatalogService.getRegulationsByCourse(selectedUnivId, selectedCourseId);
-    setRegulations(availableRegs);
-    if (availableRegs.length > 0) {
-      const activeReg = availableRegs.find((r) => r.id === selectedRegulationId) || availableRegs[0];
-      setSelectedRegulationId(activeReg.id);
-      if (activeReg.effectiveBatches && activeReg.effectiveBatches.length > 0) {
-        if (!activeReg.effectiveBatches.includes(selectedBatch)) {
-          setSelectedBatch(activeReg.effectiveBatches[0]);
+    let ignore = false;
+    async function loadUniversities() {
+      try {
+        const res = await catalogApi.getUniversities({ size: 50 });
+        if (!ignore) {
+          const list = res?.content || res?.items || res || [];
+          if (Array.isArray(list) && list.length > 0) {
+            setUniversities(list);
+            setSelectedUnivId((prev) => (list.some((u) => u.id === prev) ? prev : list[0].id));
+          }
+        }
+      } catch {
+        if (!ignore) {
+          const fallback = academicCatalogService.getUniversities();
+          if (fallback.length > 0) setUniversities(fallback);
         }
       }
-    } else {
-      setSelectedRegulationId('');
-      setSelectedBatch('');
     }
-  }, [selectedUnivId, selectedCourseId]);
+    loadUniversities();
+    return () => { ignore = true; };
+  }, []);
 
-  // When regulation changes, ensure selected batch belongs to that regulation's effectiveBatches
+  // 2. When university changes, load its courses
   useEffect(() => {
-    if (!selectedRegulationId || regulations.length === 0) return;
-    const currentReg = regulations.find((r) => r.id === selectedRegulationId);
-    if (currentReg?.effectiveBatches && currentReg.effectiveBatches.length > 0) {
-      if (!currentReg.effectiveBatches.includes(selectedBatch)) {
-        setSelectedBatch(currentReg.effectiveBatches[0]);
+    let ignore = false;
+    async function loadCourses() {
+      if (!selectedUnivId) return;
+      try {
+        const res = await catalogApi.getCoursesByUniversity(selectedUnivId);
+        if (!ignore) {
+          const list = res?.content || res || [];
+          if (Array.isArray(list) && list.length > 0) {
+            setCourses(list);
+            setSelectedCourseId((prev) => (list.some((c) => c.id === prev) ? prev : list[0].id));
+          } else {
+            const fallback = academicCatalogService.getCoursesByUniversity(selectedUnivId);
+            setCourses(fallback);
+            setSelectedCourseId((prev) => (fallback.length > 0 && fallback.some((c) => c.id === prev) ? prev : (fallback[0]?.id || '')));
+          }
+        }
+      } catch {
+        if (!ignore) {
+          const fallback = academicCatalogService.getCoursesByUniversity(selectedUnivId);
+          setCourses(fallback);
+          setSelectedCourseId((prev) => (fallback.length > 0 && fallback.some((c) => c.id === prev) ? prev : (fallback[0]?.id || '')));
+        }
       }
     }
-  }, [selectedRegulationId, regulations]);
+    loadCourses();
+    return () => { ignore = true; };
+  }, [selectedUnivId]);
 
+  // 3. When course changes, load its regulations
+  // 3. When course changes, load its regulations
+  useEffect(() => {
+    let ignore = false;
+    async function loadRegulations() {
+      if (!selectedCourseId) return;
+      try {
+        const res = await catalogApi.getRegulationsByCourse(selectedCourseId);
+        if (!ignore) {
+          const list = res?.content || res || [];
+          if (Array.isArray(list) && list.length > 0) {
+            setRegulations(list);
+            const targetId = list.some((r) => r.id === selectedRegulationId) ? selectedRegulationId : list[0].id;
+            setSelectedRegulationId(targetId);
+            const activeReg = list.find((r) => r.id === targetId);
+            const batches = activeReg?.effectiveBatches || [];
+            if (batches.length > 0 && !batches.includes(selectedBatch)) {
+              setSelectedBatch(batches[0]);
+            }
+          } else {
+            const fallback = academicCatalogService.getRegulationsByCourse(selectedUnivId, selectedCourseId);
+            setRegulations(fallback);
+            const targetId = fallback.length > 0 && fallback.some((r) => r.id === selectedRegulationId) ? selectedRegulationId : (fallback[0]?.id || '');
+            setSelectedRegulationId(targetId);
+            const activeReg = fallback.find((r) => r.id === targetId);
+            const batches = activeReg?.effectiveBatches || [];
+            if (batches.length > 0 && !batches.includes(selectedBatch)) {
+              setSelectedBatch(batches[0]);
+            }
+          }
+        }
+      } catch {
+        if (!ignore) {
+          const fallback = academicCatalogService.getRegulationsByCourse(selectedUnivId, selectedCourseId);
+          setRegulations(fallback);
+          const targetId = fallback.length > 0 && fallback.some((r) => r.id === selectedRegulationId) ? selectedRegulationId : (fallback[0]?.id || '');
+          setSelectedRegulationId(targetId);
+          const activeReg = fallback.find((r) => r.id === targetId);
+          const batches = activeReg?.effectiveBatches || [];
+          if (batches.length > 0 && !batches.includes(selectedBatch)) {
+            setSelectedBatch(batches[0]);
+          }
+        }
+      }
+    }
+    loadRegulations();
+    return () => { ignore = true; };
+  }, [selectedCourseId, selectedUnivId, selectedRegulationId, selectedBatch]);
+
+  // Retrieve full configuration for the selected combination
   // Retrieve full configuration for the selected combination
   const activeConfig = academicCatalogService.getFullConfiguration(
     selectedUnivId,
@@ -92,17 +149,99 @@ export default function AcademicProfileSetup() {
     selectedRegulationId
   );
 
-  // Keep current semester within course bounds
-  useEffect(() => {
-    if (activeConfig?.course?.totalSemesters && currentSemester > activeConfig.course.totalSemesters) {
-      setCurrentSemester(1);
+  const fallbackConfig = useMemo(() => {
+    if (activeConfig) return activeConfig;
+    const univObj = universities.find(
+      (u) => u.id === selectedUnivId || u.shortName?.toLowerCase() === String(selectedUnivId).toLowerCase()
+    );
+    const courseObj = courses.find(
+      (c) => c.id === selectedCourseId || c.shortName?.toLowerCase() === String(selectedCourseId).toLowerCase()
+    );
+    const regObj = regulations.find(
+      (r) => r.id === selectedRegulationId || r.code?.toLowerCase() === String(selectedRegulationId).toLowerCase()
+    );
+    if (!univObj && !courseObj) return null;
+
+    const isOu = univObj?.shortName?.toUpperCase() === 'OU' || String(selectedUnivId).includes('ou');
+    const isBcaOrMca = courseObj?.shortName?.toUpperCase() === 'BCA' || courseObj?.shortName?.toUpperCase() === 'MCA';
+    const isOuBcaOrMca = isOu && isBcaOrMca;
+
+    return {
+      university: {
+        id: univObj?.id || selectedUnivId,
+        name: univObj?.name || 'Selected University',
+        shortName: univObj?.shortName || 'Univ',
+        state: univObj?.state || ''
+      },
+      course: {
+        id: courseObj?.id || selectedCourseId,
+        name: courseObj?.name || 'Selected Course',
+        shortName: courseObj?.shortName || '',
+        level: courseObj?.level || 'UG',
+        durationYears: courseObj?.durationYears || 3,
+        totalSemesters: Number(courseObj?.totalSemesters || 6),
+        totalDegreeCredits: Number(courseObj?.totalDegreeCredits || 150)
+      },
+      regulation: {
+        id: regObj?.id || selectedRegulationId,
+        code: regObj?.code || 'CBCS',
+        name: regObj?.name || 'Academic Regulation',
+        ruleVersion: regObj?.ruleVersion || '1.0',
+        effectiveBatches: regObj?.effectiveBatches || ['2023 - 2026', '2024 - 2027'],
+        gradingSystem: isOuBcaOrMca ? '10-point (S-Grade Scheme)' : '10-point'
+      },
+      gradeScale: isOuBcaOrMca
+        ? [
+            { grade: 'S', points: 10, minPercentage: 85, maxPercentage: 100, desc: 'Super', isPass: true },
+            { grade: 'A', points: 9, minPercentage: 75, maxPercentage: 84.99, desc: 'Excellent', isPass: true },
+            { grade: 'B', points: 8, minPercentage: 65, maxPercentage: 74.99, desc: 'Very Good', isPass: true },
+            { grade: 'C', points: 7, minPercentage: 55, maxPercentage: 64.99, desc: 'Good', isPass: true },
+            { grade: 'D', points: 6, minPercentage: 50, maxPercentage: 54.99, desc: 'Fair', isPass: true },
+            { grade: 'E', points: 5, minPercentage: 40, maxPercentage: 49.99, desc: 'Pass', isPass: true },
+            { grade: 'F', points: 0, minPercentage: 0, maxPercentage: 39.99, desc: 'Fail', isPass: false }
+          ]
+        : [
+            { grade: 'O', points: 10, minPercentage: 85, maxPercentage: 100, desc: 'Outstanding', isPass: true },
+            { grade: 'A+', points: 9, minPercentage: 75, maxPercentage: 84.99, desc: 'Excellent', isPass: true },
+            { grade: 'A', points: 8, minPercentage: 65, maxPercentage: 74.99, desc: 'Very Good', isPass: true },
+            { grade: 'B+', points: 7, minPercentage: 55, maxPercentage: 64.99, desc: 'Good', isPass: true },
+            { grade: 'B', points: 6, minPercentage: 50, maxPercentage: 54.99, desc: 'Above Average', isPass: true },
+            { grade: 'C', points: 5, minPercentage: 40, maxPercentage: 49.99, desc: 'Pass', isPass: true },
+            { grade: 'F', points: 0, minPercentage: 0, maxPercentage: 39.99, desc: 'Fail', isPass: false }
+          ],
+      calculationRule: {
+        sgpaFormula: 'WEIGHTED_CREDIT_SUM',
+        cgpaFormula: 'CUMULATIVE_WEIGHTED_CREDIT_SUM',
+        percentageFormula: isOu ? 'CGPA * 10' : '(CGPA - 0.75) * 10',
+        formulaDescription: isOu ? 'Percentage = CGPA × 10' : 'Percentage = (CGPA - 0.75) × 10'
+      }
+    };
+  }, [activeConfig, selectedUnivId, selectedCourseId, selectedRegulationId, universities, courses, regulations]);
+
+  const effectiveConfig = activeConfig || fallbackConfig;
+
+  const courseObj = courses.find((c) => c.id === selectedCourseId);
+  const maxSemesters = Number(courseObj?.totalSemesters || effectiveConfig?.course?.totalSemesters || 8);
+  const activeSemester = currentSemester > maxSemesters ? 1 : currentSemester;
+
+  const handleRegulationChange = (newRegId) => {
+    setSelectedRegulationId(newRegId);
+    const reg = regulations.find((r) => r.id === newRegId);
+    if (reg?.effectiveBatches && reg.effectiveBatches.length > 0) {
+      if (!reg.effectiveBatches.includes(selectedBatch)) {
+        setSelectedBatch(reg.effectiveBatches[0]);
+      }
     }
-  }, [activeConfig?.course?.totalSemesters]);
+  };
 
   const handleNext = () => {
     if (step === 1) {
       if (!selectedUnivId || !selectedCourseId) {
         showToast('Please select both a university and course.');
+        return;
+      }
+      if (!hallTicketNumber.trim()) {
+        showToast('Please enter your Hall Ticket / Roll Number.');
         return;
       }
       setStep(2);
@@ -115,34 +254,55 @@ export default function AcademicProfileSetup() {
     }
   };
 
-  const handleConfirmAndSave = () => {
-    if (!activeConfig) {
-      showToast('Academic configuration is incomplete.');
+  const handleConfirmAndSave = async () => {
+    if (!selectedUnivId || !selectedCourseId || !selectedRegulationId) {
+      showToast('Academic configuration is incomplete.', 'error');
+      return;
+    }
+    if (!hallTicketNumber.trim()) {
+      showToast('Hall ticket / roll number is required.', 'error');
+      setStep(1);
       return;
     }
 
+    const regObj = regulations.find((r) => r.id === selectedRegulationId);
+    const courseObj = courses.find((c) => c.id === selectedCourseId);
+    const univObj = universities.find((u) => u.id === selectedUnivId);
+
     const updatedProfile = {
-      universityId: activeConfig.university.id,
-      university: activeConfig.university.name,
-      universityShortName: activeConfig.university.shortName,
-      courseId: activeConfig.course.id,
-      course: activeConfig.course.name,
-      courseShortName: activeConfig.course.shortName,
-      regulationId: activeConfig.regulation.id,
-      regulation: activeConfig.regulation.code,
-      ruleVersion: activeConfig.regulation.ruleVersion,
-      totalSemesters: activeConfig.course.totalSemesters,
-      totalDegreeCredits: activeConfig.course.totalDegreeCredits,
-      currentSemester: Number(currentSemester) || 1,
+      universityId: selectedUnivId,
+      university: univObj?.name || effectiveConfig?.university?.name || selectedUnivId,
+      universityShortName: univObj?.shortName || effectiveConfig?.university?.shortName || '',
+      courseId: selectedCourseId,
+      course: courseObj?.name || effectiveConfig?.course?.name || selectedCourseId,
+      courseShortName: courseObj?.shortName || effectiveConfig?.course?.shortName || '',
+      regulationId: selectedRegulationId,
+      regulation: regObj?.code || regObj?.name || effectiveConfig?.regulation?.code || selectedRegulationId,
+      ruleVersion: regObj?.ruleVersion || effectiveConfig?.regulation?.ruleVersion || '',
+      totalSemesters: Number(courseObj?.totalSemesters || effectiveConfig?.course?.totalSemesters || 8),
+      totalDegreeCredits: Number(courseObj?.totalDegreeCredits || effectiveConfig?.course?.totalDegreeCredits || 160),
+      currentSemester: Number(activeSemester) || 1,
       batch: selectedBatch,
-      hallTicketNumber: hallTicketNumber.trim() || 'REG-' + Date.now().toString().slice(-6),
-      gradingSystem: activeConfig.regulation.gradingSystem,
+      batchYear: selectedBatch,
+      hallTicketNumber: hallTicketNumber.trim(),
+      gradingSystem: regObj?.gradingSystem || effectiveConfig?.regulation?.gradingSystem || '10-point',
       hasCompletedProfile: true
     };
 
-    dispatch(saveAcademicProfile(updatedProfile));
-    showToast('Academic Profile configured and verified successfully!');
-    navigate('/student/dashboard');
+    setIsSaving(true);
+    try {
+      const resultAction = await dispatch(saveAcademicProfile(updatedProfile));
+      if (saveAcademicProfile.fulfilled.match(resultAction)) {
+        showToast('Academic Profile configured and verified successfully!');
+        navigate('/student/dashboard');
+      } else {
+        showToast(resultAction.payload || 'Failed to save academic profile.', 'error');
+      }
+    } catch (err) {
+      showToast(err.message || 'Error saving academic profile.', 'error');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -279,8 +439,30 @@ export default function AcademicProfileSetup() {
         </div>
       )}
 
+      {/* Step 2: Fallback State if configuration is missing */}
+      {step === 2 && !effectiveConfig && (
+        <div className="bg-white dark:bg-[#111418] border border-slate-200/80 dark:border-[#1E2A35] rounded-2xl p-8 text-center space-y-4 shadow-xs">
+          <div className="w-10 h-10 rounded-full bg-amber-50 dark:bg-amber-950/40 text-amber-500 border border-amber-200 dark:border-amber-900/40 flex items-center justify-center mx-auto">
+            <Info className="w-5 h-5" />
+          </div>
+          <h2 className="text-base font-bold text-slate-900 dark:text-white">
+            Academic Regulation Details Unavailable
+          </h2>
+          <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
+            Unable to resolve academic regulation details for the selected program. Please return to Step 1 and verify your university and course selection.
+          </p>
+          <button
+            onClick={() => setStep(1)}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold text-white bg-accent hover:bg-accent-hover transition-colors cursor-pointer"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Back to Step 1</span>
+          </button>
+        </div>
+      )}
+
       {/* Step 2: Regulation & Batch */}
-      {step === 2 && activeConfig && (
+      {step === 2 && effectiveConfig && (
         <div className="bg-white dark:bg-[#111418] border border-slate-200/80 dark:border-[#1E2A35] rounded-2xl p-6 sm:p-8 shadow-xs space-y-6">
           <div className="space-y-4">
             <div>
@@ -289,7 +471,7 @@ export default function AcademicProfileSetup() {
               </label>
               <select
                 value={selectedRegulationId}
-                onChange={(e) => setSelectedRegulationId(e.target.value)}
+                onChange={(e) => handleRegulationChange(e.target.value)}
                 className="w-full px-4 py-3 rounded-xl text-xs sm:text-sm bg-slate-50 dark:bg-[#0D141F] border border-slate-200 dark:border-[#1E2A35] text-slate-900 dark:text-white font-semibold focus:outline-none focus:border-orange-500 cursor-pointer"
               >
                 {regulations.map((r) => (
@@ -332,16 +514,16 @@ export default function AcademicProfileSetup() {
                   3. Current Active Semester
                 </label>
                 <select
-                  value={currentSemester}
+                  value={activeSemester}
                   onChange={(e) => setCurrentSemester(Number(e.target.value))}
                   className="w-full px-4 py-3 rounded-xl text-xs sm:text-sm bg-slate-50 dark:bg-[#0D141F] border border-slate-200 dark:border-[#1E2A35] text-slate-900 dark:text-white font-semibold focus:outline-none focus:border-orange-500 cursor-pointer"
                 >
                   {Array.from(
-                    { length: activeConfig?.course?.totalSemesters || 8 },
+                    { length: effectiveConfig?.course?.totalSemesters || 8 },
                     (_, i) => i + 1
                   ).map((sem) => (
                     <option key={sem} value={sem}>
-                      Semester {sem} (of {activeConfig?.course?.totalSemesters || 8})
+                      Semester {sem} (of {effectiveConfig?.course?.totalSemesters || 8})
                     </option>
                   ))}
                 </select>
@@ -361,23 +543,23 @@ export default function AcademicProfileSetup() {
                     Automatic Grading System Preview
                   </h3>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                    Loaded for {activeConfig.course.name} ({activeConfig.university.shortName})
+                    Loaded for {effectiveConfig.course.name} ({effectiveConfig.university.shortName})
                   </p>
                 </div>
               </div>
               <span className="self-start sm:self-center px-2.5 py-1 rounded-full text-[11px] font-bold bg-accent/10 text-accent border border-accent/20">
-                {activeConfig.regulation.gradingSystem}
+                {effectiveConfig.regulation.gradingSystem}
               </span>
             </div>
 
             {/* Special Notice for MCA / BCA S-Grade Rule */}
-            {['mca', 'bca'].includes(String(activeConfig.course.id).toLowerCase()) && (
+            {['mca', 'bca', 'course_ou_mca', 'course_ou_bca'].includes(String(effectiveConfig.course.id).toLowerCase()) && (
               <div className="p-3.5 rounded-xl bg-orange-500/10 border border-orange-500/25 flex items-start gap-2.5 text-xs">
                 <Info className="w-4 h-4 text-accent shrink-0 mt-0.5" />
                 <div className="text-left">
                   <span className="font-bold text-accent">Osmania University S-Grade Exception:</span>{' '}
                   <span className="text-slate-600 dark:text-slate-300">
-                    Under Osmania University academic regulations, <strong>{activeConfig.course.shortName}</strong> awards grade{' '}
+                    Under Osmania University academic regulations, <strong>{effectiveConfig.course.shortName}</strong> awards grade{' '}
                     <strong className="text-accent font-black">S (Super)</strong> with <strong>10 Grade Points</strong> for marks 85% and above, in place of O (Outstanding).
                   </span>
                 </div>
@@ -397,7 +579,7 @@ export default function AcademicProfileSetup() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-[#1E2A35]/70 font-medium">
-                  {activeConfig.gradeScale.map((g) => (
+                  {effectiveConfig.gradeScale.map((g) => (
                     <tr key={g.grade} className="hover:bg-slate-50/50 dark:hover:bg-[#15202D]/50 transition-colors">
                       <td className="py-2 px-3 font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
                         {g.grade === 'S' ? (
@@ -443,7 +625,7 @@ export default function AcademicProfileSetup() {
                 <span className="font-semibold text-slate-900 dark:text-white">SGPA Formula:</span> Weighted Credit Sum (Σ(Credits × Grade Points) / ΣCredits)
               </div>
               <div>
-                <span className="font-semibold text-slate-900 dark:text-white">Conversion Rule:</span> {activeConfig.calculationRule.formulaDescription}
+                <span className="font-semibold text-slate-900 dark:text-white">Conversion Rule:</span> {effectiveConfig.calculationRule.formulaDescription}
               </div>
             </div>
           </div>
@@ -467,8 +649,24 @@ export default function AcademicProfileSetup() {
         </div>
       )}
 
+      {/* Step 3: Fallback Actionable State */}
+      {step === 3 && !effectiveConfig && (
+        <div className="bg-white dark:bg-[#111418] border border-slate-200/80 dark:border-[#1E2A35] rounded-2xl p-8 text-center space-y-4 shadow-xs">
+          <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
+            Configuration summary is unavailable. Please verify your regulation selection.
+          </p>
+          <button
+            onClick={() => setStep(2)}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold text-white bg-accent hover:bg-accent-hover transition-colors cursor-pointer"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Back to Step 2</span>
+          </button>
+        </div>
+      )}
+
       {/* Step 3: Review & Confirmation */}
-      {step === 3 && activeConfig && (
+      {step === 3 && effectiveConfig && (
         <div className="bg-white dark:bg-[#111418] border border-slate-200/80 dark:border-[#1E2A35] rounded-2xl p-6 sm:p-8 shadow-xs space-y-6">
           <div className="border-b border-slate-100 dark:border-[#1E2A35] pb-4 flex items-center justify-between">
             <div>
@@ -491,9 +689,9 @@ export default function AcademicProfileSetup() {
                 Enrolled University
               </span>
               <span className="text-sm font-bold text-slate-900 dark:text-white block mt-0.5">
-                {activeConfig.university.name} ({activeConfig.university.shortName})
+                {effectiveConfig.university.name} ({effectiveConfig.university.shortName})
               </span>
-              <span className="text-[11px] text-slate-500 mt-0.5 block">{activeConfig.university.state}</span>
+              <span className="text-[11px] text-slate-500 mt-0.5 block">{effectiveConfig.university.state}</span>
             </div>
 
             <div className="p-4 rounded-xl bg-slate-50/70 dark:bg-[#0D141F] border border-slate-200/70 dark:border-[#1E2A35]">
@@ -501,10 +699,10 @@ export default function AcademicProfileSetup() {
                 Degree Program & Level
               </span>
               <span className="text-sm font-bold text-slate-900 dark:text-white block mt-0.5">
-                {activeConfig.course.name} ({activeConfig.course.shortName})
+                {effectiveConfig.course.name} ({effectiveConfig.course.shortName})
               </span>
               <span className="text-[11px] text-slate-500 mt-0.5 block">
-                {activeConfig.course.level} • {activeConfig.course.durationYears} Years ({activeConfig.course.totalSemesters} Semesters / {activeConfig.course.totalDegreeCredits} Total Credits)
+                {effectiveConfig.course.level} • {effectiveConfig.course.durationYears} Years ({effectiveConfig.course.totalSemesters} Semesters / {effectiveConfig.course.totalDegreeCredits} Total Credits)
               </span>
             </div>
 
@@ -513,9 +711,9 @@ export default function AcademicProfileSetup() {
                 Academic Regulation
               </span>
               <span className="text-sm font-bold text-slate-900 dark:text-white block mt-0.5">
-                {activeConfig.regulation.name} [{activeConfig.regulation.code}]
+                {effectiveConfig.regulation.name} [{effectiveConfig.regulation.code}]
               </span>
-              <span className="text-[11px] text-slate-500 mt-0.5 block">Rule Version: {activeConfig.regulation.ruleVersion}</span>
+              <span className="text-[11px] text-slate-500 mt-0.5 block">Rule Version: {effectiveConfig.regulation.ruleVersion}</span>
             </div>
 
             <div className="p-4 rounded-xl bg-slate-50/70 dark:bg-[#0D141F] border border-slate-200/70 dark:border-[#1E2A35]">
@@ -533,7 +731,7 @@ export default function AcademicProfileSetup() {
                 Current Active Semester
               </span>
               <span className="text-sm font-bold text-slate-900 dark:text-white block mt-0.5">
-                Semester {currentSemester} (of {activeConfig.course.totalSemesters} Semesters)
+                Semester {currentSemester} (of {effectiveConfig.course.totalSemesters} Semesters)
               </span>
               <span className="text-[11px] text-slate-500 mt-0.5 block">Active Term for Results & Calculations</span>
             </div>
@@ -553,10 +751,10 @@ export default function AcademicProfileSetup() {
                 Grading System Scheme
               </span>
               <span className="text-sm font-bold text-accent block mt-0.5">
-                {activeConfig.regulation.gradingSystem}
+                {effectiveConfig.regulation.gradingSystem}
               </span>
               <span className="text-[11px] text-slate-500 mt-0.5 block">
-                {['mca', 'bca'].includes(String(activeConfig.course.id).toLowerCase())
+                {['mca', 'bca', 'course_ou_mca', 'course_ou_bca'].includes(String(effectiveConfig.course.id).toLowerCase())
                   ? 'S (Super) grade scheme configured'
                   : 'O (Outstanding) grade scheme configured'}
               </span>
@@ -567,7 +765,7 @@ export default function AcademicProfileSetup() {
                 Percentage Conversion Formula
               </span>
               <span className="text-sm font-bold text-orange-500 block mt-0.5">
-                {activeConfig.calculationRule.formulaDescription}
+                {effectiveConfig.calculationRule.formulaDescription}
               </span>
               <span className="text-[11px] text-slate-500 mt-0.5 block">Official University Conversion Algorithm</span>
             </div>
@@ -590,7 +788,7 @@ export default function AcademicProfileSetup() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-[#1E2A35]/70 font-medium">
-                  {activeConfig.gradeScale.map((g) => (
+                  {effectiveConfig.gradeScale.map((g) => (
                     <tr key={g.grade} className="hover:bg-slate-50/50 dark:hover:bg-[#15202D]/50 transition-colors">
                       <td className="py-2 px-3 font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
                         {g.grade === 'S' ? (
@@ -639,10 +837,11 @@ export default function AcademicProfileSetup() {
             </button>
             <button
               onClick={handleConfirmAndSave}
-              className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold text-white bg-accent hover:bg-accent-hover shadow-accent transition-all cursor-pointer"
+              disabled={isSaving}
+              className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold text-white bg-accent hover:bg-accent-hover shadow-accent transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <CheckCircle2 className="w-4 h-4" />
-              <span>Confirm & Save Academic Profile</span>
+              {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+              <span>{isSaving ? 'Saving Profile...' : 'Confirm & Save Academic Profile'}</span>
             </button>
           </div>
         </div>

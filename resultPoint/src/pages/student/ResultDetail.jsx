@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -6,13 +7,19 @@ import {
   Download,
   CheckCircle2,
 } from 'lucide-react';
+import { useAppDispatch } from '../../hooks/useAppDispatch';
 import { useAppSelector } from '../../hooks/useAppSelector';
-import { selectResults } from '../../features/results/resultsSlice';
-import { selectAcademicProfile } from '../../features/academicProfile/academicProfileSlice';
+import { selectResults, fetchResults } from '../../features/results/resultsSlice';
+import {
+  selectAcademicProfile,
+  selectIsProfileComplete,
+  fetchAcademicProfile
+} from '../../features/academicProfile/academicProfileSlice';
 import { resultService } from '../../services/resultService';
 import { studentService } from '../../services/studentService';
 import { academicCatalogService } from '../../services/academicCatalogService';
 import { academicCalculationEngine } from '../../services/academicCalculationEngine';
+import { exportApi, triggerBlobDownload } from '../../services/api/exportApi';
 import ResultStatusBadge from '../../components/student/ResultStatusBadge';
 import AcademicProfileGate from '../../components/student/AcademicProfileGate';
 import { useToast } from '../../context/ToastContext';
@@ -21,10 +28,22 @@ import { printScorecard, exportScorecardPDF } from '../../utils/scorecardExport'
 export default function ResultDetail() {
   const { resultId } = useParams();
   const navigate = useNavigate();
+  const dispatch = useAppDispatch();
   const { showToast } = useToast();
 
   const reduxResults = useAppSelector(selectResults);
   const reduxProfile = useAppSelector(selectAcademicProfile);
+  const isProfileComplete = Boolean(
+    useAppSelector(selectIsProfileComplete) || studentService.isProfileComplete()
+  );
+  const [isExporting, setIsExporting] = useState(false);
+
+  useEffect(() => {
+    dispatch(fetchAcademicProfile());
+    if (isProfileComplete) {
+      dispatch(fetchResults());
+    }
+  }, [dispatch, isProfileComplete]);
 
   const cleanId = String(resultId || '').replace('semester-', '').replace('res_sem_', '');
   const resultFromRedux = reduxResults.find(
@@ -78,9 +97,21 @@ export default function ResultDetail() {
     showToast(`Scorecard for ${result.semesterLabel || `Semester ${result.semesterNumber}`} opened in print viewer.`);
   };
 
-  const handleExportPDF = () => {
-    exportScorecardPDF(result, student);
-    showToast(`PDF download generated for ${result.semesterLabel || `Semester ${result.semesterNumber}`}.`);
+  const handleExportPDF = async () => {
+    if (isExporting) return;
+    setIsExporting(true);
+    showToast('Downloading official scorecard PDF from server...');
+    try {
+      const blob = await exportApi.downloadSemesterScorecardPdf(result.semesterNumber);
+      triggerBlobDownload(blob, `semester-${result.semesterNumber}-scorecard.pdf`);
+      showToast(`Official PDF scorecard for ${result.semesterLabel || `Semester ${result.semesterNumber}`} downloaded successfully!`);
+    } catch (err) {
+      console.warn('Backend PDF export failed, falling back to printable scorecard:', err.message);
+      exportScorecardPDF(result, student);
+      showToast(`Scorecard PDF generated for ${result.semesterLabel || `Semester ${result.semesterNumber}`}.`);
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   return (
@@ -129,10 +160,11 @@ export default function ResultDetail() {
             <button
               onClick={handleExportPDF}
               type="button"
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold text-white bg-accent hover:bg-accent-hover shadow-accent transition-all cursor-pointer"
+              disabled={isExporting}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold text-white bg-accent hover:bg-accent-hover shadow-accent transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Download className="w-4 h-4" />
-              <span>Export PDF</span>
+              <span>{isExporting ? 'Exporting...' : 'Export PDF'}</span>
             </button>
           </div>
         </div>

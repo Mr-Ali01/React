@@ -7,9 +7,7 @@ import {
   CheckCircle,
   AlertCircle,
   Sparkles,
-  BookOpen,
-  Layers,
-  GraduationCap
+  BookOpen
 } from 'lucide-react';
 import { studentService } from '../../services/studentService';
 import { resultService } from '../../services/resultService';
@@ -25,7 +23,11 @@ import {
   updateSemesterResult,
   fetchResults
 } from '../../features/results/resultsSlice';
-import { selectAcademicProfile, fetchAcademicProfile } from '../../features/academicProfile/academicProfileSlice';
+import {
+  selectAcademicProfile,
+  selectIsProfileComplete,
+  fetchAcademicProfile
+} from '../../features/academicProfile/academicProfileSlice';
 import { selectMarksInputPreference } from '../../features/settings/settingsSlice';
 
 export default function AddResult() {
@@ -36,11 +38,16 @@ export default function AddResult() {
   const reduxProfile = useAppSelector(selectAcademicProfile);
   const reduxResults = useAppSelector(selectResults);
   const marksInputPreference = useAppSelector(selectMarksInputPreference);
+  const isProfileComplete = Boolean(
+    useAppSelector(selectIsProfileComplete) || studentService.isProfileComplete()
+  );
 
   useEffect(() => {
-    dispatch(fetchResults());
     dispatch(fetchAcademicProfile());
-  }, [dispatch]);
+    if (isProfileComplete) {
+      dispatch(fetchResults());
+    }
+  }, [dispatch, isProfileComplete]);
 
   const profile = useMemo(() => ({
     ...studentService.getProfile(),
@@ -59,16 +66,18 @@ export default function AddResult() {
   }, [profile.universityId, profile.courseId, profile.regulationId]);
 
   const maxSemesters = catalogConfig?.course?.totalSemesters || profile.totalSemesters || 8;
-  const gradeScale = catalogConfig?.gradeScale || [
-    { grade: 'O', points: 10, isPass: true },
-    { grade: 'A+', points: 9, isPass: true },
-    { grade: 'A', points: 8, isPass: true },
-    { grade: 'B+', points: 7, isPass: true },
-    { grade: 'B', points: 6, isPass: true },
-    { grade: 'C', points: 5, isPass: true },
-    { grade: 'P', points: 4, isPass: true },
-    { grade: 'F', points: 0, isPass: false }
-  ];
+  const gradeScale = useMemo(() => {
+    return catalogConfig?.gradeScale || [
+      { grade: 'O', points: 10, isPass: true },
+      { grade: 'A+', points: 9, isPass: true },
+      { grade: 'A', points: 8, isPass: true },
+      { grade: 'B+', points: 7, isPass: true },
+      { grade: 'B', points: 6, isPass: true },
+      { grade: 'C', points: 5, isPass: true },
+      { grade: 'P', points: 4, isPass: true },
+      { grade: 'F', points: 0, isPass: false }
+    ];
+  }, [catalogConfig?.gradeScale]);
 
   // Determine which semesters already exist
   const existingSemesterNumbers = useMemo(() => {
@@ -112,88 +121,92 @@ export default function AddResult() {
     ? availableSemesters[0]
     : 1;
 
-  const [semesterNumber, setSemesterNumber] = useState(defaultEligibleSemester);
-  const [academicPeriod, setAcademicPeriod] = useState(
-    editTargetResult?.academicPeriod || `Semester ${defaultEligibleSemester} Exam`
-  );
-  const [subjects, setSubjects] = useState([]);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  // When editTargetResult loads or updates, prefill all form fields with saved data
-  useEffect(() => {
-    if (editTargetResult) {
-      setSemesterNumber(Number(editTargetResult.semesterNumber));
-      setAcademicPeriod(editTargetResult.academicPeriod || `Semester ${editTargetResult.semesterNumber} Exam`);
-      if (Array.isArray(editTargetResult.subjects) && editTargetResult.subjects.length > 0) {
-        setSubjects(
-          editTargetResult.subjects.map((s, idx) => ({
-            id: s.id || `edit_sub_${idx}_${Date.now()}`,
-            code: s.code || '',
-            name: s.name || '',
-            credits: Number(s.credits) || 4,
-            defaultCredits: Number(s.defaultCredits || s.credits) || 4,
-            marksObtained: Number(s.marksObtained) || 0,
-            maxMarks: Number(s.maxMarks) || 100,
-            grade: s.grade || 'A',
-            isElective: Boolean(s.isElective)
-          }))
-        );
-      }
-    }
-  }, [editTargetResult]);
-
-  // Keep semesterNumber pointing to valid available semester (only in add mode)
-  useEffect(() => {
-    if (isEditMode) return;
-    if (availableSemesters.length > 0) {
-      if (!semesterNumber || existingSemesterNumbers.has(Number(semesterNumber))) {
-        setSemesterNumber(availableSemesters[0]);
-      }
-    }
-  }, [isEditMode, availableSemesters, existingSemesterNumbers, semesterNumber]);
-
-  // Check if chosen semester is already recorded
-  const isDuplicateSemester = !isEditMode && existingSemesterNumbers.has(Number(semesterNumber));
-  const allSemestersCompleted = !isEditMode && availableSemesters.length === 0;
-
-  // Initialize/Load subjects when semesterNumber changes or when catalogConfig loads (only in add mode)
-  useEffect(() => {
-    if (isEditMode || !semesterNumber) return;
-
+  const getCatalogSubjects = (semNum) => {
     const configuredSubjects = academicCatalogService.getSemesterSubjects(
       profile.universityId,
       profile.courseId,
       profile.regulationId,
-      semesterNumber
+      semNum
     );
 
     if (configuredSubjects && configuredSubjects.length > 0) {
+      return configuredSubjects.map((s, idx) => ({
+        id: s.id || `sub_${semNum}_${idx}`,
+        code: s.code,
+        name: s.name,
+        credits: Number(s.credits || s.defaultCredits) || 4,
+        defaultCredits: Number(s.defaultCredits || s.credits) || 4,
+        marksObtained: 85,
+        maxMarks: 100,
+        grade: (s.credits || s.defaultCredits || 4) >= 4 ? 'A+' : 'A',
+        isElective: Boolean(s.isElective)
+      }));
+    }
+    return [
+      { id: `default_sub_${semNum}_1`, code: `CS${semNum}01`, name: `Core Subject 1`, credits: 4, defaultCredits: 4, marksObtained: 85, maxMarks: 100, grade: 'A+' },
+      { id: `default_sub_${semNum}_2`, code: `CS${semNum}02`, name: `Core Subject 2`, credits: 4, defaultCredits: 4, marksObtained: 80, maxMarks: 100, grade: 'A' },
+      { id: `default_sub_${semNum}_3`, code: `CS${semNum}03`, name: `Core Subject 3`, credits: 4, defaultCredits: 4, marksObtained: 78, maxMarks: 100, grade: 'B+' },
+      { id: `default_sub_${semNum}_4`, code: `CS${semNum}04`, name: `Department Elective`, credits: 4, defaultCredits: 4, marksObtained: 90, maxMarks: 100, grade: 'O' },
+      { id: `default_sub_${semNum}_5`, code: `CS${semNum}05`, name: `Laboratory / Practical`, credits: 2, defaultCredits: 2, marksObtained: 92, maxMarks: 100, grade: 'O' }
+    ];
+  };
+
+  const [semesterNumber, setSemesterNumber] = useState(defaultEligibleSemester);
+  const [academicPeriod, setAcademicPeriod] = useState(
+    () => editTargetResult?.academicPeriod || `Semester ${defaultEligibleSemester} - 202${Number(defaultEligibleSemester) + 2}`
+  );
+  const [subjects, setSubjects] = useState(() => {
+    if (editTargetResult && Array.isArray(editTargetResult.subjects) && editTargetResult.subjects.length > 0) {
+      return editTargetResult.subjects.map((s, idx) => ({
+        id: s.id || `edit_sub_${idx}`,
+        code: s.code || s.subjectCode || '',
+        name: s.name || s.subjectName || '',
+        credits: Number(s.credits) || 4,
+        defaultCredits: Number(s.defaultCredits || s.credits) || 4,
+        marksObtained: Number(s.marksObtained != null ? s.marksObtained : (s.totalMarks != null ? s.totalMarks : 0)),
+        maxMarks: Number(s.maxMarks) || 100,
+        grade: s.grade || s.gradeLetter || 'A',
+        isElective: Boolean(s.isElective)
+      }));
+    }
+    return getCatalogSubjects(defaultEligibleSemester);
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Sync state if editTargetResult arrives asynchronously
+  const [prevEditTargetId, setPrevEditTargetId] = useState(editTargetResult?.id || null);
+  if (editTargetResult && editTargetResult.id !== prevEditTargetId) {
+    setPrevEditTargetId(editTargetResult.id);
+    setSemesterNumber(Number(editTargetResult.semesterNumber));
+    setAcademicPeriod(editTargetResult.academicPeriod || `Semester ${editTargetResult.semesterNumber} Exam`);
+    if (Array.isArray(editTargetResult.subjects) && editTargetResult.subjects.length > 0) {
       setSubjects(
-        configuredSubjects.map((s, idx) => ({
-          id: s.id || `sub_${idx}_${Date.now()}`,
-          code: s.code,
-          name: s.name,
-          credits: Number(s.credits || s.defaultCredits) || 4,
+        editTargetResult.subjects.map((s, idx) => ({
+          id: s.id || `edit_sub_${idx}`,
+          code: s.code || s.subjectCode || '',
+          name: s.name || s.subjectName || '',
+          credits: Number(s.credits) || 4,
           defaultCredits: Number(s.defaultCredits || s.credits) || 4,
-          marksObtained: 85,
-          maxMarks: 100,
-          grade: (s.credits || s.defaultCredits || 4) >= 4 ? 'A+' : 'A',
+          marksObtained: Number(s.marksObtained != null ? s.marksObtained : (s.totalMarks != null ? s.totalMarks : 0)),
+          maxMarks: Number(s.maxMarks) || 100,
+          grade: s.grade || s.gradeLetter || 'A',
           isElective: Boolean(s.isElective)
         }))
       );
-    } else {
-      // Default subjects for this semester if catalog has no specific list
-      setSubjects([
-        { id: '1', code: `CS${semesterNumber}01`, name: `Core Subject 1`, credits: 4, defaultCredits: 4, marksObtained: 85, maxMarks: 100, grade: 'A+' },
-        { id: '2', code: `CS${semesterNumber}02`, name: `Core Subject 2`, credits: 4, defaultCredits: 4, marksObtained: 80, maxMarks: 100, grade: 'A' },
-        { id: '3', code: `CS${semesterNumber}03`, name: `Core Subject 3`, credits: 4, defaultCredits: 4, marksObtained: 78, maxMarks: 100, grade: 'B+' },
-        { id: '4', code: `CS${semesterNumber}04`, name: `Department Elective`, credits: 4, defaultCredits: 4, marksObtained: 90, maxMarks: 100, grade: 'O' },
-        { id: '5', code: `CS${semesterNumber}05`, name: `Laboratory / Practical`, credits: 2, defaultCredits: 2, marksObtained: 92, maxMarks: 100, grade: 'O' }
-      ]);
     }
+  }
 
-    setAcademicPeriod(`Semester ${semesterNumber} - 202${Number(semesterNumber) + 2}`);
-  }, [isEditMode, semesterNumber, profile.universityId, profile.courseId, profile.regulationId]);
+  // Handle explicit user semester dropdown change
+  const handleSemesterSelect = (newSem) => {
+    const semNum = Number(newSem);
+    setSemesterNumber(semNum);
+    setAcademicPeriod(`Semester ${semNum} - 202${semNum + 2}`);
+    setSubjects(getCatalogSubjects(semNum));
+  };
+
+  // Check if chosen semester is already recorded
+  const isDuplicateSemester = !isEditMode && existingSemesterNumbers.has(Number(semesterNumber));
+  const allSemestersCompleted = !isEditMode && availableSemesters.length === 0;
 
   // Set default subject credit value to 4 credits when adding an elective/subject (Requirement 3)
   const handleAddSubject = () => {
@@ -345,12 +358,23 @@ export default function AddResult() {
     };
 
     try {
+      let saved;
       if (isEditMode) {
-        await dispatch(updateSemesterResult({ id: editTargetResult.id, updates: resultRecord })).unwrap();
-        showToast(`Semester ${semesterNumber} result updated with SGPA: ${calculationResult.sgpa.toFixed(2)} and CGPA: ${projectedCGPA.toFixed(2)}!`);
+        saved = await dispatch(
+          updateSemesterResult({
+            id: editTargetResult.id,
+            semesterNumber: Number(semesterNumber),
+            updates: resultRecord
+          })
+        ).unwrap();
+        const displaySgpa = Number(saved?.sgpa ?? calculationResult.sgpa).toFixed(2);
+        const displayCgpa = Number(saved?.cgpa ?? projectedCGPA).toFixed(2);
+        showToast(`Semester ${saved?.semesterNumber || semesterNumber} result updated with SGPA: ${displaySgpa} and CGPA: ${displayCgpa}!`);
       } else {
-        await dispatch(addSemesterResult(resultRecord)).unwrap();
-        showToast(`Semester ${semesterNumber} result saved with SGPA: ${calculationResult.sgpa.toFixed(2)} and CGPA: ${projectedCGPA.toFixed(2)}!`);
+        saved = await dispatch(addSemesterResult(resultRecord)).unwrap();
+        const displaySgpa = Number(saved?.sgpa ?? calculationResult.sgpa).toFixed(2);
+        const displayCgpa = Number(saved?.cgpa ?? projectedCGPA).toFixed(2);
+        showToast(`Semester ${saved?.semesterNumber || semesterNumber} result saved with SGPA: ${displaySgpa} and CGPA: ${displayCgpa}!`);
       }
       navigate('/student/results');
     } catch (err) {
@@ -361,7 +385,7 @@ export default function AddResult() {
   };
 
   // If profile is incomplete, display AcademicProfileGate
-  if (!studentService.isProfileComplete()) {
+  if (!isProfileComplete) {
     return (
       <AcademicProfileGate
         title="Academic Profile Setup Required"
@@ -467,7 +491,7 @@ export default function AddResult() {
             </label>
             <select
               value={semesterNumber}
-              onChange={(e) => setSemesterNumber(Number(e.target.value))}
+              onChange={(e) => handleSemesterSelect(Number(e.target.value))}
               disabled={isEditMode || allSemestersCompleted}
               className="calc-input w-full px-3 py-2 rounded-xl text-xs font-semibold cursor-pointer disabled:opacity-50"
               required

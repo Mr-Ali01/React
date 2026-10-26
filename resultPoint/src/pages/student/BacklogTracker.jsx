@@ -5,7 +5,10 @@ import {
   AlertTriangle,
   FileSpreadsheet,
   Search,
-  Check
+  Check,
+  Loader2,
+  RefreshCw,
+  AlertCircle
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAppDispatch } from '../../hooks/useAppDispatch';
@@ -15,13 +18,18 @@ import {
   selectActiveBacklogs,
   selectClearedBacklogs,
   selectTotalBacklogs,
-  selectClearanceStatus,
+  selectBacklogLoading,
+  selectBacklogError,
   fetchBacklogs,
   markBacklogCleared
 } from '../../features/backlog/backlogSlice';
-import { selectPerformanceAnalytics, fetchPerformanceData } from '../../features/performance/performanceSlice';
+import { fetchPerformanceData } from '../../features/performance/performanceSlice';
 import { fetchResults } from '../../features/results/resultsSlice';
-import { selectAcademicProfile, fetchAcademicProfile } from '../../features/academicProfile/academicProfileSlice';
+import {
+  selectAcademicProfile,
+  selectIsProfileComplete,
+  fetchAcademicProfile
+} from '../../features/academicProfile/academicProfileSlice';
 import { studentService } from '../../services/studentService';
 import { academicCatalogService } from '../../services/academicCatalogService';
 import AcademicProfileGate from '../../components/student/AcademicProfileGate';
@@ -36,25 +44,35 @@ export default function BacklogTracker() {
   const activeBacklogs = useAppSelector(selectActiveBacklogs);
   const clearedBacklogs = useAppSelector(selectClearedBacklogs);
   const totalBacklogs = useAppSelector(selectTotalBacklogs);
-  const clearanceStatus = useAppSelector(selectClearanceStatus);
-  const performance = useAppSelector(selectPerformanceAnalytics);
+  const loading = useAppSelector(selectBacklogLoading);
+  const error = useAppSelector(selectBacklogError);
 
   const [activeTab, setActiveTab] = useState('ALL'); // 'ALL' | 'ACTIVE' | 'CLEARED'
   const [searchQuery, setSearchQuery] = useState('');
   const [clearingBacklog, setClearingBacklog] = useState(null);
   const [clearedGrade, setClearedGrade] = useState('B');
   const [examinationPeriod, setExaminationPeriod] = useState('Supplementary Examination');
+  const [isClearing, setIsClearing] = useState(false);
+
+  const isProfileComplete = Boolean(
+    useAppSelector(selectIsProfileComplete) || studentService.isProfileComplete()
+  );
 
   useEffect(() => {
-    dispatch(fetchAcademicProfile());
-    dispatch(fetchBacklogs());
-    dispatch(fetchResults());
-    dispatch(fetchPerformanceData());
-
-    const handleSync = () => {
+    if (isProfileComplete) {
+      dispatch(fetchAcademicProfile());
       dispatch(fetchBacklogs());
       dispatch(fetchResults());
       dispatch(fetchPerformanceData());
+    }
+
+    const handleSync = () => {
+      if (isProfileComplete) {
+        dispatch(fetchAcademicProfile());
+        dispatch(fetchBacklogs());
+        dispatch(fetchResults());
+        dispatch(fetchPerformanceData());
+      }
     };
 
     window.addEventListener('backlogs_data_updated', handleSync);
@@ -65,7 +83,7 @@ export default function BacklogTracker() {
       window.removeEventListener('results_data_updated', handleSync);
       window.removeEventListener('storage', handleSync);
     };
-  }, [dispatch]);
+  }, [dispatch, isProfileComplete]);
 
   const profile = useMemo(
     () => ({
@@ -133,13 +151,15 @@ export default function BacklogTracker() {
 
   const handleClearSupplementary = async (e) => {
     e.preventDefault();
-    if (!clearingBacklog) return;
+    if (!clearingBacklog || isClearing) return;
 
+    setIsClearing(true);
     try {
       const gradeObj = passingGrades.find((g) => g.grade === clearedGrade) || { points: 6 };
 
       await dispatch(
         markBacklogCleared({
+          backlogId: clearingBacklog.id,
           semesterId: `semester-${clearingBacklog.semesterNumber}`,
           semesterNumber: clearingBacklog.semesterNumber,
           subjectCode: clearingBacklog.subjectCode,
@@ -160,6 +180,8 @@ export default function BacklogTracker() {
       setClearingBacklog(null);
     } catch (err) {
       showToast(typeof err === 'string' ? err : err?.message || 'Failed to update backlog', 'error');
+    } finally {
+      setIsClearing(false);
     }
   };
 
@@ -190,6 +212,27 @@ export default function BacklogTracker() {
             Status: {activeBacklogs === 0 ? 'All Clear' : `${activeBacklogs} Active Arrear${activeBacklogs > 1 ? 's' : ''}`}
           </span>
         </div>
+
+        {/* Error Alert if API or calculation error occurred */}
+        {error && (
+          <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-rose-600 dark:text-rose-400">
+            <div className="flex items-center gap-2 text-xs font-semibold">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{typeof error === 'string' ? error : error?.message || 'Failed to scan backlog subjects'}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                dispatch(fetchBacklogs());
+                dispatch(fetchResults());
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-rose-500/15 hover:bg-rose-500/25 transition-colors self-start sm:self-auto cursor-pointer"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Retry Scan</span>
+            </button>
+          </div>
+        )}
 
         {/* Top Metric Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
@@ -306,7 +349,15 @@ export default function BacklogTracker() {
 
         {/* Backlog List Table */}
         <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-xs">
-          {filteredBacklogs.length > 0 ? (
+          {loading && (!backlogs || backlogs.length === 0) ? (
+            <div className="p-12 text-center space-y-3">
+              <Loader2 className="w-8 h-8 animate-spin text-brandAmber mx-auto" />
+              <h3 className="text-sm font-bold text-text-h">Scanning Backlogs & Arrears</h3>
+              <p className="text-xs text-text-light max-w-sm mx-auto">
+                Checking academic records against grading scales and supplementary clearance history...
+              </p>
+            </div>
+          ) : filteredBacklogs.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead className="bg-bg text-text-light font-semibold border-b border-border">
@@ -533,9 +584,10 @@ export default function BacklogTracker() {
                 <button
                   type="button"
                   onClick={handleClearSupplementary}
-                  className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors shadow-xs"
+                  disabled={isClearing}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Confirm Clearance
+                  {isClearing ? 'Clearing...' : 'Confirm Clearance'}
                 </button>
               </div>
             </div>

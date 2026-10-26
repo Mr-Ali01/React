@@ -103,8 +103,10 @@ export default function LoginSignup() {
       .unwrap()
       .then((data) => {
         setIsLoggingIn(false);
-        dispatch(fetchAcademicProfile());
         const user = data.user;
+        if (user && user.role === 'student' && user.hasCompletedProfile) {
+          dispatch(fetchAcademicProfile());
+        }
         if (user.role === 'admin') {
           showToast(`Welcome to Admin Panel, ${user.fullName}!`);
           navigate('/admin/dashboard');
@@ -139,6 +141,8 @@ export default function LoginSignup() {
 
     if (!signupForm.fullName.trim()) {
       errors.fullName = 'Full name is required.';
+    } else if (signupForm.fullName.trim().length < 2) {
+      errors.fullName = 'Full name must be at least 2 characters.';
     }
 
     if (!signupForm.email.trim()) {
@@ -149,8 +153,10 @@ export default function LoginSignup() {
 
     if (!signupForm.password) {
       errors.password = 'Password is required.';
-    } else if (signupForm.password.length < 6) {
-      errors.password = 'Password must be at least 6 characters.';
+    } else if (signupForm.password.length < 8) {
+      errors.password = 'Password must be at least 8 characters.';
+    } else if (!/^(?=.*[A-Za-z])(?=.*\d)/.test(signupForm.password)) {
+      errors.password = 'Password must contain at least one letter and one number.';
     }
 
     if (!signupForm.confirmPassword) {
@@ -177,8 +183,10 @@ export default function LoginSignup() {
       .unwrap()
       .then((data) => {
         setIsSigningUp(false);
-        dispatch(fetchAcademicProfile());
         const user = data.user;
+        if (user && user.hasCompletedProfile) {
+          dispatch(fetchAcademicProfile());
+        }
         const pendingSave = calculationSaveService.savePendingCalculationForUser(user);
         if (pendingSave && pendingSave.success && pendingSave.record) {
           dispatch(saveCalculationToHistory(pendingSave.record));
@@ -194,8 +202,25 @@ export default function LoginSignup() {
       })
       .catch((err) => {
         setIsSigningUp(false);
-        setSignupErrors({ email: err, general: err });
-        showToast(err);
+        const fieldErrors = {};
+        const errorMsg = typeof err === 'string' ? err : err?.message || 'Registration failed.';
+
+        if (err && typeof err === 'object' && Array.isArray(err.details)) {
+          err.details.forEach((detail) => {
+            if (detail.field === 'fullName') fieldErrors.fullName = detail.message;
+            else if (detail.field === 'email') fieldErrors.email = detail.message;
+            else if (detail.field === 'password') fieldErrors.password = detail.message;
+            else if (detail.field === 'phone') fieldErrors.phone = detail.message;
+          });
+        }
+
+        if (err?.code === 'EMAIL_ALREADY_REGISTERED' || (typeof errorMsg === 'string' && errorMsg.toLowerCase().includes('email'))) {
+          fieldErrors.email = errorMsg;
+        }
+
+        fieldErrors.general = errorMsg;
+        setSignupErrors(fieldErrors);
+        showToast(errorMsg);
       });
   };
 
@@ -616,6 +641,13 @@ export default function LoginSignup() {
                     Start your academic journey with ResultPoint
                   </p>
                 </div>
+
+                {signupErrors.general && (
+                  <div className="p-3 rounded-xl bg-brandPink/15 border border-brandPink/30 text-brandPink text-xs font-semibold flex items-center gap-2 mb-2">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>{signupErrors.general}</span>
+                  </div>
+                )}
 
                 <form onSubmit={handleSignupSubmit} noValidate className="space-y-3 text-xs">
                   <div>

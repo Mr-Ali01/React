@@ -5,6 +5,7 @@ C:\React\resultPoint\resultpoint-backend\src\test\java\com\resultpoint\CatalogIn
 C:\React\resultPoint\resultpoint-backend\src\test\java\com\resultpoint\CommonDtoAndExceptionTest.java
 C:\React\resultPoint\resultpoint-backend\src\test\java\com\resultpoint\FlywayParserTest.java
 C:\React\resultPoint\resultpoint-backend\src\test\java\com\resultpoint\FormulaEvaluatorTest.java
+C:\React\resultPoint\resultpoint-backend\src\test\java\com\resultpoint\GlobalExceptionHandlerTest.java
 C:\React\resultPoint\resultpoint-backend\src\test\java\com\resultpoint\IdGeneratorTest.java
 C:\React\resultPoint\resultpoint-backend\src\test\java\com\resultpoint\ImportExportReportingIntegrationTest.java
 C:\React\resultPoint\resultpoint-backend\src\test\java\com\resultpoint\JwtTokenProviderTest.java

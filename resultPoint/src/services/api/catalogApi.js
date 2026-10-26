@@ -58,6 +58,33 @@ export const CATALOG_ID_ALIASES = {
   rule_standard_ugc: 'rule_standard_ugc'
 };
 
+// Reverse mapping from backend canonical database IDs to local static catalog keys
+export const BACKEND_TO_LOCAL_CATALOG_IDS = {
+  // Universities
+  uni_ou: 'osmania',
+  uni_jntuh: 'jntuh',
+  uni_anna: 'anna',
+  uni_vtu: 'vtu',
+
+  // Courses
+  course_ou_bca: 'bca',
+  course_ou_mca: 'mca',
+  course_ou_bcom: 'bcom-gen',
+  course_jntuh_btech_cse: 'btech-cse',
+
+  // Regulations
+  reg_ou_bca_cbcs: 'ou-bca-cbcs',
+  reg_ou_mca_cbcs: 'ou-mca-cbcs',
+  reg_ou_bcom_cbcs: 'ou-bcom-cbcs',
+  reg_jntuh_r18: 'jntuh-cse-r18'
+};
+
+export const resolveToLocalCatalogId = (key) => {
+  if (!key) return null;
+  const cleanKey = String(key).trim().toLowerCase();
+  return BACKEND_TO_LOCAL_CATALOG_IDS[cleanKey] || cleanKey;
+};
+
 export const catalogApi = {
   /**
    * Resolves any shorthand or legacy key to its canonical backend database ID.
@@ -66,6 +93,13 @@ export const catalogApi = {
     if (!key) return null;
     const cleanKey = String(key).trim().toLowerCase();
     return CATALOG_ID_ALIASES[cleanKey] || key;
+  },
+
+  /**
+   * Resolves a backend canonical database ID to its local static catalog key.
+   */
+  resolveToLocalId(key) {
+    return resolveToLocalCatalogId(key);
   },
 
   /**

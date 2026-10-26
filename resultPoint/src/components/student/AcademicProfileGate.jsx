@@ -15,7 +15,16 @@ export default function AcademicProfileGate({
   description = "Before accessing this feature, please configure your University, Course, and Regulation so ResultPoint can load your curriculum subjects, credit weights, and grading rules."
 }) {
   const isCompleteRedux = useAppSelector(selectIsProfileComplete);
+  const isLoading = useAppSelector((state) => state.academicProfile?.loading);
   const isComplete = isCompleteRedux || studentService.isProfileComplete();
+
+  if (isLoading && !isComplete) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <div className="w-8 h-8 border-3 border-accent border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   if (!isComplete) {
     return (

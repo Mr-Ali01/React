@@ -1,12 +1,14 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import { studentService } from '../../services/studentService';
-import { authService } from '../../services/authService';
-import { updateAuthProfileStatus } from '../auth/authSlice';
+import { studentService } from '../../services/studentService.js';
+import { authService } from '../../services/authService.js';
+import { updateAuthProfileStatus } from '../auth/authSlice.js';
+
+import { studentProfileApi } from '../../services/api/studentProfileApi.js';
 
 const getInitialAcademicData = () => {
   try {
     const authUser = authService.getCurrentUser();
-    if (!authUser) {
+    if (!authUser || !authUser.hasCompletedProfile) {
       return {
         universityId: null,
         university: null,
@@ -81,18 +83,77 @@ const initialData = getInitialAcademicData();
 const initialState = {
   ...initialData,
   loading: false,
+  initialized: false,
   error: null,
   saveSuccess: false,
 };
 
 export const fetchAcademicProfile = createAsyncThunk(
   'academicProfile/fetchAcademicProfile',
-  async (_, { rejectWithValue }) => {
+  async (_, { dispatch, rejectWithValue }) => {
     try {
-      const profile = studentService.getProfile();
-      return profile;
+      const backendProfile = await studentProfileApi.getProfile();
+      if (backendProfile) {
+        studentService.syncFromBackendProfile(backendProfile);
+        dispatch(updateAuthProfileStatus(true));
+        return {
+          id: backendProfile.id,
+          userId: backendProfile.userId,
+          fullName: backendProfile.userFullName,
+          email: backendProfile.userEmail,
+          universityId: backendProfile.universityId,
+          university: backendProfile.universityName,
+          universityName: backendProfile.universityName,
+          courseId: backendProfile.courseId,
+          course: backendProfile.courseName,
+          courseName: backendProfile.courseName,
+          courseLevel: backendProfile.courseLevel,
+          regulationId: backendProfile.regulationId,
+          regulation: backendProfile.regulationCode,
+          regulationCode: backendProfile.regulationCode,
+          batch: backendProfile.batchYear,
+          batchYear: backendProfile.batchYear,
+          hallTicketNumber: backendProfile.hallTicketNumber,
+          institutionName: backendProfile.institutionName,
+          currentSemester: Number(backendProfile.currentSemester) || 1,
+          dob: backendProfile.dateOfBirth,
+          gender: backendProfile.gender,
+          targetCgpa: backendProfile.targetCgpa,
+          cumulativeCgpa: backendProfile.cumulativeCgpa,
+          totalCreditsEarned: backendProfile.totalCreditsEarned,
+          hasCompletedProfile: true
+        };
+      } else {
+        // Backend returned 404 RESOURCE_NOT_FOUND: Profile not yet configured
+        dispatch(updateAuthProfileStatus(false));
+        return {
+          hasCompletedProfile: false,
+          universityId: null,
+          courseId: null,
+          regulationId: null
+        };
+      }
     } catch (err) {
+      // In offline/cached mode, fall back to local profile
+      const fallback = studentService.getProfile();
+      if (fallback && fallback.hasCompletedProfile) {
+        return fallback;
+      }
+      dispatch(updateAuthProfileStatus(false));
       return rejectWithValue(err.message || 'Failed to fetch academic profile');
+    }
+  },
+  {
+    condition: (force, { getState }) => {
+      const state = getState();
+      const profile = state?.academicProfile;
+      if (profile?.loading) {
+        return false;
+      }
+      if (!force && profile?.initialized) {
+        return false;
+      }
+      return true;
     }
   }
 );
@@ -101,9 +162,23 @@ export const saveAcademicProfile = createAsyncThunk(
   'academicProfile/saveAcademicProfile',
   async (profileUpdates, { dispatch, rejectWithValue }) => {
     try {
-      const updated = studentService.updateProfile(profileUpdates);
+      let saved = null;
+      try {
+        const backendResult = await studentProfileApi.updateProfile(profileUpdates);
+        if (backendResult) {
+          saved = studentService.syncFromBackendProfile(backendResult);
+        }
+      } catch (apiErr) {
+        console.warn('Backend profile update failed; using local persistence:', apiErr.message);
+        saved = studentService.updateProfile(profileUpdates);
+      }
+
+      if (!saved) {
+        saved = studentService.updateProfile(profileUpdates);
+      }
+
       dispatch(updateAuthProfileStatus(true));
-      return updated;
+      return saved;
     } catch (err) {
       return rejectWithValue(err.message || 'Failed to save academic profile');
     }
@@ -155,6 +230,7 @@ export const academicProfileSlice = createSlice({
       })
       .addCase(fetchAcademicProfile.fulfilled, (state, action) => {
         state.loading = false;
+        state.initialized = true;
         const p = action.payload || {};
         state.universityId = p.universityId || null;
         state.university = p.university || null;
@@ -178,6 +254,7 @@ export const academicProfileSlice = createSlice({
       })
       .addCase(fetchAcademicProfile.rejected, (state, action) => {
         state.loading = false;
+        state.initialized = true;
         state.error = action.payload;
       })
       // Save
@@ -188,6 +265,7 @@ export const academicProfileSlice = createSlice({
       })
       .addCase(saveAcademicProfile.fulfilled, (state, action) => {
         state.loading = false;
+        state.initialized = true;
         state.saveSuccess = true;
         const p = action.payload || {};
         state.universityId = p.universityId || null;
@@ -234,6 +312,7 @@ export const academicProfileSlice = createSlice({
         state.gradingSystem = null;
         state.hasCompletedProfile = false;
         state.loading = false;
+        state.initialized = false;
         state.error = null;
         state.saveSuccess = false;
       })
@@ -255,6 +334,7 @@ export const academicProfileSlice = createSlice({
         state.gradingSystem = null;
         state.hasCompletedProfile = false;
         state.loading = false;
+        state.initialized = false;
         state.error = null;
         state.saveSuccess = false;
       });
@@ -279,6 +359,7 @@ export const selectIsProfileComplete = (state) =>
 export const selectCurrentSemester = (state) => state.academicProfile.currentSemester;
 export const selectTotalSemesters = (state) => state.academicProfile.totalSemesters;
 export const selectAcademicProfileLoading = (state) => state.academicProfile.loading;
+export const selectAcademicProfileInitialized = (state) => Boolean(state.academicProfile?.initialized);
 export const selectAcademicProfileError = (state) => state.academicProfile.error;
 export const selectAcademicProfileSaveSuccess = (state) => state.academicProfile.saveSuccess;
 

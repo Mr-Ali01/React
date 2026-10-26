@@ -22,7 +22,11 @@ import {
   fetchPerformanceData
 } from '../../features/performance/performanceSlice';
 import { selectResults, fetchResults } from '../../features/results/resultsSlice';
-import { selectAcademicProfile, fetchAcademicProfile } from '../../features/academicProfile/academicProfileSlice';
+import {
+  selectAcademicProfile,
+  selectIsProfileComplete,
+  fetchAcademicProfile
+} from '../../features/academicProfile/academicProfileSlice';
 import { studentService } from '../../services/studentService';
 import { resultService } from '../../services/resultService';
 import { academicCatalogService } from '../../services/academicCatalogService';
@@ -58,12 +62,18 @@ export default function PerformanceAnalytics() {
   const [metricMode, setMetricMode] = useState('both'); // 'both' | 'sgpa' | 'cgpa'
   const [customTargetCGPA, setCustomTargetCGPA] = useState(8.50);
 
+  const isProfileComplete = Boolean(
+    useAppSelector(selectIsProfileComplete) || studentService.isProfileComplete()
+  );
+
   // Fetch performance and results on mount
   useEffect(() => {
-    dispatch(fetchResults());
     dispatch(fetchAcademicProfile());
-    dispatch(fetchPerformanceData());
-  }, [dispatch]);
+    if (isProfileComplete) {
+      dispatch(fetchResults());
+      dispatch(fetchPerformanceData());
+    }
+  }, [dispatch, isProfileComplete]);
 
   // Merge profile and results safely with services fallback
   const profile = useMemo(() => ({

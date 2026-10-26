@@ -82,21 +82,21 @@ export const studentService = {
           email: authUser.email,
           hasCompletedProfile: Boolean(authUser.hasCompletedProfile),
           avatar: authUser.avatar || '',
-          universityId: authUser.universityId || '',
-          courseId: authUser.courseId || '',
-          regulationId: authUser.regulationId || '',
-          course: authUser.course || '',
-          university: authUser.university || '',
+          universityId: authUser.universityId || null,
+          courseId: authUser.courseId || null,
+          regulationId: authUser.regulationId || null,
+          course: authUser.course || null,
+          university: authUser.university || null,
           currentSemester: authUser.currentSemester || 1,
-          totalSemesters: authUser.totalSemesters || 6,
-          regulation: authUser.regulation || '',
-          ruleVersion: authUser.ruleVersion || '',
-          hallTicketNumber: authUser.hallTicketNumber || '',
-          batch: authUser.batch || '',
-          phoneNumber: authUser.phoneNumber || '',
-          dob: authUser.dob || '',
-          gender: authUser.gender || 'Male',
-          totalDegreeCredits: authUser.totalDegreeCredits || 150
+          totalSemesters: authUser.totalSemesters || 8,
+          regulation: authUser.regulation || null,
+          ruleVersion: authUser.ruleVersion || null,
+          hallTicketNumber: authUser.hallTicketNumber || null,
+          batch: authUser.batch || null,
+          phoneNumber: authUser.phoneNumber || null,
+          dob: authUser.dob || null,
+          gender: authUser.gender || null,
+          totalDegreeCredits: authUser.totalDegreeCredits || 160
         });
       }
     }
@@ -112,11 +112,16 @@ export const studentService = {
       return null;
     }
     const stored = safeGet(STORAGE_KEYS.STUDENT, null) || {};
-    const isComplete = Boolean(authUser.hasCompletedProfile ?? stored.hasCompletedProfile ?? true);
-    const totalSem = Number(authUser.totalSemesters || stored.totalSemesters || 6);
+    const hasExplicitCompleted = Boolean(authUser.hasCompletedProfile || stored.hasCompletedProfile);
+    const hasRequiredFields = Boolean(
+      (authUser.universityId || stored.universityId) &&
+      (authUser.courseId || stored.courseId)
+    );
+    const isComplete = hasExplicitCompleted && hasRequiredFields;
+    const totalSem = Number(authUser.totalSemesters || stored.totalSemesters || 8);
 
     // Calculate dynamic active semester from actual valid results
-    let results = [];
+    let results;
     try {
       results = resultService.getAllResults() || [];
     } catch {
@@ -129,33 +134,69 @@ export const studentService = {
     return {
       fullName: authUser.fullName || stored.fullName || 'Student User',
       username: authUser.username || authUser.fullName || stored.fullName || 'Student',
-      email: authUser.email || stored.email || 'student@resultpoint.edu',
+      email: authUser.email || stored.email || '',
       hasCompletedProfile: isComplete,
       avatar: authUser.avatar || stored.avatar || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=256&q=80',
-      universityId: authUser.universityId || stored.universityId || 'osmania',
-      courseId: authUser.courseId || stored.courseId || 'bca',
-      regulationId: authUser.regulationId || stored.regulationId || 'ou-bca-cbcs',
-      course: authUser.course || stored.course || 'BCA — Bachelor of Computer Applications (6 Semesters)',
-      university: authUser.university || stored.university || 'Osmania University (OU)',
-      currentSemester: semInfo.activeSemester,
-      isDegreeCompleted: semInfo.isDegreeCompleted,
-      completedSemestersCount: semInfo.completedCount,
-      completedSemestersList: semInfo.completedSemesters,
+      universityId: authUser.universityId || stored.universityId || null,
+      courseId: authUser.courseId || stored.courseId || null,
+      regulationId: authUser.regulationId || stored.regulationId || null,
+      course: authUser.course || stored.course || null,
+      university: authUser.university || stored.university || null,
+      currentSemester: isComplete ? semInfo.activeSemester : 1,
+      isDegreeCompleted: isComplete ? semInfo.isDegreeCompleted : false,
+      completedSemestersCount: isComplete ? semInfo.completedCount : 0,
+      completedSemestersList: isComplete ? semInfo.completedSemesters : [],
       totalSemesters: totalSem,
-      regulation: authUser.regulation || stored.regulation || 'Choice Based Credit System (CBCS) — [OU_BCA_CBCS_V1]',
-      ruleVersion: authUser.ruleVersion || stored.ruleVersion || 'OU_BCA_CBCS_V1',
-      hallTicketNumber: stored.hallTicketNumber || authUser.hallTicketNumber || 'REG-478583',
-      batch: stored.batch || authUser.batch || '2025-2027',
-      phoneNumber: stored.phoneNumber || authUser.phoneNumber || '+91 98765 43210',
-      dob: stored.dob || authUser.dob || '15 Mar 2003',
-      gender: stored.gender || authUser.gender || 'Male',
-      totalDegreeCredits: stored.totalDegreeCredits || authUser.totalDegreeCredits || 150
+      regulation: authUser.regulation || stored.regulation || null,
+      ruleVersion: authUser.ruleVersion || stored.ruleVersion || null,
+      hallTicketNumber: stored.hallTicketNumber || authUser.hallTicketNumber || null,
+      batch: stored.batch || authUser.batch || null,
+      phoneNumber: stored.phoneNumber || authUser.phoneNumber || null,
+      dob: stored.dob || authUser.dob || null,
+      gender: stored.gender || authUser.gender || null,
+      totalDegreeCredits: stored.totalDegreeCredits || authUser.totalDegreeCredits || 160
     };
   },
 
   isProfileComplete() {
     const p = this.getProfile();
     return Boolean(p && p.hasCompletedProfile === true && p.universityId && p.courseId);
+  },
+
+  syncFromBackendProfile(backendProfile) {
+    if (!backendProfile) return null;
+    const current = safeGet(STORAGE_KEYS.STUDENT, null) || {};
+    const synced = {
+      ...current,
+      id: backendProfile.id,
+      userId: backendProfile.userId,
+      fullName: backendProfile.userFullName || current.fullName,
+      email: backendProfile.userEmail || current.email,
+      universityId: backendProfile.universityId,
+      university: backendProfile.universityName,
+      courseId: backendProfile.courseId,
+      course: backendProfile.courseName,
+      courseLevel: backendProfile.courseLevel,
+      regulationId: backendProfile.regulationId,
+      regulation: backendProfile.regulationCode,
+      batch: backendProfile.batchYear,
+      batchYear: backendProfile.batchYear,
+      hallTicketNumber: backendProfile.hallTicketNumber,
+      institutionName: backendProfile.institutionName,
+      currentSemester: Number(backendProfile.currentSemester) || 1,
+      dob: backendProfile.dateOfBirth,
+      gender: backendProfile.gender,
+      targetCgpa: backendProfile.targetCgpa,
+      cumulativeCgpa: backendProfile.cumulativeCgpa,
+      totalCreditsEarned: backendProfile.totalCreditsEarned,
+      hasCompletedProfile: true
+    };
+    safeSet(STORAGE_KEYS.STUDENT, synced);
+    authService.updateCurrentUser(synced);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('academic_profile_updated'));
+    }
+    return synced;
   },
 
   updateProfile(updates) {
@@ -344,7 +385,6 @@ export const studentService = {
   },
 
   getPerformanceInsights(customProfile, customResults) {
-    const summary = this.getAcademicSummary(customProfile, customResults);
     const results = customResults || resultService.getAllResults();
     
     // Calculate dynamic diff if available

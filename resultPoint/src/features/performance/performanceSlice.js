@@ -1,8 +1,9 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import { studentService } from '../../services/studentService';
-import { resultService } from '../../services/resultService';
-import { performanceService } from '../../services/performanceService';
-import { academicCatalogService } from '../../services/academicCatalogService';
+import { studentService } from '../../services/studentService.js';
+import { resultService } from '../../services/resultService.js';
+import { performanceService } from '../../services/performanceService.js';
+import { academicCatalogService } from '../../services/academicCatalogService.js';
+import { reportApi } from '../../services/api/reportApi.js';
 
 const getInitialPerformance = () => {
   try {
@@ -77,8 +78,51 @@ export const fetchPerformanceData = createAsyncThunk(
         profile.regulationId
       );
 
-      const overview = performanceService.getOverview(profile, results, catalogConfig);
-      const gradeTrends = performanceService.getSemesterTrends(results, 'all');
+      let overview = performanceService.getOverview(profile, results, catalogConfig);
+      let gradeTrends = performanceService.getSemesterTrends(results, 'all');
+
+      try {
+        const backendReport = await reportApi.getPerformanceReport();
+        if (backendReport) {
+          if (overview) {
+            overview = {
+              ...overview,
+              currentCGPA: backendReport.cumulativeCgpa !== null && backendReport.cumulativeCgpa !== undefined
+                ? Number(backendReport.cumulativeCgpa)
+                : overview.currentCGPA,
+              earnedCredits: backendReport.totalCreditsEarned !== null && backendReport.totalCreditsEarned !== undefined
+                ? Number(backendReport.totalCreditsEarned)
+                : overview.earnedCredits,
+              totalCredits: backendReport.totalCreditsAttempted !== null && backendReport.totalCreditsAttempted !== undefined
+                ? Number(backendReport.totalCreditsAttempted)
+                : overview.totalCredits,
+              estimatedPercentage: backendReport.estimatedPercentage !== null && backendReport.estimatedPercentage !== undefined
+                ? Number(backendReport.estimatedPercentage)
+                : overview.estimatedPercentage,
+              percentageVerificationStatus: backendReport.percentageVerificationStatus || overview.percentageVerificationStatus,
+              totalPassedSubjects: backendReport.totalPassedSubjects ?? overview.totalPassedSubjects,
+              totalFailedSubjects: backendReport.totalFailedSubjects ?? overview.totalFailedSubjects,
+            };
+          }
+
+          if (Array.isArray(backendReport.semesterTrends) && backendReport.semesterTrends.length > 0) {
+            gradeTrends = backendReport.semesterTrends.map((st) => ({
+              semester: `Sem ${st.semesterNumber}`,
+              semesterNumber: st.semesterNumber,
+              sgpa: st.sgpa !== null ? Number(st.sgpa) : null,
+              cgpa: st.cumulativeCgpa !== null ? Number(st.cumulativeCgpa) : null,
+              creditsEarned: st.creditsEarned,
+              creditsAttempted: st.creditsAttempted,
+              passed: st.subjectsPassed,
+              failed: st.subjectsFailed,
+              status: st.resultStatus || 'Passed'
+            }));
+          }
+        }
+      } catch (apiErr) {
+        console.warn('Backend performance report unavailable, using local calculation fallback:', apiErr.message);
+      }
+
       const categories = performanceService.getSubjectCategoryPerformance(results);
       const distribution = performanceService.getGradeDistribution(results, catalogConfig?.gradeScale);
       const topSubjects = performanceService.getTopPerformingSubjects(results, 6);
@@ -117,6 +161,19 @@ export const performanceSlice = createSlice({
     clearPerformanceError: (state) => {
       state.error = null;
     },
+    resetPerformanceState: (state) => {
+      state.overview = null;
+      state.analytics = null;
+      state.gradeTrends = [];
+      state.categories = [];
+      state.distribution = { distribution: [], totalSubjects: 0, totalPass: 0, passRate: 0 };
+      state.topSubjects = [];
+      state.improveSubjects = [];
+      state.insights = [];
+      state.projections = null;
+      state.loading = false;
+      state.error = null;
+    }
   },
   extraReducers: (builder) => {
     builder
@@ -139,6 +196,19 @@ export const performanceSlice = createSlice({
       .addCase(fetchPerformanceData.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
+      })
+      .addCase('auth/logout', (state) => {
+        state.overview = null;
+        state.analytics = null;
+        state.gradeTrends = [];
+        state.categories = [];
+        state.distribution = { distribution: [], totalSubjects: 0, totalPass: 0, passRate: 0 };
+        state.topSubjects = [];
+        state.improveSubjects = [];
+        state.insights = [];
+        state.projections = null;
+        state.loading = false;
+        state.error = null;
       })
       .addMatcher(
         (action) =>

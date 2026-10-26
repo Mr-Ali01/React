@@ -9,8 +9,6 @@ import {
   Eye,
   Pencil,
   Trash2,
-  X,
-  Check,
   AlertTriangle,
   Award,
   TrendingUp,
@@ -18,7 +16,7 @@ import {
   Sparkles,
   Percent
 } from 'lucide-react';
-import { resultService, DEMO_STUDENT_RESULTS } from '../../services/resultService';
+import { resultService } from '../../services/resultService';
 import { studentService } from '../../services/studentService';
 import ResultStatusBadge from '../../components/student/ResultStatusBadge';
 import AcademicProfileGate from '../../components/student/AcademicProfileGate';
@@ -28,11 +26,11 @@ import { useAppSelector } from '../../hooks/useAppSelector';
 import {
   selectResults,
   fetchResults,
-  updateSemesterResult,
   deleteSemesterResult,
 } from '../../features/results/resultsSlice';
 import {
   selectAcademicProfile,
+  selectIsProfileComplete,
   fetchAcademicProfile,
 } from '../../features/academicProfile/academicProfileSlice';
 import { selectDecimalPrecision } from '../../features/settings/settingsSlice';
@@ -45,14 +43,22 @@ export default function MyResults() {
   const reduxProfile = useAppSelector(selectAcademicProfile);
   const decimalPrecision = useAppSelector(selectDecimalPrecision);
 
+  const isProfileComplete = Boolean(
+    useAppSelector(selectIsProfileComplete) || studentService.isProfileComplete()
+  );
+
   // Sync fresh results and profile from store and storage events
   useEffect(() => {
-    dispatch(fetchResults());
     dispatch(fetchAcademicProfile());
+    if (isProfileComplete) {
+      dispatch(fetchResults());
+    }
 
     const handleSync = () => {
-      dispatch(fetchResults());
       dispatch(fetchAcademicProfile());
+      if (isProfileComplete) {
+        dispatch(fetchResults());
+      }
     };
 
     window.addEventListener('results_data_updated', handleSync);
@@ -61,7 +67,7 @@ export default function MyResults() {
       window.removeEventListener('results_data_updated', handleSync);
       window.removeEventListener('storage', handleSync);
     };
-  }, [dispatch]);
+  }, [dispatch, isProfileComplete]);
 
   const profile = useMemo(() => ({
     ...studentService.getProfile(),
@@ -74,7 +80,7 @@ export default function MyResults() {
   const [sortBy, setSortBy] = useState('LATEST');
 
   // Load results from Redux or data-access layer fallback
-  const results = reduxResults && reduxResults.length > 0 ? reduxResults : resultService.getAllResults();
+  const results = Array.isArray(reduxResults) ? reduxResults : resultService.getAllResults();
 
   // Calculate real-time academic summaries (SGPA, CGPA, GPA, percentage, overall grade)
   const summary = useMemo(() => {
@@ -512,11 +518,12 @@ export default function MyResults() {
               </button>
               <button
                 type="button"
+                disabled={isProcessing}
                 onClick={handleConfirmDelete}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white bg-red-600 hover:bg-red-700 shadow-sm transition-all cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white bg-red-600 hover:bg-red-700 shadow-sm transition-all cursor-pointer disabled:opacity-50"
               >
                 <Trash2 className="w-3.5 h-3.5" />
-                <span>Delete Result</span>
+                <span>{isProcessing ? 'Deleting...' : 'Delete Result'}</span>
               </button>
             </div>
           </div>

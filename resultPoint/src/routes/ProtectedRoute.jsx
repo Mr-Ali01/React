@@ -14,6 +14,7 @@ export default function ProtectedRoute({ children }) {
   if (!isAuthenticated || !currentUser) {
     return <Navigate to="/login" replace state={{ from: location }} />;
   }
+console.log("how are you");
 
   // If authenticated as Admin, redirect to Admin dashboard
   if (currentUser.role === 'admin') {

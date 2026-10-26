@@ -1,19 +1,23 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Target, PlusCircle, CheckCircle2 } from 'lucide-react';
+import { Target, PlusCircle, Download } from 'lucide-react';
 import { useAppDispatch } from '../../hooks/useAppDispatch';
 import { useAppSelector } from '../../hooks/useAppSelector';
 import {
   selectAcademicGoal,
-  selectGoalDetails,
   fetchAcademicGoal,
   saveAcademicGoal
 } from '../../features/academicGoals/academicGoalsSlice';
 import { selectResults, fetchResults } from '../../features/results/resultsSlice';
-import { selectAcademicProfile, fetchAcademicProfile } from '../../features/academicProfile/academicProfileSlice';
+import {
+  selectAcademicProfile,
+  selectIsProfileComplete,
+  fetchAcademicProfile
+} from '../../features/academicProfile/academicProfileSlice';
 import { studentService } from '../../services/studentService';
 import { resultService } from '../../services/resultService';
 import { goalService } from '../../services/goalService';
 import { academicCatalogService } from '../../services/academicCatalogService';
+import { exportApi, triggerBlobDownload } from '../../services/api/exportApi';
 import { useToast } from '../../context/ToastContext';
 
 import AcademicProfileGate from '../../components/student/AcademicProfileGate';
@@ -29,14 +33,19 @@ export default function AcademicGoals() {
   const reduxProfile = useAppSelector(selectAcademicProfile);
   const reduxResults = useAppSelector(selectResults);
   const reduxGoal = useAppSelector(selectAcademicGoal);
-  const reduxDetails = useAppSelector(selectGoalDetails);
+
+  const isProfileComplete = Boolean(
+    useAppSelector(selectIsProfileComplete) || studentService.isProfileComplete()
+  );
 
   // Initialize and synchronize
   useEffect(() => {
-    dispatch(fetchResults());
     dispatch(fetchAcademicProfile());
-    dispatch(fetchAcademicGoal());
-  }, [dispatch]);
+    if (isProfileComplete) {
+      dispatch(fetchResults());
+      dispatch(fetchAcademicGoal());
+    }
+  }, [dispatch, isProfileComplete]);
 
   const profile = useMemo(() => ({
     ...studentService.getProfile(),
@@ -56,15 +65,9 @@ export default function AcademicGoals() {
   }, [profile.universityId, profile.courseId, profile.regulationId]);
 
   // Target CGPA interactive state
-  const initialTarget = reduxGoal?.targetCGPA || 8.50;
-  const [currentTarget, setCurrentTarget] = useState(initialTarget);
+  const [userSelectedTarget, setUserSelectedTarget] = useState(null);
+  const currentTarget = userSelectedTarget ?? reduxGoal?.targetCGPA ?? 8.50;
   const [planScope, setPlanScope] = useState('remaining'); // 'remaining' | 'all' | 'next'
-
-  useEffect(() => {
-    if (reduxGoal?.targetCGPA) {
-      setCurrentTarget(reduxGoal.targetCGPA);
-    }
-  }, [reduxGoal]);
 
   // Recalculate dynamic goal details whenever results or currentTarget change
   const details = useMemo(() => {
@@ -74,12 +77,30 @@ export default function AcademicGoals() {
   // Handle saving target CGPA
   const handleSaveGoal = async (newTarget) => {
     const val = Number(parseFloat(newTarget).toFixed(2));
-    setCurrentTarget(val);
+    setUserSelectedTarget(val);
     try {
       await dispatch(saveAcademicGoal({ targetCGPA: val })).unwrap();
       showToast(`Target Degree CGPA updated to ${val.toFixed(2)}!`);
     } catch (err) {
       showToast(typeof err === 'string' ? err : 'Failed to save goal', 'error');
+    }
+  };
+
+  const [isExporting, setIsExporting] = useState(false);
+
+  // Handle exporting goals PDF report
+  const handleExportGoalsReport = async () => {
+    if (isExporting) return;
+    setIsExporting(true);
+    showToast('Downloading academic goals & progress report...');
+    try {
+      const blob = await exportApi.downloadGoalsReportPdf();
+      triggerBlobDownload(blob, 'academic-goals-progress.pdf');
+      showToast('Goals and progress report PDF downloaded successfully!');
+    } catch (err) {
+      showToast(typeof err === 'string' ? err : err?.message || 'Failed to download goals report PDF', 'error');
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -150,6 +171,18 @@ export default function AcademicGoals() {
                   <option value="next">Next Semester Only</option>
                 </select>
               </div>
+
+              {/* Export Goals PDF Button */}
+              <button
+                type="button"
+                onClick={handleExportGoalsReport}
+                disabled={isExporting}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-text-h bg-card border border-border hover:bg-bg-sec shadow-xs transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Download Goals and Trajectory PDF Report"
+              >
+                <Download className="w-3.5 h-3.5 text-accent" />
+                <span>{isExporting ? 'Exporting...' : 'Export PDF'}</span>
+              </button>
             </div>
           )}
         </div>
@@ -187,7 +220,7 @@ export default function AcademicGoals() {
             <TargetSetterAndFeasibility
               details={details}
               targetCGPA={currentTarget}
-              onTargetChange={(val) => setCurrentTarget(val)}
+              onTargetChange={(val) => setUserSelectedTarget(val)}
               onSaveGoal={handleSaveGoal}
             />
 

@@ -374,6 +374,9 @@ export const authService = {
       return {
         success: false,
         error: err.message || 'Registration failed. Please check the entered details.',
+        details: err.details || null,
+        code: err.code || 'UNKNOWN_ERROR',
+        status: err.status || 500,
       };
     }
   },

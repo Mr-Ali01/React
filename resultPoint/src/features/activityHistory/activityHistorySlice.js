@@ -1,5 +1,7 @@
-import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
+import { createSlice, createAsyncThunk, createSelector } from '@reduxjs/toolkit';
 import { activityHistoryService } from '../../services/activityHistoryService.js';
+
+const EMPTY_ACTIVITIES = [];
 
 const getInitialActivities = () => {
   try {
@@ -165,7 +167,7 @@ export const {
 } = activityHistorySlice.actions;
 
 // Selectors
-export const selectActivities = (state) => state.activityHistory.activities;
+export const selectActivities = (state) => state.activityHistory?.activities || EMPTY_ACTIVITIES;
 export const selectSelectedActivity = (state) => state.activityHistory.selectedActivity;
 export const selectSearchQuery = (state) => state.activityHistory.searchQuery;
 export const selectTypeFilter = (state) => state.activityHistory.typeFilter;
@@ -177,15 +179,15 @@ export const selectItemsPerPage = (state) => state.activityHistory.itemsPerPage;
 export const selectActivityLoading = (state) => state.activityHistory.loading;
 export const selectActivityError = (state) => state.activityHistory.error;
 
-export const selectActivitySummary = (state) => {
-  const list = state.activityHistory.activities || [];
-  return {
+export const selectActivitySummary = createSelector(
+  [selectActivities],
+  (list) => ({
     totalActivities: list.length,
     calculatorUsage: list.filter((a) => a.type === 'calculation').length,
     resultUpdates: list.filter((a) => a.type === 'result').length,
     goalUpdates: list.filter((a) => a.type === 'goal').length,
     backlogsCleared: list.filter((a) => a.type === 'backlog').length
-  };
-};
+  })
+);
 
 export default activityHistorySlice.reducer;

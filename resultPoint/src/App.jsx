@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Outlet, Navigate } from 'react-router-dom';
 import { ThemeProvider } from './context/ThemeContext';
 import { ToastProvider } from './context/ToastContext';
 import { useAppDispatch } from './hooks/useAppDispatch';
 import { checkAuthSession, logout } from './features/auth/authSlice';
+import { fetchAcademicProfile } from './features/academicProfile/academicProfileSlice';
 
 // Public Layout Components
 import Header from './components/layout/Header';
@@ -63,7 +64,6 @@ import AdminRoute from './routes/AdminRoute';
 import AdminLayout from './pages/admin/AdminLayout';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import AcademicCatalogManager from './pages/admin/AcademicCatalogManager';
-import AdminManagementPage from './pages/admin/AdminManagementPage';
 import UsersManager from './pages/admin/UsersManager';
 import SupportQueriesManager from './pages/admin/SupportQueriesManager';
 import AnnouncementsManager from './pages/admin/AnnouncementsManager';
@@ -104,11 +104,19 @@ export default function App() {
 
   useEffect(() => {
     // 1. Deterministic session validation on app startup
-    dispatch(checkAuthSession());
+    dispatch(checkAuthSession()).then((action) => {
+      if (action.payload && action.payload.user && action.payload.user.role === 'student' && action.payload.user.hasCompletedProfile) {
+        dispatch(fetchAcademicProfile());
+      }
+    });
 
     // 2. React to auth session changes (login, logout, expiration, or tab storage events)
     const handleAuthChange = () => {
-      dispatch(checkAuthSession());
+      dispatch(checkAuthSession()).then((action) => {
+        if (action.payload && action.payload.user && action.payload.user.role === 'student' && action.payload.user.hasCompletedProfile) {
+          dispatch(fetchAcademicProfile());
+        }
+      });
     };
 
     const handleSessionExpired = () => {

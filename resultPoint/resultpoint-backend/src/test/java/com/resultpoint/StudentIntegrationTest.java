@@ -109,6 +109,52 @@ public class StudentIntegrationTest {
         mockMvc.perform(get("/api/v1/student/profile")
                         .header("Authorization", "Bearer " + tokenA))
                 .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.error.code").value("RESOURCE_NOT_FOUND"));
+    }
+
+    @Test
+    @DisplayName("Endpoints: Return 404 when student profile is missing (unconfigured student)")
+    void shouldReturn404ForEndpointsWhenProfileDoesNotExist() throws Exception {
+        // Goals endpoint returns 404 when student has no profile
+        mockMvc.perform(get("/api/v1/student/goals")
+                        .header("Authorization", "Bearer " + tokenA))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.error.code").value("RESOURCE_NOT_FOUND"));
+
+        // Results endpoint returns 404 when student has no profile
+        mockMvc.perform(get("/api/v1/student/results")
+                        .header("Authorization", "Bearer " + tokenA))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.error.code").value("RESOURCE_NOT_FOUND"));
+
+        // Performance report endpoint returns 404 when student has no profile
+        mockMvc.perform(get("/api/v1/student/reports/performance")
+                        .header("Authorization", "Bearer " + tokenA))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.error.code").value("RESOURCE_NOT_FOUND"));
+    }
+
+    @Test
+    @DisplayName("Endpoints: Return 401 when accessed without authentication")
+    void shouldReturn401WhenEndpointsAccessedWithoutAuth() throws Exception {
+        mockMvc.perform(get("/api/v1/student/profile"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.success").value(false));
+
+        mockMvc.perform(get("/api/v1/student/goals"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.success").value(false));
+
+        mockMvc.perform(get("/api/v1/student/results"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.success").value(false));
+
+        mockMvc.perform(get("/api/v1/student/reports/performance"))
+                .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.success").value(false));
     }
 

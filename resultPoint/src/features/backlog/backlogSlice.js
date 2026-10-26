@@ -1,6 +1,8 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import { resultService } from '../../services/resultService';
-import { backlogService } from '../../services/backlogService';
+import { resultService } from '../../services/resultService.js';
+import { backlogService } from '../../services/backlogService.js';
+import { backlogApi } from '../../services/api/backlogApi.js';
+import { fetchResults } from '../results/resultsSlice.js';
 
 const getInitialBacklogState = () => {
   try {
@@ -37,6 +39,28 @@ export const fetchBacklogs = createAsyncThunk(
   'backlog/fetchBacklogs',
   async (_, { rejectWithValue }) => {
     try {
+      try {
+        const backendBacklogs = await backlogApi.getBacklogs();
+        if (Array.isArray(backendBacklogs)) {
+          const totalBacklogs = backendBacklogs.length;
+          const activeBacklogs = backendBacklogs.filter((b) => b.status === 'Active').length;
+          const clearedBacklogs = backendBacklogs.filter((b) => b.status === 'Cleared').length;
+          const clearanceRate = totalBacklogs > 0 ? Math.round((clearedBacklogs / totalBacklogs) * 100) : 100;
+          const clearanceStatus = activeBacklogs === 0 ? 'All Clear' : `${activeBacklogs} Active`;
+
+          backlogService.setBacklogs(backendBacklogs);
+          return {
+            backlogs: backendBacklogs,
+            totalBacklogs,
+            activeBacklogs,
+            clearedBacklogs,
+            clearanceRate,
+            clearanceStatus,
+          };
+        }
+      } catch (apiErr) {
+        console.warn('Backend backlog fetch failed, using local scan fallback:', apiErr.message);
+      }
       const results = resultService.getAllResults();
       return backlogService.scanBacklogs(results);
     } catch (err) {
@@ -50,6 +74,7 @@ export const markBacklogCleared = createAsyncThunk(
   async (payload, { dispatch, rejectWithValue }) => {
     try {
       const {
+        backlogId,
         semesterId,
         semesterNumber,
         subjectCode,
@@ -60,19 +85,47 @@ export const markBacklogCleared = createAsyncThunk(
         clearedPeriod
       } = payload;
 
-      const finalGrade = clearedGrade || newGrade || 'C';
-      const finalPoints = clearedPoints !== undefined ? clearedPoints : newPoints;
+      const finalGrade = (clearedGrade || newGrade || 'C').toUpperCase();
+      const period = clearedPeriod || 'Supplementary Examination';
 
+      let clearedDto = null;
+      if (backlogId) {
+        try {
+          clearedDto = await backlogApi.clearBacklog({
+            backlogId,
+            clearedInPeriod: period,
+            clearedGrade: finalGrade
+          });
+        } catch (apiErr) {
+          if (apiErr?.status === 400 || apiErr?.status === 404 || apiErr?.status === 401) {
+            return rejectWithValue(apiErr.message || 'Validation error while clearing backlog');
+          }
+          console.warn('API backlog clearance failed, using local fallback:', apiErr.message);
+        }
+      }
+
+      if (clearedDto) {
+        backlogService.syncBacklogAuthoritative(clearedDto);
+        const fresh = await dispatch(fetchBacklogs()).unwrap();
+        try {
+          dispatch(fetchResults());
+        } catch (e) {
+          console.warn('Sync results state warning:', e);
+        }
+        return fresh;
+      }
+
+      // Local fallback
+      const finalPoints = clearedPoints !== undefined ? clearedPoints : newPoints;
       const res = backlogService.clearBacklog({
         semesterId,
         semesterNumber,
         subjectCode,
         clearedGrade: finalGrade,
         clearedPoints: finalPoints,
-        clearedPeriod
+        clearedPeriod: period
       });
 
-      // Synchronize results state in Redux
       try {
         dispatch({ type: 'results/setResultsList', payload: resultService.getAllResults() });
       } catch (e) {
@@ -105,6 +158,8 @@ export const backlogSlice = createSlice({
       state.clearanceRate = 100;
       state.clearanceStatus = 'All Clear';
       state.selectedBacklog = null;
+      state.loading = false;
+      state.error = null;
     },
   },
   extraReducers: (builder) => {
@@ -135,17 +190,32 @@ export const backlogSlice = createSlice({
       })
       .addCase(markBacklogCleared.fulfilled, (state, action) => {
         state.loading = false;
-        state.backlogs = action.payload.backlogs;
-        state.totalBacklogs = action.payload.totalBacklogs;
-        state.activeBacklogs = action.payload.activeBacklogs;
-        state.pendingBacklogs = action.payload.activeBacklogs;
-        state.clearedBacklogs = action.payload.clearedBacklogs;
-        state.clearanceRate = action.payload.clearanceRate;
-        state.clearanceStatus = action.payload.clearanceStatus;
+        if (action.payload) {
+          state.backlogs = action.payload.backlogs || state.backlogs;
+          state.totalBacklogs = action.payload.totalBacklogs ?? state.totalBacklogs;
+          state.activeBacklogs = action.payload.activeBacklogs ?? state.activeBacklogs;
+          state.pendingBacklogs = action.payload.activeBacklogs ?? state.pendingBacklogs;
+          state.clearedBacklogs = action.payload.clearedBacklogs ?? state.clearedBacklogs;
+          state.clearanceRate = action.payload.clearanceRate ?? state.clearanceRate;
+          state.clearanceStatus = action.payload.clearanceStatus ?? state.clearanceStatus;
+        }
       })
       .addCase(markBacklogCleared.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
+      })
+      // auth/logout
+      .addCase('auth/logout', (state) => {
+        state.backlogs = [];
+        state.totalBacklogs = 0;
+        state.activeBacklogs = 0;
+        state.pendingBacklogs = 0;
+        state.clearedBacklogs = 0;
+        state.clearanceRate = 100;
+        state.clearanceStatus = 'All Clear';
+        state.selectedBacklog = null;
+        state.loading = false;
+        state.error = null;
       })
       .addMatcher(
         (action) =>

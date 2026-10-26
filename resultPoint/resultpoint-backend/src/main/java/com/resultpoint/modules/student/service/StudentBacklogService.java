@@ -30,8 +30,11 @@ public class StudentBacklogService {
 
     @Transactional(readOnly = true)
     public List<StudentBacklogDto> getBacklogs(String userId, BacklogStatus status) {
-        StudentProfile profile = studentProfileRepository.findByUserId(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("StudentProfile", "userId", userId));
+        Optional<StudentProfile> profileOpt = studentProfileRepository.findByUserId(userId);
+        if (profileOpt.isEmpty()) {
+            return List.of();
+        }
+        StudentProfile profile = profileOpt.get();
 
         List<StudentBacklog> backlogs;
         if (status != null) {

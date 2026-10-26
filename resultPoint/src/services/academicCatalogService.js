@@ -6,6 +6,7 @@
 
 import { STORAGE_KEYS } from './storageKeys.js';
 import { auditHistoryService } from './auditHistoryService.js';
+import { resolveToLocalCatalogId } from './api/catalogApi.js';
 
 // Verified Multi-University Catalog Data
 const DEFAULT_CATALOG = {
@@ -1282,11 +1283,12 @@ export const academicCatalogService = {
     if (!univId) return null;
     const catalog = this.getCatalog();
     const normalized = String(univId).trim().toLowerCase();
+    const localId = resolveToLocalCatalogId(normalized);
     return (
       catalog.universities.find(
         (u) =>
-          (u.id && u.id.toLowerCase() === normalized) ||
-          (u.shortName && u.shortName.toLowerCase() === normalized)
+          (u.id && (u.id.toLowerCase() === normalized || u.id.toLowerCase() === localId)) ||
+          (u.shortName && (u.shortName.toLowerCase() === normalized || u.shortName.toLowerCase() === localId))
       ) || null
     );
   },
@@ -1317,11 +1319,12 @@ export const academicCatalogService = {
     const univ = this.getUniversityById(univId);
     if (!univ || !univ.courses) return null;
     const normalized = String(courseId).trim().toLowerCase();
+    const localId = resolveToLocalCatalogId(normalized);
     return (
       univ.courses.find(
         (c) =>
-          c.id.toLowerCase() === normalized ||
-          (c.shortName && c.shortName.toLowerCase() === normalized)
+          (c.id && (c.id.toLowerCase() === normalized || c.id.toLowerCase() === localId)) ||
+          (c.shortName && (c.shortName.toLowerCase() === normalized || c.shortName.toLowerCase() === localId))
       ) || null
     );
   },
@@ -1344,8 +1347,15 @@ export const academicCatalogService = {
   getRegulation(univId, courseId, regulationId) {
     const course = this.getCourse(univId, courseId);
     if (!course || !course.regulations) return null;
+    if (!regulationId) return course.regulations[0] || null;
+    const normalized = String(regulationId).trim().toLowerCase();
+    const localId = resolveToLocalCatalogId(normalized);
     return (
-      course.regulations.find((r) => r.id === regulationId || r.code.toLowerCase() === String(regulationId).toLowerCase()) ||
+      course.regulations.find(
+        (r) =>
+          (r.id && (r.id.toLowerCase() === normalized || r.id.toLowerCase() === localId)) ||
+          (r.code && (r.code.toLowerCase() === normalized || r.code.toLowerCase() === localId))
+      ) ||
       course.regulations[0] ||
       null
     );
@@ -1359,7 +1369,11 @@ export const academicCatalogService = {
     const regulation = this.getRegulation(univId, courseId, regulationId);
     if (!regulation) return null;
 
-    const isOuMcaOrBca = (univ.id === 'osmania' || univ.id === 'ou') && ['mca', 'bca'].includes(String(course.id).toLowerCase());
+    const isOu = univ.id === 'osmania' || univ.id === 'ou' || univ.id === 'uni_ou' || String(univ.shortName).toLowerCase() === 'ou';
+    const isOuMcaOrBca = isOu && (
+      ['mca', 'bca', 'course_ou_mca', 'course_ou_bca'].includes(String(course.id).toLowerCase()) ||
+      ['mca', 'bca'].includes(String(course.shortName).toLowerCase())
+    );
 
     const gradeScale = (regulation.gradeScale || []).map((g) => {
       if (isOuMcaOrBca && (g.grade === 'O' || g.desc?.toLowerCase().includes('outstanding'))) {
@@ -1394,7 +1408,7 @@ export const academicCatalogService = {
       resolvedCalcRule = { ...regulation.calculationRule };
     }
     if (!resolvedCalcRule) {
-      if (univ.id === 'jntuh' || univ.id === 'jntu') {
+      if (univ.id === 'jntuh' || univ.id === 'jntu' || univ.id === 'uni_jntuh' || String(univ.shortName).toLowerCase() === 'jntuh') {
         resolvedCalcRule = {
           id: 'jntuh-r18-r22-rule',
           name: 'JNTUH Standard Formula',
@@ -1666,17 +1680,17 @@ export const academicCatalogService = {
 
       const student = safeGet(STORAGE_KEYS.STUDENT, null);
       if (student && student.universityId === univId) studentProfileCount++;
-    } catch {}
+    } catch { }
 
     try {
       const eduRecords = safeGet(STORAGE_KEYS.EDUCATION_RECORDS, []);
       educationRecordCount += eduRecords.filter((r) => r.universityId === univId).length;
-    } catch {}
+    } catch { }
 
     try {
       const results = safeGet(STORAGE_KEYS.RESULTS, []);
       resultCount += results.filter((r) => r.universityId === univId).length;
-    } catch {}
+    } catch { }
 
     const totalReferences = courseCount + regulationCount + studentProfileCount + educationRecordCount + resultCount;
 
@@ -1977,7 +1991,7 @@ export const academicCatalogService = {
       ) {
         studentProfileCount++;
       }
-    } catch {}
+    } catch { }
 
     try {
       const eduRecords = safeGet(STORAGE_KEYS.EDUCATION_RECORDS, []);
@@ -1986,7 +2000,7 @@ export const academicCatalogService = {
           r.courseId === courseId ||
           (r.course && r.course.toLowerCase() === course.shortName.toLowerCase())
       ).length;
-    } catch {}
+    } catch { }
 
     try {
       const results = safeGet(STORAGE_KEYS.RESULTS, []);
@@ -1995,7 +2009,7 @@ export const academicCatalogService = {
           r.courseId === courseId ||
           (r.course && r.course.toLowerCase() === course.shortName.toLowerCase())
       ).length;
-    } catch {}
+    } catch { }
 
     const totalReferences = regulationCount + studentProfileCount + educationRecordCount + resultCount;
 
@@ -2426,7 +2440,7 @@ export const academicCatalogService = {
         ).length;
         resultCount += extra;
       }
-    } catch {}
+    } catch { }
 
     // 2. Backlog tracker records
     let backlogCount = 0;
@@ -2439,7 +2453,7 @@ export const academicCatalogService = {
             (b.code && b.code.trim().toUpperCase() === codeUpper)
         ).length;
       }
-    } catch {}
+    } catch { }
 
     const totalReferences = resultCount + backlogCount;
     const reasons = [];
@@ -2686,14 +2700,14 @@ export const academicCatalogService = {
     const grades = Array.isArray(scaleData.grades) && scaleData.grades.length > 0
       ? scaleData.grades
       : [
-          { grade: 'O', points: 10, minPercentage: 85, maxPercentage: 100, desc: 'Outstanding', isPass: true },
-          { grade: 'A+', points: 9, minPercentage: 75, maxPercentage: 84.99, desc: 'Excellent', isPass: true },
-          { grade: 'A', points: 8, minPercentage: 65, maxPercentage: 74.99, desc: 'Very Good', isPass: true },
-          { grade: 'B+', points: 7, minPercentage: 55, maxPercentage: 64.99, desc: 'Good', isPass: true },
-          { grade: 'B', points: 6, minPercentage: 50, maxPercentage: 54.99, desc: 'Above Average', isPass: true },
-          { grade: 'C', points: 5, minPercentage: 40, maxPercentage: 49.99, desc: 'Pass', isPass: true },
-          { grade: 'F', points: 0, minPercentage: 0, maxPercentage: 39.99, desc: 'Fail', isPass: false }
-        ];
+        { grade: 'O', points: 10, minPercentage: 85, maxPercentage: 100, desc: 'Outstanding', isPass: true },
+        { grade: 'A+', points: 9, minPercentage: 75, maxPercentage: 84.99, desc: 'Excellent', isPass: true },
+        { grade: 'A', points: 8, minPercentage: 65, maxPercentage: 74.99, desc: 'Very Good', isPass: true },
+        { grade: 'B+', points: 7, minPercentage: 55, maxPercentage: 64.99, desc: 'Good', isPass: true },
+        { grade: 'B', points: 6, minPercentage: 50, maxPercentage: 54.99, desc: 'Above Average', isPass: true },
+        { grade: 'C', points: 5, minPercentage: 40, maxPercentage: 49.99, desc: 'Pass', isPass: true },
+        { grade: 'F', points: 0, minPercentage: 0, maxPercentage: 39.99, desc: 'Fail', isPass: false }
+      ];
 
     const validation = this.validateGradeScale(grades, { checkCoverage: false });
     if (!validation.isValid) {
@@ -2941,7 +2955,7 @@ export const academicCatalogService = {
           return referencingRegulations.some((ref) => ref.regulationId === res.regulationId);
         }).length;
       }
-    } catch {}
+    } catch { }
 
     const regulationCount = referencingRegulations.length;
     const totalReferences = regulationCount + resultCount;
@@ -3396,7 +3410,7 @@ export const academicCatalogService = {
         (c.regulations || []).forEach((r) => {
           const directMatch = r.calculationRuleId && r.calculationRuleId.toLowerCase() === cleanId;
           const legacyMatch = (!r.calculationRuleId && cleanId === 'jntuh-r18-r22-rule' && u.id === 'jntuh') ||
-                              (!r.calculationRuleId && cleanId === 'ou-cbcs-standard-rule' && u.id === 'ou');
+            (!r.calculationRuleId && cleanId === 'ou-cbcs-standard-rule' && u.id === 'ou');
 
           if (directMatch || legacyMatch) {
             referencingRegulations.push({
@@ -3421,7 +3435,7 @@ export const academicCatalogService = {
           return referencingRegulations.some((ref) => ref.regulationId === res.regulationId);
         }).length;
       }
-    } catch {}
+    } catch { }
 
     const regulationCount = referencingRegulations.length;
     const totalReferences = regulationCount + resultCount;

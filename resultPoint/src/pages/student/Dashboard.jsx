@@ -17,7 +17,11 @@ import AcademicProfileGate from '../../components/student/AcademicProfileGate';
 import ActiveAnnouncementBanner from '../../components/common/ActiveAnnouncementBanner';
 import { useAppSelector } from '../../hooks/useAppSelector';
 import { useAppDispatch } from '../../hooks/useAppDispatch';
-import { selectAcademicProfile, fetchAcademicProfile } from '../../features/academicProfile/academicProfileSlice';
+import {
+  selectAcademicProfile,
+  selectIsProfileComplete,
+  fetchAcademicProfile
+} from '../../features/academicProfile/academicProfileSlice';
 import { selectResults, fetchResults } from '../../features/results/resultsSlice';
 import {
   selectPerformanceAnalytics,
@@ -33,12 +37,18 @@ export default function StudentDashboard() {
   const reduxGoalMetrics = useAppSelector(selectGoalMetrics);
   const dashboardView = useAppSelector(selectDashboardView);
 
+  const isProfileComplete = Boolean(
+    useAppSelector(selectIsProfileComplete) || studentService.isProfileComplete()
+  );
+
   useEffect(() => {
     const syncDashboardData = () => {
       dispatch(fetchAcademicProfile());
-      dispatch(fetchResults());
-      dispatch(fetchPerformanceData());
-      dispatch(fetchAcademicGoal());
+      if (isProfileComplete) {
+        dispatch(fetchResults());
+        dispatch(fetchPerformanceData());
+        dispatch(fetchAcademicGoal());
+      }
     };
 
     // Initial load
@@ -56,7 +66,7 @@ export default function StudentDashboard() {
       window.removeEventListener('academic_profile_updated', syncDashboardData);
       window.removeEventListener('academic_goals_updated', syncDashboardData);
     };
-  }, [dispatch]);
+  }, [dispatch, isProfileComplete]);
 
   const profile = { ...studentService.getProfile(), ...(reduxProfile || {}) };
   const results = reduxResults && reduxResults.length > 0 ? reduxResults : resultService.getAllResults();

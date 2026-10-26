@@ -190,7 +190,12 @@ export const resultService = {
   initialize() {
     const existing = safeGet(STORAGE_KEYS.RESULTS, null);
     if (existing === null) {
-      safeSet(STORAGE_KEYS.RESULTS, DEFAULT_RESULTS);
+      const auth = safeGet(STORAGE_KEYS.AUTH, null);
+      if (auth && (auth.token || auth.user)) {
+        safeSet(STORAGE_KEYS.RESULTS, []);
+      } else {
+        safeSet(STORAGE_KEYS.RESULTS, DEFAULT_RESULTS);
+      }
     } else if (Array.isArray(existing) && existing.length > 0) {
       // Check if student profile is MCA or BCA under Osmania and has legacy 'O' grades
       const profile = safeGet(STORAGE_KEYS.STUDENT, null);
@@ -212,6 +217,129 @@ export const resultService = {
         }
       }
     }
+  },
+
+  setResults(resultsList, emitEvent = true) {
+    if (!Array.isArray(resultsList)) return;
+    safeSet(STORAGE_KEYS.RESULTS, resultsList);
+    syncStudentActiveSemester(resultsList);
+    if (emitEvent && typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('results_data_updated'));
+    }
+  },
+
+  addResultAuthoritative(authoritativeResult) {
+    const results = safeGet(STORAGE_KEYS.RESULTS, []);
+    const semNum = Number(authoritativeResult.semesterNumber);
+    const existingIndex = results.findIndex(
+      (r) => Number(r.semesterNumber) === semNum || r.id === authoritativeResult.id
+    );
+    let updatedList;
+    if (existingIndex !== -1) {
+      updatedList = results.map((r, idx) => (idx === existingIndex ? authoritativeResult : r));
+    } else {
+      updatedList = [...results, authoritativeResult];
+    }
+    updatedList.sort((a, b) => Number(a.semesterNumber) - Number(b.semesterNumber));
+    safeSet(STORAGE_KEYS.RESULTS, updatedList);
+    syncStudentActiveSemester(updatedList);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('results_data_updated'));
+    }
+    try {
+      auditHistoryService.recordEvent({
+        action: 'CREATED',
+        semesterNumber: authoritativeResult.semesterNumber,
+        semesterLabel: authoritativeResult.semesterLabel,
+        resultId: authoritativeResult.id,
+        academicPeriod: authoritativeResult.academicPeriod,
+        sgpa: authoritativeResult.sgpa,
+        cgpa: authoritativeResult.cgpa,
+        credits: authoritativeResult.creditsEarned || authoritativeResult.totalCredits,
+        subjectCount: authoritativeResult.subjects?.length || authoritativeResult.subjectCount,
+        status: authoritativeResult.status,
+        details: `Saved result for Semester ${authoritativeResult.semesterNumber} with SGPA: ${Number(authoritativeResult.sgpa).toFixed(2)}, CGPA: ${Number(authoritativeResult.cgpa).toFixed(2)}.`
+      });
+      activityHistoryService.recordActivity({
+        type: 'result',
+        action: 'created',
+        title: 'Added Semester Result',
+        description: `Added Semester ${authoritativeResult.semesterNumber} results`,
+        entityId: authoritativeResult.id,
+        badgeValues: [`Semester ${authoritativeResult.semesterNumber}`, `${authoritativeResult.subjects?.length || 6} Subjects`],
+        resultMetric: { label: 'SGPA', value: Number(authoritativeResult.sgpa).toFixed(2), color: 'emerald' },
+        metadata: {
+          activityType: 'Result Creation',
+          semesterNumber: authoritativeResult.semesterNumber,
+          sgpa: Number(authoritativeResult.sgpa).toFixed(2),
+          cgpa: Number(authoritativeResult.cgpa).toFixed(2),
+          creditsEarned: authoritativeResult.creditsEarned,
+          status: authoritativeResult.status,
+          remarks: 'Authoritative backend semester scorecard saved.'
+        }
+      });
+      notificationService.notifyResultSaved(authoritativeResult.semesterNumber, authoritativeResult.sgpa);
+    } catch (e) {
+      console.warn('Audit/Activity record warning:', e);
+    }
+    return authoritativeResult;
+  },
+
+  updateResultAuthoritative(authoritativeResult) {
+    const results = safeGet(STORAGE_KEYS.RESULTS, []);
+    const semNum = Number(authoritativeResult.semesterNumber);
+    const existingIndex = results.findIndex(
+      (r) => Number(r.semesterNumber) === semNum || r.id === authoritativeResult.id
+    );
+    let updatedList;
+    if (existingIndex !== -1) {
+      updatedList = results.map((r, idx) => (idx === existingIndex ? authoritativeResult : r));
+    } else {
+      updatedList = [...results, authoritativeResult];
+    }
+    updatedList.sort((a, b) => Number(a.semesterNumber) - Number(b.semesterNumber));
+    safeSet(STORAGE_KEYS.RESULTS, updatedList);
+    syncStudentActiveSemester(updatedList);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('results_data_updated'));
+    }
+    try {
+      auditHistoryService.recordEvent({
+        action: 'UPDATED',
+        semesterNumber: authoritativeResult.semesterNumber,
+        semesterLabel: authoritativeResult.semesterLabel,
+        resultId: authoritativeResult.id,
+        academicPeriod: authoritativeResult.academicPeriod,
+        sgpa: authoritativeResult.sgpa,
+        cgpa: authoritativeResult.cgpa,
+        credits: authoritativeResult.creditsEarned || authoritativeResult.totalCredits,
+        subjectCount: authoritativeResult.subjects?.length || authoritativeResult.subjectCount,
+        status: authoritativeResult.status,
+        details: `Updated Semester ${authoritativeResult.semesterNumber} result details. SGPA: ${Number(authoritativeResult.sgpa).toFixed(2)}, CGPA: ${Number(authoritativeResult.cgpa).toFixed(2)}.`
+      });
+      activityHistoryService.recordActivity({
+        type: 'result',
+        action: 'updated',
+        title: 'Edited Semester Result',
+        description: `Updated Semester ${authoritativeResult.semesterNumber} results`,
+        entityId: authoritativeResult.id,
+        badgeValues: [`Semester ${authoritativeResult.semesterNumber}`, `${authoritativeResult.subjects?.length || 6} Subjects`],
+        resultMetric: { label: 'SGPA', value: Number(authoritativeResult.sgpa).toFixed(2), color: 'emerald' },
+        metadata: {
+          activityType: 'Result Update',
+          semesterNumber: authoritativeResult.semesterNumber,
+          sgpa: Number(authoritativeResult.sgpa).toFixed(2),
+          cgpa: Number(authoritativeResult.cgpa).toFixed(2),
+          creditsEarned: authoritativeResult.creditsEarned,
+          status: authoritativeResult.status,
+          remarks: 'Authoritative backend semester scorecard updated.'
+        }
+      });
+      notificationService.notifyResultUpdated(authoritativeResult.semesterNumber, authoritativeResult.sgpa);
+    } catch (e) {
+      console.warn('Audit/Activity record warning:', e);
+    }
+    return authoritativeResult;
   },
 
   getAllResults() {

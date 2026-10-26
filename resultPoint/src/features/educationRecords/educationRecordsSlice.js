@@ -1,5 +1,8 @@
-import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
+import { createSlice, createAsyncThunk, createSelector } from '@reduxjs/toolkit';
 import { educationRecordService } from '../../services/educationRecordService.js';
+import { educationRecordApi } from '../../services/api/educationRecordApi.js';
+
+const EMPTY_RECORDS = [];
 
 const getInitialRecords = () => {
   try {
@@ -33,6 +36,16 @@ export const fetchEducationRecords = createAsyncThunk(
   'educationRecords/fetchEducationRecords',
   async (_, { rejectWithValue }) => {
     try {
+      try {
+        const backendRecords = await educationRecordApi.getEducationRecords();
+        if (Array.isArray(backendRecords)) {
+          educationRecordService.saveAll(backendRecords);
+          const activeId = educationRecordService.getActiveEducationId();
+          return { records: backendRecords, activeId };
+        }
+      } catch (apiErr) {
+        console.warn('Backend education records fetch failed, using local service fallback:', apiErr.message);
+      }
       const records = educationRecordService.getAll();
       const activeId = educationRecordService.getActiveEducationId();
       return { records, activeId };
@@ -46,7 +59,23 @@ export const addEducationRecord = createAsyncThunk(
   'educationRecords/addEducationRecord',
   async (recordData, { rejectWithValue }) => {
     try {
-      const created = educationRecordService.add(recordData);
+      let created = null;
+      try {
+        created = await educationRecordApi.createEducationRecord(recordData);
+      } catch (apiErr) {
+        if (apiErr?.status === 400 || apiErr?.status === 401 || apiErr?.status === 404) {
+          return rejectWithValue(apiErr.message || 'Validation error while saving education record');
+        }
+        console.warn('API create education record failed, using local service fallback:', apiErr.message);
+      }
+
+      if (created) {
+        educationRecordService.add(created);
+        const activeId = educationRecordService.getActiveEducationId();
+        return { created, activeId };
+      }
+
+      created = educationRecordService.add(recordData);
       const activeId = educationRecordService.getActiveEducationId();
       return { created, activeId };
     } catch (err) {
@@ -59,6 +88,7 @@ export const updateEducationRecord = createAsyncThunk(
   'educationRecords/updateEducationRecord',
   async ({ id, updates }, { rejectWithValue }) => {
     try {
+      // Backend contract note: Backend currently exposes GET, POST, DELETE. No PUT endpoint exists.
       const updated = educationRecordService.update(id, updates);
       return updated;
     } catch (err) {
@@ -71,6 +101,11 @@ export const deleteEducationRecord = createAsyncThunk(
   'educationRecords/deleteEducationRecord',
   async (id, { rejectWithValue }) => {
     try {
+      try {
+        await educationRecordApi.deleteEducationRecord(id);
+      } catch (apiErr) {
+        console.warn('API delete education record failed, using local service fallback:', apiErr.message);
+      }
       const success = educationRecordService.delete(id);
       const activeId = educationRecordService.getActiveEducationId();
       return { id, success, activeId };
@@ -201,6 +236,15 @@ export const educationRecordsSlice = createSlice({
         if (state.selectedRecord?.id === action.payload.id) {
           state.selectedRecord = action.payload;
         }
+      })
+      // auth/logout
+      .addCase('auth/logout', (state) => {
+        state.records = [];
+        state.activeEducationId = null;
+        state.selectedRecord = null;
+        state.loading = false;
+        state.error = null;
+        state.operationSuccess = false;
       });
   }
 });
@@ -215,7 +259,7 @@ export const {
 } = educationRecordsSlice.actions;
 
 // Selectors
-export const selectAllEducationRecords = (state) => state.educationRecords?.records || [];
+export const selectAllEducationRecords = (state) => state.educationRecords?.records || EMPTY_RECORDS;
 export const selectActiveEducationId = (state) => state.educationRecords?.activeEducationId || null;
 export const selectSelectedRecord = (state) => state.educationRecords?.selectedRecord || null;
 export const selectActiveFilterTab = (state) => state.educationRecords?.activeFilterTab || 'ALL';
@@ -223,57 +267,61 @@ export const selectSearchQuery = (state) => state.educationRecords?.searchQuery 
 export const selectStatusFilter = (state) => state.educationRecords?.statusFilter || 'ALL';
 export const selectEducationLoading = (state) => state.educationRecords?.loading || false;
 
-export const selectActiveEducationRecord = (state) => {
-  const records = selectAllEducationRecords(state);
-  const activeId = selectActiveEducationId(state);
-  return records.find((r) => r.id === activeId) || null;
-};
+export const selectActiveEducationRecord = createSelector(
+  [selectAllEducationRecords, selectActiveEducationId],
+  (records, activeId) => records.find((r) => r.id === activeId) || null
+);
 
-export const selectEducationStats = (state) => {
-  const records = selectAllEducationRecords(state);
-  return {
+export const selectEducationStats = createSelector(
+  [selectAllEducationRecords],
+  (records) => ({
     allCount: records.length,
     schoolCount: records.filter((r) => r.categoryGroup === 'School' || r.category === 'School Education').length,
     ugCount: records.filter((r) => r.categoryGroup === 'Undergraduate' || r.category === 'Undergraduate').length,
     pgCount: records.filter((r) => r.categoryGroup === 'Postgraduate' || r.category === 'Postgraduate').length
-  };
-};
+  })
+);
 
-export const selectFilteredEducationRecords = (state) => {
-  const records = selectAllEducationRecords(state);
-  const tab = selectActiveFilterTab(state);
-  const query = selectSearchQuery(state).toLowerCase().trim();
-  const status = selectStatusFilter(state);
+export const selectFilteredEducationRecords = createSelector(
+  [
+    selectAllEducationRecords,
+    selectActiveFilterTab,
+    selectSearchQuery,
+    selectStatusFilter
+  ],
+  (records, tab, rawQuery, status) => {
+    const query = (rawQuery || '').toLowerCase().trim();
 
-  return records.filter((rec) => {
-    // 1. Tab filter
-    if (tab === 'SCHOOL') {
-      if (rec.categoryGroup !== 'School' && rec.category !== 'School Education') return false;
-    } else if (tab === 'UNDERGRADUATE') {
-      if (rec.categoryGroup !== 'Undergraduate' && rec.category !== 'Undergraduate') return false;
-    } else if (tab === 'POSTGRADUATE') {
-      if (rec.categoryGroup !== 'Postgraduate' && rec.category !== 'Postgraduate') return false;
-    }
+    return records.filter((rec) => {
+      // 1. Tab filter
+      if (tab === 'SCHOOL') {
+        if (rec.categoryGroup !== 'School' && rec.category !== 'School Education') return false;
+      } else if (tab === 'UNDERGRADUATE') {
+        if (rec.categoryGroup !== 'Undergraduate' && rec.category !== 'Undergraduate') return false;
+      } else if (tab === 'POSTGRADUATE') {
+        if (rec.categoryGroup !== 'Postgraduate' && rec.category !== 'Postgraduate') return false;
+      }
 
-    // 2. Status filter
-    if (status === 'COMPLETED' && rec.status !== 'Completed') return false;
-    if (status === 'IN_PROGRESS' && rec.status !== 'In Progress') return false;
+      // 2. Status filter
+      if (status === 'COMPLETED' && rec.status !== 'Completed') return false;
+      if (status === 'IN_PROGRESS' && rec.status !== 'In Progress') return false;
 
-    // 3. Search query
-    if (query) {
-      const matchLevel = (rec.level || '').toLowerCase().includes(query);
-      const matchBoard = (rec.board || '').toLowerCase().includes(query);
-      const matchSchool = (rec.schoolName || '').toLowerCase().includes(query);
-      const matchUniv = (rec.university || rec.universityShortName || '').toLowerCase().includes(query);
-      const matchCourse = (rec.course || rec.courseShortName || '').toLowerCase().includes(query);
-      const matchStream = (rec.stream || '').toLowerCase().includes(query);
-      const matchRoll = (rec.rollNumber || '').toLowerCase().includes(query);
+      // 3. Search query
+      if (query) {
+        const matchLevel = (rec.level || '').toLowerCase().includes(query);
+        const matchBoard = (rec.board || '').toLowerCase().includes(query);
+        const matchSchool = (rec.schoolName || '').toLowerCase().includes(query);
+        const matchUniv = (rec.university || rec.universityShortName || '').toLowerCase().includes(query);
+        const matchCourse = (rec.course || rec.courseShortName || '').toLowerCase().includes(query);
+        const matchStream = (rec.stream || '').toLowerCase().includes(query);
+        const matchRoll = (rec.rollNumber || '').toLowerCase().includes(query);
 
-      return matchLevel || matchBoard || matchSchool || matchUniv || matchCourse || matchStream || matchRoll;
-    }
+        return matchLevel || matchBoard || matchSchool || matchUniv || matchCourse || matchStream || matchRoll;
+      }
 
-    return true;
-  });
-};
+      return true;
+    });
+  }
+);
 
 export default educationRecordsSlice.reducer;

@@ -9,33 +9,45 @@ import {
   Edit3,
   Trash2,
   Calendar,
-  Clock,
-  Layers,
-  Award,
-  BookOpen,
-  FileSpreadsheet
+  Download
 } from 'lucide-react';
 import { useAppDispatch } from '../../hooks/useAppDispatch';
 import { useAppSelector } from '../../hooks/useAppSelector';
 import {
   fetchAcademicHistory,
-  selectAuditEvents,
-  selectHistoryLoading
+  selectAuditEvents
 } from '../../features/academicHistory/academicHistorySlice';
 import { selectResults } from '../../features/results/resultsSlice';
-import { studentService } from '../../services/studentService';
+import { exportApi, triggerBlobDownload } from '../../services/api/exportApi';
+import { useToast } from '../../context/ToastContext';
 import AcademicProfileGate from '../../components/student/AcademicProfileGate';
 
 export default function AcademicHistory() {
   const dispatch = useAppDispatch();
+  const { showToast } = useToast();
   const rawAuditEvents = useAppSelector(selectAuditEvents);
   const results = useAppSelector(selectResults);
-  const isLoading = useAppSelector(selectHistoryLoading);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [actionFilter, setActionFilter] = useState('ALL');
   const [semesterFilter, setSemesterFilter] = useState('ALL');
   const [sortOrder, setSortOrder] = useState('LATEST_FIRST');
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleDownloadTranscript = async () => {
+    if (isExporting) return;
+    setIsExporting(true);
+    showToast('Downloading consolidated academic transcript...');
+    try {
+      const blob = await exportApi.downloadAcademicTranscriptPdf();
+      triggerBlobDownload(blob, 'academic-transcript.pdf');
+      showToast('Academic transcript PDF downloaded successfully!');
+    } catch (err) {
+      showToast(typeof err === 'string' ? err : err?.message || 'Failed to download transcript PDF', 'error');
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   useEffect(() => {
     dispatch(fetchAcademicHistory());
@@ -156,9 +168,21 @@ export default function AcademicHistory() {
               Immutable audit timeline of all semester result creations, revisions, and academic updates.
             </p>
           </div>
-          <span className="text-xs font-semibold px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 self-start sm:self-auto font-mono">
-            {stats.total} Total Event{stats.total === 1 ? '' : 's'}
-          </span>
+          <div className="flex items-center gap-2.5 self-start sm:self-auto">
+            <button
+              type="button"
+              onClick={handleDownloadTranscript}
+              disabled={isExporting}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-text-h bg-card border border-border hover:bg-bg-sec shadow-xs transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Download consolidated academic transcript in PDF format"
+            >
+              <Download className="w-3.5 h-3.5 text-accent" />
+              <span>{isExporting ? 'Downloading...' : 'Download Transcript (PDF)'}</span>
+            </button>
+            <span className="text-xs font-semibold px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 font-mono">
+              {stats.total} Total Event{stats.total === 1 ? '' : 's'}
+            </span>
+          </div>
         </div>
 
         {/* Audit Metric Highlights */}
@@ -304,7 +328,6 @@ export default function AcademicHistory() {
             {filteredEvents.map((event, idx) => {
               const isCreated = event.action === 'CREATED';
               const isUpdated = event.action === 'UPDATED';
-              const isDeleted = event.action === 'DELETED';
 
               return (
                 <div key={event.id || idx} className="relative group">

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import {
   UserCheck,
@@ -20,12 +20,12 @@ import {
   Calendar,
   ChevronDown,
   Info,
-  X,
   ShieldAlert
 } from 'lucide-react';
 import { studentService } from '../../services/studentService';
 import { authService } from '../../services/authService';
 import { academicCatalogService } from '../../services/academicCatalogService';
+import { catalogApi } from '../../services/api/catalogApi';
 import { resultService } from '../../services/resultService';
 import { activityHistoryService } from '../../services/activityHistoryService';
 import { useToast } from '../../context/ToastContext';
@@ -33,7 +33,8 @@ import { useAppDispatch } from '../../hooks/useAppDispatch';
 import { useAppSelector } from '../../hooks/useAppSelector';
 import {
   selectAcademicProfile,
-  saveAcademicProfile
+  saveAcademicProfile,
+  fetchAcademicProfile
 } from '../../features/academicProfile/academicProfileSlice';
 import {
   selectUserProfile,
@@ -95,51 +96,151 @@ export default function AcademicProfile() {
     };
   }, []);
 
-  // Form State
-  const [formData, setFormData] = useState({
-    fullName: '',
-    email: '',
-    hallTicketNumber: '',
-    phoneNumber: '',
-    dob: '',
-    gender: 'Male',
-    avatar: DEFAULT_AVATAR,
-    universityId: 'osmania',
-    courseId: 'bca',
-    regulationId: 'ou-bca-cbcs',
-    batch: '2025-2027',
-    currentSemester: 5,
-    totalSemesters: 6
-  });
+  // Ensure authoritative academic profile is synchronized from backend on mount
+  useEffect(() => {
+    dispatch(fetchAcademicProfile());
+  }, [dispatch]);
 
-  // Saved baseline snapshot for detecting changes & reset
-  const [savedBaseline, setSavedBaseline] = useState(null);
+  // Form State initialized directly from loaded student profile & results
+  const getInitialFormData = () => {
+    const totalSem = Number(baseProfile?.totalSemesters || 6);
+    const semCalc = studentService.calculateActiveSemesterInfo(
+      completedResults,
+      totalSem,
+      baseProfile?.currentSemester
+    );
+    const hasConfig = Boolean(baseProfile?.universityId && baseProfile?.courseId);
+    return {
+      fullName: baseProfile?.fullName || '',
+      email: baseProfile?.email || '',
+      hallTicketNumber: baseProfile?.hallTicketNumber || '',
+      phoneNumber: baseProfile?.phoneNumber || '',
+      dob: baseProfile?.dob || '',
+      gender: baseProfile?.gender || 'Male',
+      avatar: baseProfile?.avatar || DEFAULT_AVATAR,
+      universityId: baseProfile?.universityId || (hasConfig ? 'osmania' : ''),
+      courseId: baseProfile?.courseId || (hasConfig ? 'bca' : ''),
+      regulationId: baseProfile?.regulationId || (hasConfig ? 'ou-bca-cbcs' : ''),
+      batch: baseProfile?.batch || '',
+      currentSemester: semCalc.activeSemester || 1,
+      totalSemesters: totalSem
+    };
+  };
+
+  const [formData, setFormData] = useState(getInitialFormData);
+  const [savedBaseline, setSavedBaseline] = useState(getInitialFormData);
+  const [syncedKey, setSyncedKey] = useState(
+    () => `${baseProfile?.hallTicketNumber || ''}_${baseProfile?.courseId || ''}_${baseProfile?.universityId || ''}`
+  );
+
+  // Synchronize state when baseProfile updates asynchronously from backend fetch
+  const currentKey = `${baseProfile?.hallTicketNumber || ''}_${baseProfile?.courseId || ''}_${baseProfile?.universityId || ''}`;
+  if (currentKey && currentKey !== syncedKey) {
+    setSyncedKey(currentKey);
+    const refreshed = getInitialFormData();
+    setFormData(refreshed);
+    setSavedBaseline(refreshed);
+    setPreviewAvatar(refreshed.avatar);
+  }
 
   // Section Editing Flags
   const [isEditingPersonal, setIsEditingPersonal] = useState(false);
   const [isEditingAcademic, setIsEditingAcademic] = useState(false);
 
   // Photo & Action Feedback State
-  const [previewAvatar, setPreviewAvatar] = useState(DEFAULT_AVATAR);
+  const [previewAvatar, setPreviewAvatar] = useState(() => baseProfile?.avatar || DEFAULT_AVATAR);
   const [copiedRoll, setCopiedRoll] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const fileInputRef = useRef(null);
 
-  // Catalog Data Lists
-  const universities = useMemo(() => {
-    return academicCatalogService.getUniversities() || [];
+  // Catalog Data Lists backed by catalogApi with offline fallback
+  const [universities, setUniversities] = useState(() => academicCatalogService.getUniversities() || []);
+  const [courses, setCourses] = useState(() => {
+    return formData.universityId ? academicCatalogService.getCoursesByUniversity(formData.universityId) || [] : [];
+  });
+  const [regulations, setRegulations] = useState(() => {
+    return (formData.universityId && formData.courseId)
+      ? academicCatalogService.getRegulationsByCourse(formData.universityId, formData.courseId) || []
+      : [];
+  });
+
+  // Fetch universities from catalogApi
+  useEffect(() => {
+    let ignore = false;
+    async function loadUniversities() {
+      try {
+        const res = await catalogApi.getUniversities();
+        if (!ignore) {
+          const list = res?.content || res || [];
+          if (Array.isArray(list) && list.length > 0) {
+            setUniversities(list);
+          }
+        }
+      } catch {
+        // Fallback already initialized from academicCatalogService
+      }
+    }
+    loadUniversities();
+    return () => { ignore = true; };
   }, []);
 
-  const courses = useMemo(() => {
-    if (!formData.universityId) return [];
-    return academicCatalogService.getCoursesByUniversity(formData.universityId) || [];
+  // Fetch courses when university selection changes
+  useEffect(() => {
+    let ignore = false;
+    async function loadCourses() {
+      if (!formData.universityId) {
+        setCourses([]);
+        return;
+      }
+      try {
+        const res = await catalogApi.getCoursesByUniversity(formData.universityId);
+        if (!ignore) {
+          const list = res?.content || res || [];
+          if (Array.isArray(list) && list.length > 0) {
+            setCourses(list);
+          } else {
+            setCourses(academicCatalogService.getCoursesByUniversity(formData.universityId) || []);
+          }
+        }
+      } catch {
+        if (!ignore) {
+          setCourses(academicCatalogService.getCoursesByUniversity(formData.universityId) || []);
+        }
+      }
+    }
+    loadCourses();
+    return () => { ignore = true; };
   }, [formData.universityId]);
 
-  const regulations = useMemo(() => {
-    if (!formData.universityId || !formData.courseId) return [];
-    return academicCatalogService.getRegulationsByCourse(formData.universityId, formData.courseId) || [];
+  // Fetch regulations when university or course changes
+  useEffect(() => {
+    let ignore = false;
+    async function loadRegulations() {
+      if (!formData.universityId || !formData.courseId) {
+        setRegulations([]);
+        return;
+      }
+      try {
+        const res = await catalogApi.getRegulationsByCourse(formData.courseId);
+        if (!ignore) {
+          const list = res?.content || res || [];
+          if (Array.isArray(list) && list.length > 0) {
+            setRegulations(list);
+          } else {
+            setRegulations(academicCatalogService.getRegulationsByCourse(formData.universityId, formData.courseId) || []);
+          }
+        }
+      } catch {
+        if (!ignore) {
+          setRegulations(academicCatalogService.getRegulationsByCourse(formData.universityId, formData.courseId) || []);
+        }
+      }
+    }
+    loadRegulations();
+    return () => { ignore = true; };
   }, [formData.universityId, formData.courseId]);
 
   // Active Catalog Configuration
@@ -161,45 +262,6 @@ export default function AcademicProfile() {
       formData.currentSemester
     );
   }, [completedResults, activeConfig, formData.totalSemesters, formData.currentSemester]);
-
-  // Sync initial state from loaded student profile & results
-  useEffect(() => {
-    if (baseProfile) {
-      const totalSem = Number(baseProfile.totalSemesters || 6);
-      const semCalc = studentService.calculateActiveSemesterInfo(
-        completedResults,
-        totalSem,
-        baseProfile.currentSemester
-      );
-
-      const initial = {
-        fullName: baseProfile.fullName || 'Student User',
-        email: baseProfile.email || 'student@resultpoint.edu',
-        hallTicketNumber: baseProfile.hallTicketNumber || 'REG-478583',
-        phoneNumber: baseProfile.phoneNumber || '+91 98765 43210',
-        dob: baseProfile.dob || '15 Mar 2003',
-        gender: baseProfile.gender || 'Male',
-        avatar: baseProfile.avatar || DEFAULT_AVATAR,
-        universityId: baseProfile.universityId || 'osmania',
-        courseId: baseProfile.courseId || 'bca',
-        regulationId: baseProfile.regulationId || 'ou-bca-cbcs',
-        batch: baseProfile.batch || '2025-2027',
-        currentSemester: semCalc.activeSemester,
-        totalSemesters: totalSem
-      };
-      setFormData(initial);
-      setSavedBaseline(initial);
-      setPreviewAvatar(initial.avatar);
-    }
-  }, [
-    baseProfile.fullName,
-    baseProfile.email,
-    baseProfile.hallTicketNumber,
-    baseProfile.courseId,
-    baseProfile.universityId,
-    baseProfile.avatar,
-    completedResults.length
-  ]);
 
   // Batches for selected regulation
   const availableBatches = useMemo(() => {
@@ -422,14 +484,22 @@ export default function AcademicProfile() {
   };
 
   // Destructive Save: Reset all dependent academic data and reinitialize
-  const commitDestructiveReset = () => {
+  const commitDestructiveReset = async () => {
     setShowConfirmModal(false);
+    setIsSaving(true);
 
     const cleanCourseName = activeConfig.course.name.startsWith(activeConfig.course.shortName)
       ? activeConfig.course.name
       : `${activeConfig.course.shortName} — ${activeConfig.course.name}`;
 
     const newConfig = {
+      fullName: formData.fullName.trim(),
+      email: formData.email.trim(),
+      hallTicketNumber: formData.hallTicketNumber.trim(),
+      phoneNumber: formData.phoneNumber.trim(),
+      dob: formData.dob.trim(),
+      gender: formData.gender,
+      avatar: formData.avatar || DEFAULT_AVATAR,
       universityId: activeConfig.university.id,
       university: `${activeConfig.university.name} (${activeConfig.university.shortName})`,
       universityName: `${activeConfig.university.name} (${activeConfig.university.shortName})`,
@@ -444,51 +514,64 @@ export default function AcademicProfile() {
       regulationCode: activeConfig.regulation.code,
       ruleVersion: activeConfig.regulation.ruleVersion,
       batch: formData.batch,
+      batchYear: formData.batch,
+      currentSemester: 1,
       totalSemesters: Number(activeConfig.course.totalSemesters),
-      totalDegreeCredits: Number(activeConfig.course.totalDegreeCredits || 150)
+      totalDegreeCredits: Number(activeConfig.course.totalDegreeCredits || 150),
+      hasCompletedProfile: true
     };
 
-    // 1. Reset all academic data for the student atomically via studentService
-    const updated = studentService.resetAcademicDataForNewProgram(newConfig);
+    try {
+      // 1. Save profile to backend & academicProfileSlice
+      const saved = await dispatch(saveAcademicProfile(newConfig)).unwrap();
 
-    // 2. Dispatch across Redux slices atomically
-    dispatch(clearResults());
-    dispatch(fetchResults());
-    dispatch(resetBacklogsState());
-    dispatch(fetchBacklogs());
-    dispatch(fetchAcademicGoal());
-    dispatch(fetchPerformanceData());
-    dispatch(fetchAcademicHistory());
-    dispatch(fetchActivities());
-    dispatch(updateUserProfile(updated));
-    dispatch(saveAcademicProfile(updated));
+      // 2. Reset all academic data for the student atomically via studentService
+      const updated = studentService.resetAcademicDataForNewProgram(saved || newConfig);
 
-    // 3. Update local state
-    setCompletedResults([]);
-    setFormData((prev) => ({
-      ...prev,
-      currentSemester: 1,
-      totalSemesters: updated.totalSemesters
-    }));
-    setSavedBaseline({
-      ...formData,
-      universityId: updated.universityId,
-      courseId: updated.courseId,
-      regulationId: updated.regulationId,
-      batch: updated.batch,
-      currentSemester: 1,
-      totalSemesters: updated.totalSemesters
-    });
-    setHasUnsavedChanges(false);
-    setIsEditingPersonal(false);
-    setIsEditingAcademic(false);
+      // 3. Dispatch across Redux slices atomically
+      dispatch(clearResults());
+      dispatch(fetchResults());
+      dispatch(resetBacklogsState());
+      dispatch(fetchBacklogs());
+      dispatch(fetchAcademicGoal());
+      dispatch(fetchPerformanceData());
+      dispatch(fetchAcademicHistory());
+      dispatch(fetchActivities());
+      dispatch(updateUserProfile(updated));
+      dispatch(updateAuthProfileStatus(true));
 
-    showToast('Academic configuration updated and curriculum data reinitialized successfully.');
+      // 4. Update local state
+      setCompletedResults([]);
+      setFormData((prev) => ({
+        ...prev,
+        currentSemester: 1,
+        totalSemesters: updated.totalSemesters
+      }));
+      setSavedBaseline({
+        ...formData,
+        universityId: updated.universityId,
+        courseId: updated.courseId,
+        regulationId: updated.regulationId,
+        batch: updated.batch,
+        currentSemester: 1,
+        totalSemesters: updated.totalSemesters
+      });
+      setHasUnsavedChanges(false);
+      setIsEditingPersonal(false);
+      setIsEditingAcademic(false);
+
+      showToast('Academic configuration updated and curriculum data reinitialized successfully.');
+    } catch (err) {
+      showToast(err?.message || 'Failed to update academic configuration.', 'error');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   // Standard (Non-destructive) Save
-  const commitSave = () => {
+  const commitSave = async () => {
     setShowConfirmModal(false);
+    setIsSaving(true);
 
     const cleanCourseName = activeConfig.course.name.startsWith(activeConfig.course.shortName)
       ? activeConfig.course.name
@@ -512,53 +595,63 @@ export default function AcademicProfile() {
       regulation: activeConfig.regulation.name,
       ruleVersion: activeConfig.regulation.ruleVersion,
       batch: formData.batch,
+      batchYear: formData.batch,
       currentSemester: Number(formData.currentSemester),
       totalSemesters: Number(activeConfig.course.totalSemesters),
       totalDegreeCredits: Number(activeConfig.course.totalDegreeCredits || 150),
       hasCompletedProfile: true
     };
 
-    // 1. Update Student Service & authService
-    studentService.updateProfile(updatedProfile);
-    authService.updateCurrentUser(updatedProfile);
-
-    // 2. Dispatch to Redux Store
-    dispatch(updateUserProfile(updatedProfile));
-    dispatch(saveAcademicProfile(updatedProfile));
-    dispatch(updateAuthProfileStatus(true));
-
-    // 3. Log into Calculation & Activity History
     try {
-      activityHistoryService.recordActivity({
-        type: 'result',
-        action: 'updated',
-        title: 'Academic Profile Updated',
-        description: `Saved profile details (${activeConfig.university.shortName} - ${activeConfig.course.shortName}, Regulation: ${activeConfig.regulation.code})`,
-        entityId: 'profile-update',
-        badgeValues: [
-          activeConfig.course.shortName,
-          activeConfig.university.shortName,
-          activeConfig.regulation.code
-        ],
-        metadata: {
-          universityId: activeConfig.university.id,
-          courseId: activeConfig.course.id,
-          regulationId: activeConfig.regulation.id,
-          batch: formData.batch,
-          currentSemester: formData.currentSemester
-        }
-      });
+      // 1. Dispatch saveAcademicProfile thunk (syncs with backend API)
+      const saved = await dispatch(saveAcademicProfile(updatedProfile)).unwrap();
+      const finalProfile = saved || updatedProfile;
+
+      // 2. Update Student Service & authService
+      studentService.updateProfile(finalProfile);
+      authService.updateCurrentUser(finalProfile);
+
+      // 3. Dispatch to Redux Store
+      dispatch(updateUserProfile(finalProfile));
+      dispatch(updateAuthProfileStatus(true));
+
+      // 4. Log into Calculation & Activity History
+      try {
+        activityHistoryService.recordActivity({
+          type: 'result',
+          action: 'updated',
+          title: 'Academic Profile Updated',
+          description: `Saved profile details (${activeConfig.university.shortName} - ${activeConfig.course.shortName}, Regulation: ${activeConfig.regulation.code})`,
+          entityId: 'profile-update',
+          badgeValues: [
+            activeConfig.course.shortName,
+            activeConfig.university.shortName,
+            activeConfig.regulation.code
+          ],
+          metadata: {
+            universityId: activeConfig.university.id,
+            courseId: activeConfig.course.id,
+            regulationId: activeConfig.regulation.id,
+            batch: formData.batch,
+            currentSemester: formData.currentSemester
+          }
+        });
+      } catch (err) {
+        console.warn('Could not record activity history for profile update:', err);
+      }
+
+      // 5. Update local saved baseline & UI flags
+      setSavedBaseline({ ...formData, avatar: finalProfile.avatar });
+      setHasUnsavedChanges(false);
+      setIsEditingPersonal(false);
+      setIsEditingAcademic(false);
+
+      showToast('Academic profile updated successfully.');
     } catch (err) {
-      console.warn('Could not record activity history for profile update:', err);
+      showToast(err?.message || 'Failed to update academic profile.', 'error');
+    } finally {
+      setIsSaving(false);
     }
-
-    // 4. Update local saved baseline & UI flags
-    setSavedBaseline({ ...formData, avatar: updatedProfile.avatar });
-    setHasUnsavedChanges(false);
-    setIsEditingPersonal(false);
-    setIsEditingAcademic(false);
-
-    showToast('Academic profile updated successfully.');
   };
 
   // Determine grading details
@@ -679,18 +772,34 @@ export default function AcademicProfile() {
 
               {/* Badges Row */}
               <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 mt-3.5">
-                <span className="px-3 py-1 rounded-full text-xs font-semibold bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/30 shadow-sm">
-                  {activeConfig?.course?.shortName || 'BCA'} –{' '}
-                  {activeConfig?.course?.name?.split('—')?.[1]?.trim() || 'Bachelor of Computer Applications'}
-                </span>
-                <span className="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 shadow-sm">
-                  {activeConfig?.university?.shortName
-                    ? `${activeConfig.university.name} (${activeConfig.university.shortName})`
-                    : 'Osmania University (OU)'}
-                </span>
-                <span className="px-3 py-1 rounded-full text-xs font-semibold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/30 shadow-sm">
-                  {activeConfig?.regulation?.code || 'CBCS'}
-                </span>
+                {activeConfig?.course ? (
+                  <span className="px-3 py-1 rounded-full text-xs font-semibold bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/30 shadow-sm">
+                    {activeConfig.course.shortName} –{' '}
+                    {activeConfig.course.name?.split('—')?.[1]?.trim() || activeConfig.course.name}
+                  </span>
+                ) : (
+                  <span className="px-3 py-1 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30 shadow-sm">
+                    Program Not Configured
+                  </span>
+                )}
+                {activeConfig?.university ? (
+                  <span className="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 shadow-sm">
+                    {activeConfig.university.name} ({activeConfig.university.shortName})
+                  </span>
+                ) : (
+                  <span className="px-3 py-1 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30 shadow-sm">
+                    University Not Selected
+                  </span>
+                )}
+                {activeConfig?.regulation ? (
+                  <span className="px-3 py-1 rounded-full text-xs font-semibold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/30 shadow-sm">
+                    {activeConfig.regulation.code}
+                  </span>
+                ) : (
+                  <span className="px-3 py-1 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30 shadow-sm">
+                    Setup Required
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -746,6 +855,18 @@ export default function AcademicProfile() {
             <p className="text-xs text-text-light leading-relaxed mt-3">
               {profileStatus.description}
             </p>
+
+            {profileStatus.label === 'Incomplete' && (
+              <div className="mt-3.5 pt-3 border-t border-border">
+                <Link
+                  to="/student/profile-setup"
+                  className="inline-flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-xl font-bold text-xs text-white bg-accent hover:bg-accent-hover shadow-accent transition-all cursor-pointer"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  <span>Complete Profile Setup</span>
+                </Link>
+              </div>
+            )}
           </div>
 
           <div className="pt-4 border-t border-border mt-4 flex items-center justify-between text-[11px] text-text-light">
@@ -1239,6 +1360,12 @@ export default function AcademicProfile() {
 
       {/* Bottom Sticky/Fixed Action Row */}
       <div className="flex items-center justify-end gap-3 pt-2">
+        {hasUnsavedChanges && (
+          <span className="text-xs text-amber-500 font-semibold mr-1 flex items-center gap-1">
+            <AlertCircle className="w-3.5 h-3.5" />
+            <span>Unsaved Changes</span>
+          </span>
+        )}
         <button
           type="button"
           onClick={handleReset}
@@ -1252,11 +1379,12 @@ export default function AcademicProfile() {
         <button
           type="button"
           onClick={handleSaveClick}
+          disabled={isSaving}
           id="save-profile-changes-btn"
-          className="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-accent hover:bg-accent-hover shadow-lg shadow-accent/25 flex items-center gap-2 transition-all cursor-pointer active:scale-95"
+          className="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-accent hover:bg-accent-hover shadow-lg shadow-accent/25 flex items-center gap-2 transition-all cursor-pointer active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Save className="w-4 h-4" />
-          <span>Save Profile Changes</span>
+          <span>{isSaving ? 'Saving Changes...' : 'Save Profile Changes'}</span>
         </button>
       </div>
 
@@ -1304,9 +1432,10 @@ export default function AcademicProfile() {
               <button
                 type="button"
                 onClick={commitDestructiveReset}
-                className="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-accent hover:bg-accent-hover shadow-md shadow-accent/25 transition-all cursor-pointer active:scale-95"
+                disabled={isSaving}
+                className="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-accent hover:bg-accent-hover shadow-md shadow-accent/25 transition-all cursor-pointer active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Confirm & Reset Data
+                {isSaving ? 'Updating...' : 'Confirm & Reset Data'}
               </button>
             </div>
           </div>

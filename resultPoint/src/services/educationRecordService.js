@@ -16,9 +16,7 @@
 import { STORAGE_KEYS } from './storageKeys.js';
 import { authService } from './authService.js';
 import { academicCatalogService } from './academicCatalogService.js';
-import { academicCalculationEngine } from './academicCalculationEngine.js';
 import { activityHistoryService } from './activityHistoryService.js';
-import { auditHistoryService } from './auditHistoryService.js';
 
 // Default initial seed records for demo student user matching the reference UI
 const DEFAULT_EDUCATION_RECORDS = [
@@ -259,6 +257,18 @@ export const educationRecordService = {
     const key = getRecordsStorageKey();
     const records = safeGet(key, []);
     return Array.isArray(records) ? records : [];
+  },
+
+  /**
+   * Persists authoritative list of records from backend
+   */
+  saveAll(records) {
+    if (!Array.isArray(records)) return;
+    const key = getRecordsStorageKey();
+    safeSet(key, records);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('education_records_updated'));
+    }
   },
 
   /**

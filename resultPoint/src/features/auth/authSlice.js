@@ -68,7 +68,12 @@ export const registerUser = createAsyncThunk(
     try {
       const result = await authService.register({ fullName, email, password });
       if (!result.success) {
-        return rejectWithValue(result.error || 'Registration failed');
+        return rejectWithValue({
+          message: result.error || 'Registration failed',
+          details: result.details || null,
+          code: result.code || null,
+          status: result.status || null,
+        });
       }
 
       return {
@@ -77,7 +82,12 @@ export const registerUser = createAsyncThunk(
         refreshToken: result.refreshToken,
       };
     } catch (err) {
-      return rejectWithValue(err.message || 'Registration request encountered an error');
+      return rejectWithValue({
+        message: err.message || 'Registration request encountered an error',
+        details: err.details || null,
+        code: err.code || null,
+        status: err.status || null,
+      });
     }
   }
 );
@@ -168,7 +178,7 @@ export const authSlice = createSlice({
       })
       .addCase(registerUser.rejected, (state, action) => {
         state.loading = false;
-        state.error = action.payload || 'Registration failed';
+        state.error = action.payload?.message || action.payload || 'Registration failed';
       });
 
     // Logout
