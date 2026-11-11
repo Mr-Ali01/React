@@ -27,6 +27,8 @@ console.log("how are you");
 console.log("how are you");
 console.log("how are you");
 console.log("how are you");
+console.log("how are you");
+console.log("how are you 2");
 
 
   // If authenticated as Admin, redirect to Admin dashboard
