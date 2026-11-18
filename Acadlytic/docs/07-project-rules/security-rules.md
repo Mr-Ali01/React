@@ -3,7 +3,7 @@
 **Project:** Acadlytic  
 **Document:** Security Development Rules  
 **Path:** `07-project-rules/security-rules.md`  
-**Status:** Draft / Under Review  
+**Status:** Approved / Aligned with Finalized MVP Architecture  
 **Applies To:** Authentication, authorization, tenant isolation, API security, data protection, account security, file uploads, integrations, logging, database security, frontend/backend boundaries, and deployment security
 
 ---
@@ -107,7 +107,7 @@ Result Processing
 Backlog Tracking
 Academic Passport
 Analytics
-Student Portal
+Student Portal (Post-MVP)
 Administration
 Integrations
 Background Jobs
@@ -139,13 +139,19 @@ Security controls must therefore exist independently of frontend behavior.
 
 # 6. User Roles
 
-MVP roles:
+Active MVP roles:
 
 ```text
 SUPER_ADMIN
 COLLEGE_ADMIN
-ACADEMIC_STAFF
-STUDENT
+```
+
+Post-MVP roles (explicitly excluded from MVP authentication and authorization):
+
+```text
+ACADEMIC_STAFF  (Post-MVP — Phase 15)
+STUDENT         (Post-MVP — Phase 16; Student academic records remain in MVP)
+BRANCH_ADMIN    (Post-MVP — Phase 18.6; no branch tables or features in MVP)
 ```
 
 There is also:
@@ -160,30 +166,40 @@ which represents unauthenticated public access rather than an authenticated appl
 
 # 7. Role Responsibilities
 
-### SUPER_ADMIN
+### SUPER_ADMIN (Active MVP Role)
 
 May manage platform-level operations, including:
 
-- colleges
-- college administrators
-- platform configuration
-- authorized administrative operations
+- reviewing, approving, requesting action on, or rejecting college registration applications
+- managing college tenant lifecycle status (`ACTIVE`, `SUSPENDED`, `INACTIVE`)
+- platform configuration and supported universities
+- authorized platform administrative operations
 
-### COLLEGE_ADMIN
+`SUPER_ADMIN` does **not** manually create `COLLEGE_ADMIN` credentials; colleges self-register publicly and `SUPER_ADMIN` verifies and approves or rejects their registration.
 
-May manage permitted operations within their own college.
+### COLLEGE_ADMIN (Active MVP Role)
 
-### ACADEMIC_STAFF
+May manage permitted operations within their own college:
 
-May perform permitted academic operations within their college.
+- receives immediate restricted onboarding dashboard access upon public college registration (`PENDING`, `ACTION_REQUIRED`, `REJECTED`) to verify email, upload verification documents, submit for review, and track approval status
+- unlocks full academic management APIs only when `colleges.approval_status = APPROVED` and `colleges.status = ACTIVE`
+- MVP enforces **exactly one active `COLLEGE_ADMIN` per college** via a MySQL 8 `VIRTUAL` generated column unique index (`active_college_admin_college_id`), while preserving `users.college_id` as non-unique for post-MVP multi-admin support
 
-### STUDENT
+### ACADEMIC_STAFF (Post-MVP — Phase 15)
 
-May access their own academic information and permitted account operations.
+Future delegated role for permitted academic operations within a college. Not active in MVP.
+
+### STUDENT (Post-MVP — Phase 16)
+
+Future authenticated role for self-service read-only access to own academic information via the Student Portal. Not active in MVP (student academic records are managed by `COLLEGE_ADMIN` in MVP).
+
+### BRANCH_ADMIN (Post-MVP — Phase 18.6)
+
+Future multi-campus/branch administration role. Not active in MVP (no branch tables or features exist in MVP).
 
 ### PUBLIC_VISITOR
 
-May access only explicitly public resources.
+May access only explicitly public resources (public website pages, public college registration, login, CSRF bootstrap, and password reset endpoints). Public general-user self-registration is prohibited.
 
 ---
 
@@ -232,11 +248,11 @@ A valid login does not automatically authorize every API operation.
 
 # 10. Authentication Requirements
 
-Protected APIs must require authenticated users.
+Protected APIs must require authenticated users via **stateful HTTP-only server-side sessions** persisted in **MySQL 8** using **Spring Session JDBC** (`SPRING_SESSION`, `SPRING_SESSION_ATTRIBUTES`) with **Spring Security 6 SPA CSRF protection**. **JWT authentication is prohibited in MVP.**
 
-Authentication must establish a trusted user identity before protected operations are executed.
+Authentication must establish a trusted user identity before protected operations are executed, and every protected request must perform a live server-side check of user status and college status/approval status.
 
-The exact authentication/token/session architecture must remain aligned with `authentication.md`.
+The exact authentication and session architecture must remain aligned with `authentication.md` and `authentication-implementation.md`.
 
 ---
 
@@ -251,12 +267,14 @@ Examples:
 /about
 /features
 /contact
+/register-college
 /login
 /forgot-password
 /reset-password
+/verify-email
 ```
 
-Application APIs must not accidentally become public.
+Public API endpoints are strictly limited to explicitly permitted endpoints such as `GET /api/v1/health`, `GET /api/v1/auth/csrf`, `POST /api/v1/auth/register-college`, `POST /api/v1/auth/login`, `POST /api/v1/auth/forgot-password`, `POST /api/v1/auth/reset-password`, and email verification confirmation endpoints. Public general-user self-registration is strictly prohibited. Application APIs must not accidentally become public.
 
 ---
 
@@ -287,56 +305,49 @@ Passwords must:
 - never be stored in frontend local storage
 - never appear in audit logs
 
-Use a strong adaptive password hashing mechanism supported by Spring Security.
+Use `BCryptPasswordEncoder(12)` (cost factor 12) for all password hashing.
 
 ---
 
 # 14. Password Policy
 
-The final password policy must define:
+The approved MVP password policy enforces:
 
-- minimum length
-- allowed characters
-- common-password handling
-- password history if required
-- reset behavior
-
-Do not impose unnecessarily complicated password rules that reduce usability without improving meaningful security.
+- minimum length **12** characters, maximum **128** characters
+- rejection of common/compromised passwords
+- no arbitrary complexity rules that reduce usability without improving security
+- atomic password change (`POST /api/v1/auth/change-password`) and password reset (`POST /api/v1/auth/reset-password`) with session revocation
 
 ---
 
 # 15. Password Reset
 
-Password reset must use a secure, time-limited mechanism.
+Password reset uses a secure, time-limited, single-use token persisted as a cryptographic hash in MySQL 8 and dispatched via the transactional email outbox (`outbox_emails`).
 
 Reset tokens must:
 
-- be cryptographically secure
-- expire
-- be single-use
-- become invalid after successful reset
-- not be logged
-- not be exposed through analytics/audit data
-
-The exact delivery mechanism remains an implementation decision.
+- be cryptographically secure (single-use, **1-hour** expiry; email verification and email-change tokens expire in **48 hours**)
+- be stored hashed in the database (never plaintext)
+- become invalid after successful use or superseded requests
+- revoke **ALL** active sessions upon successful password reset
+- not be logged or exposed through analytics/audit data (raw token values are scrubbed from outbox payloads after send)
 
 ---
 
-# 16. Account Activation
+# 16. College Onboarding & Account Provisioning
 
-New accounts created by administrators must have a defined activation/password setup flow.
+In MVP:
 
-Account creation must not result in an insecure default password shared through an unsafe channel.
-
-The final activation mechanism must align with `authentication.md`.
+- Public **college registration** (`POST /api/v1/auth/register-college`) allows a proposed `COLLEGE_ADMIN` to establish their own credentials and receive immediate restricted dashboard access (`users.status = ACTIVE`, `colleges.approval_status = PENDING`, `colleges.status = PENDING_VERIFICATION`).
+- Public general-user self-registration is strictly prohibited.
+- `SUPER_ADMIN` does **not** manually create `COLLEGE_ADMIN` credentials or default passwords; `SUPER_ADMIN` is bootstrapped via a guarded, idempotent, environment-driven `SuperAdminBootstrapRunner` (disabled post-setup; zero public bootstrap endpoint).
+- Future administrator-provisioned accounts (Post-MVP `ACADEMIC_STAFF`, `STUDENT`) must use a secure activation flow aligned with `authentication.md` and never share default passwords over unsafe channels.
 
 ---
 
 # 17. Account Status
 
-Accounts should have controlled lifecycle states.
-
-Examples:
+Accounts have controlled lifecycle states:
 
 ```text
 ACTIVE
@@ -345,63 +356,48 @@ LOCKED
 SUSPENDED
 ```
 
-Exact states must remain aligned with the authentication feature specification.
+Exact states must remain aligned with `authentication.md`.
 
-Inactive/suspended users must not continue accessing protected application functionality.
-
----
-
-# 18. Failed Login Protection
-
-The system must protect authentication endpoints against repeated failed attempts.
-
-Controls may include:
-
-- rate limiting
-- temporary lockout
-- progressive delay
-- security event logging
-
-The exact mechanism should be finalized during security implementation.
+- `users.status = ACTIVE` immediately on college registration; academic management APIs are separately gated by `colleges.approval_status = APPROVED` and `colleges.status = ACTIVE`.
+- Inactive, locked, or suspended users—and users belonging to a `SUSPENDED` or `INACTIVE` college (`403 COLLEGE_SUSPENDED` / `COLLEGE_INACTIVE`)—must be blocked from login and have active sessions revoked immediately.
 
 ---
 
-# 19. Session/Token Security
+# 18. Failed Login Protection & Registration Rate Limiting
 
-The final authentication mechanism must protect:
+The system protects authentication and public onboarding endpoints against abuse:
 
-- session identifiers
-- access tokens
-- refresh tokens where applicable
-- authentication cookies
-
-Credentials must not be exposed to JavaScript unnecessarily.
-
-The final token/session architecture must be documented before production.
+- **Login lockout:** **5** consecutive failed login attempts trigger a **15-minute** temporary account lockout, plus security audit logging.
+- **Public college registration rate limiting:** **5** attempts per IP per hour (`429 Too Many Requests` with `Retry-After` and `RATE_LIMIT_EXCEEDED`), using a pluggable `RateLimiter` with trusted reverse-proxy IP resolution and configurable production `CaptchaVerifier`.
 
 ---
 
-# 20. Token Storage
+# 19. Session & Cookie Security
 
-Do not store authentication secrets in insecure browser storage without a documented security decision.
+Acadlytic uses **stateful HTTP-only sessions** persisted in **MySQL 8** via **Spring Session JDBC** (**no JWT**):
 
-The frontend authentication strategy must be selected with consideration for:
-
-- XSS
-- CSRF
-- token theft
-- expiration
-- logout
-- refresh
-- revocation
+- **Session lifecycle:** 30-minute idle timeout, 12-hour absolute lifetime, session ID renewal on login and privilege/credential changes, multi-device sessions allowed.
+- **Development cookie:** `ACADLYTIC_SID` (`HttpOnly=true`, `Secure=false`, `SameSite=Lax`, `Path=/`, no `Domain`).
+- **Production cookie:** `__Host-ACADLYTIC_SID` (`HttpOnly=true`, `Secure=true`, `SameSite=Lax`, `Path=/`, **no `Domain`** behind a same-origin reverse proxy); session cookie (no `Max-Age`).
+- Session identifiers must never be readable by JavaScript or passed in URLs.
 
 ---
 
-# 21. Logout
+# 20. Browser Storage Policy
 
-Logout must invalidate the relevant authenticated state according to the selected authentication architecture.
+Never store authentication credentials, session tokens, or JWTs in `localStorage` or `sessionStorage`.
 
-A logout request must not merely redirect the user while leaving a valid long-lived credential active.
+Browser authentication relies exclusively on server-managed `HttpOnly` session cookies combined with Spring Security 6 SPA CSRF protection (`XSRF-TOKEN` cookie + `X-XSRF-TOKEN` request header).
+
+---
+
+# 21. Logout & Session Revocation
+
+Server-side session revocation is mandatory:
+
+- **Logout (`POST /api/v1/auth/logout`):** invalidates the current session in Spring Session JDBC and clears the session cookie.
+- **Password change & email change:** revokes all other sessions for the user and rotates the current session ID.
+- **Password reset, user suspension, college suspension, permanent rejection, admin replacement, or `SUPER_ADMIN` suspension:** immediately revokes **ALL** active sessions for the affected user(s).
 
 ---
 
@@ -542,21 +538,24 @@ This applies to:
 
 # 28. `/me` Security
 
-Self-service APIs should use `/me` where appropriate.
-
-Examples:
+In MVP, authenticated identity and live authorization context are served from:
 
 ```text
-GET /api/v1/me
+GET /api/v1/auth/me
+```
+
+which derives the user identity, role, college status, approval status, and management-access flag exclusively from the server-side authenticated session and live database state.
+
+In **Post-MVP (Phase 16 — Student Portal)**, student self-service APIs will use `/me` endpoints:
+
+```text
 GET /api/v1/me/results
 GET /api/v1/me/backlogs
 GET /api/v1/me/academic-passport
 GET /api/v1/me/analytics
 ```
 
-These endpoints should derive the student/user identity from the authenticated principal.
-
-Do not require students to send their own student ID as proof of identity.
+These Post-MVP endpoints must derive the student identity from the authenticated principal rather than trusting a client-supplied student ID.
 
 ---
 
@@ -579,35 +578,37 @@ Administrative permissions must never be inferred from frontend route visibility
 
 ---
 
-# 30. College Administration
+# 30. College Administration & Onboarding
 
 In the MVP:
 
 ```text
-SUPER_ADMIN
+Public College Registration (proposed COLLEGE_ADMIN sets credentials)
     ↓
-creates/manages college
-
-COLLEGE_ADMIN
+Restricted Onboarding Dashboard (PENDING / ACTION_REQUIRED / REJECTED)
     ↓
-manages permitted operations
-within own college
+SUPER_ADMIN reviews, approves, requests action on, or rejects application
+    ↓
+APPROVED + ACTIVE College
+    ↓
+COLLEGE_ADMIN manages permitted academic operations within own college
 ```
 
-A College Admin must not modify another college merely by supplying another `collegeId`.
+- `SUPER_ADMIN` does **not** manually create `COLLEGE_ADMIN` credentials.
+- MVP enforces **exactly one active `COLLEGE_ADMIN` per college** via a MySQL 8 `VIRTUAL` generated column unique index (`active_college_admin_college_id`).
+- A College Admin must not access academic management APIs before approval or modify another college merely by supplying another `collegeId`.
 
 ---
 
 # 31. User Provisioning Security
 
-Account creation must validate:
+Account creation and registration must validate:
 
-- creator permission
-- target role
-- college association
-- email uniqueness
-- account status
-- activation process
+- allowed entry flow (public college registration in MVP; authorized admin provisioning in Post-MVP; general public user self-registration prohibited)
+- target role (`SUPER_ADMIN` and `COLLEGE_ADMIN` only in MVP)
+- college association and single-active-admin constraint
+- active email uniqueness (`active_email` generated column)
+- account status and email verification state
 
 A lower-privileged user must not create a higher-privileged account.
 
@@ -615,19 +616,19 @@ A lower-privileged user must not create a higher-privileged account.
 
 # 32. Role Escalation Protection
 
-Users must not be able to modify their own role through profile/update APIs.
+Users must not be able to modify their own role through profile/update or registration APIs.
 
-For example, a student must never be able to submit:
+For example, a `COLLEGE_ADMIN` (or a Post-MVP `STUDENT` / `ACADEMIC_STAFF` user) must never be able to submit:
 
 ```json
 {
-  "role": "COLLEGE_ADMIN"
+  "role": "SUPER_ADMIN"
 }
 ```
 
 and have the backend accept it.
 
-Role changes must use authorized administrative operations.
+Role assignments must only occur through authorized server-side workflows.
 
 ---
 
@@ -743,13 +744,15 @@ Do not allow arbitrary HTML simply because a field is stored as `TEXT`.
 
 # 39. CSRF
 
-The CSRF strategy must match the selected authentication mechanism.
+Because Acadlytic uses stateful HTTP-only session cookies (Spring Session JDBC + MySQL 8), **Spring Security 6 SPA CSRF protection is mandatory** on all state-changing requests (`POST`, `PUT`, `PATCH`, `DELETE`), including login, logout, and public college registration:
 
-If authentication uses cookies, appropriate CSRF protection is required for state-changing requests.
+- `CookieCsrfTokenRepository.withHttpOnlyFalse()` issues the readable `XSRF-TOKEN` cookie.
+- `SpaCsrfTokenRequestHandler` and `CsrfCookieFilter` handle BREACH-safe token resolution and cookie emission.
+- `GET /api/v1/auth/csrf` bootstraps the CSRF token for the React SPA.
+- Axios sends `withCredentials: true` and echoes the `X-XSRF-TOKEN` header (preferring same-origin requests via the Vite dev proxy in development and same-origin reverse proxy in production).
+- Invalid or missing CSRF tokens must fail closed with `403 CSRF_TOKEN_INVALID`.
 
-If the final architecture uses a token mechanism with a different threat model, the corresponding protections must be documented.
-
-Do not disable CSRF protection without understanding the authentication architecture.
+Do not disable CSRF protection.
 
 ---
 
@@ -1100,14 +1103,16 @@ Never log:
 ```text
 password
 password reset token
-access token
-refresh token
+email verification token
+email change token
+session ID
+CSRF token
 API secret
 database password
 private encryption key
 ```
 
-Do not log complete student result files.
+Do not log complete student result files or raw verification/reset links.
 
 ---
 
@@ -1119,15 +1124,16 @@ Examples:
 
 ```text
 database password
-JWT signing secret
+SMTP / email provider credentials
+object storage credentials
+SUPER_ADMIN bootstrap credentials
 API keys
-Stripe secret
-email credentials
-university API credentials
+Stripe secret (Post-MVP)
+university API credentials (Post-MVP)
 encryption keys
 ```
 
-Use environment variables or an approved secrets manager.
+Use environment variables or an approved secrets manager. (JWT is not used in MVP.)
 
 ---
 
@@ -1291,11 +1297,10 @@ Historical academic data must remain protected.
 
 Academic Passport data contains sensitive student information.
 
-Access must be restricted according to role.
+Access must be restricted according to role and tenant:
 
-Students may access their own Passport.
-
-Authorized college staff may access student Passports according to their permissions.
+- **MVP:** Authorized `COLLEGE_ADMIN` users (for an `APPROVED` and `ACTIVE` college) may access Academic Passports for students within their own college.
+- **Post-MVP:** `ACADEMIC_STAFF` (Phase 15) may access permitted Passports within their college, and `STUDENT` users (Phase 16) may access only their own Passport.
 
 Unauthorized cross-tenant access must be denied.
 
@@ -1320,17 +1325,16 @@ Do not assume that aggregated data is automatically non-sensitive.
 
 # 79. Student Privacy
 
-Students should only receive information they are authorized to view.
+Student academic records must be strictly protected:
 
-A student must not be able to query another student's:
-
-- results
-- backlog
-- Passport
-- analytics
-- personal information
-
-by changing an ID in the URL.
+- **MVP:** `COLLEGE_ADMIN` users may only view and manage student records belonging to their own approved college.
+- **Post-MVP (Phase 16 — Student Portal):** Authenticated `STUDENT` users must only receive their own information and must never be able to query another student's:
+  - results
+  - backlog
+  - Passport
+  - analytics
+  - personal information
+  by changing an ID in the URL.
 
 ---
 
@@ -1583,7 +1587,8 @@ database credentials
 server secrets
 private API keys
 integration credentials
-JWT signing secrets
+SMTP / object storage credentials
+SUPER_ADMIN bootstrap credentials
 ```
 
 Frontend environment variables must be treated as public unless the build system guarantees otherwise.
@@ -1692,21 +1697,12 @@ Do not test only the happy path.
 
 Verify that:
 
-```text
-STUDENT
-```
+- **MVP:** A `COLLEGE_ADMIN` (whether pending or approved) cannot escalate to `SUPER_ADMIN`, cannot bypass pre-approval management locks, and cannot access another college's resources.
+- **Post-MVP:** When introduced, `STUDENT` (Phase 16) cannot escalate to `ACADEMIC_STAFF`, `COLLEGE_ADMIN`, or `SUPER_ADMIN`, and `ACADEMIC_STAFF` (Phase 15) cannot escalate to `COLLEGE_ADMIN` or `SUPER_ADMIN`.
 
-cannot become:
+Test across:
 
-```text
-ACADEMIC_STAFF
-COLLEGE_ADMIN
-SUPER_ADMIN
-```
-
-through:
-
-- profile APIs
+- profile and registration APIs
 - request manipulation
 - mass assignment
 - direct endpoint access
@@ -1888,19 +1884,9 @@ Run security tests
 
 # 113. AI Must Not Guess Security Decisions
 
-If the implementation requires an unresolved security decision, the AI must not silently choose a risky default.
+If an implementation requires an unresolved or deferred security decision, the AI must not silently choose a risky default.
 
-Examples:
-
-- token storage
-- refresh-token strategy
-- encryption approach
-- secret storage
-- public endpoint behavior
-- tenant authorization
-- role permissions
-
-The ambiguity must be identified and resolved through project architecture.
+Core MVP authentication, session, CSRF, password, lockout, rate-limiting, email-dispatch, and storage decisions are finalized in `authentication.md` and `authentication-implementation.md` (`ADR-01` – `ADR-19`). Any new ambiguity outside those finalized ADRs must be identified and resolved through project architecture before coding.
 
 ---
 
@@ -2096,46 +2082,36 @@ This document must be used together with:
 ├── backlog-tracking.md
 ├── academic-passport.md
 ├── analytics.md
-└── student-portal.md
+└── student-portal.md              (Post-MVP — Phase 16)
 ```
 
-`authentication.md` remains the detailed feature-level authority for authentication/account lifecycle behavior.
+`authentication.md` and `authentication-implementation.md` remain the detailed feature-level and technical authorities for authentication, session, CSRF, and college onboarding security behavior.
 
 ---
 
-# 119. Unresolved Security Decisions
+# 119. Finalized vs. Deferred Security Decisions
 
-The following decisions remain subject to final security/architecture review:
+All MVP authentication, session, onboarding, and security architecture decisions (`ADR-01` – `ADR-19`) are **FINALIZED** in `authentication.md` and `authentication-implementation.md`, including:
 
-- authentication mechanism
-- access-token strategy
-- refresh-token/session strategy
-- token/cookie storage strategy
-- CSRF strategy
-- password policy
-- account activation mechanism
-- password-reset delivery
-- login lockout/rate-limit implementation
-- production CORS origins
-- security-header configuration
-- file storage security
-- file retention
-- encryption-at-rest requirements
-- integration credential storage
-- secrets manager
-- API rate limiting
-- audit-log retention
-- monitoring/security alerting
-- dependency vulnerability scanning
-- production security incident process details
+- Stateful HTTP-only sessions via Spring Session JDBC + MySQL 8 (no JWT), 30m idle / 12h absolute timeout, `ACADLYTIC_SID` (dev) / `__Host-ACADLYTIC_SID` (prod)
+- Spring Security 6 SPA CSRF protection (`CookieCsrfTokenRepository.withHttpOnlyFalse()`, `SpaCsrfTokenRequestHandler`, `GET /api/v1/auth/csrf`)
+- `BCryptPasswordEncoder(12)`, 12–128 char password policy + common-password rejection, 5-fail / 15-min lockout, 5/IP/hr public registration rate limiting + configurable prod CAPTCHA
+- Transactional email outbox (`outbox_emails`, `SKIP LOCKED`) with Mailpit in dev and SMTP/TLS in prod
+- `DocumentStorageService` abstraction (local non-webroot in dev; private S3-compatible storage in prod), MIME + magic-byte validation, 10 MB cap, 5 docs/revision
+- `SuperAdminBootstrapRunner` (one-time, env-driven, disabled post-setup) and MySQL 8 Testcontainers (`8.0.36`) security integration tests
 
-These must be finalized before production deployment.
+Explicitly **DEFERRED** items tracked outside Phase 02–03 backend implementation:
+
+- **ADR-11b (Post-MVP Phase 18.7):** Automated document malware/AV scanning (Owner: Security / Backend Lead).
+- **ADR-15b (Phase 14 MVP Release Gate):** Exact commercial production SMTP vendor selection (Owner: Platform / DevOps Lead).
+- **ADR-16b (Phase 14 MVP Release Gate):** Exact production S3-compatible object storage provider selection (Owner: Platform / DevOps Lead).
+- **Deployment / Operations (Phase 14 Release Hardening):** Production CORS origins, reverse-proxy security headers, secrets manager, backup/encryption-at-rest configuration, monitoring/alerting, and incident response runbook.
 
 ---
 
 # 120. Review Status
 
-**Status:** Draft / Under Review
+**Status:** Approved / Aligned with Finalized MVP Architecture
 
 This document must be reviewed against:
 

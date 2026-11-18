@@ -12,7 +12,7 @@ spring:
       maximum-pool-size: 25
       minimum-idle: 5
       idle-timeout: 300000
-      connection-timeout: 30000
+      connection-timeout: 20000
       max-lifetime: 1800000
 
   jpa:
@@ -25,6 +25,28 @@ spring:
     enabled: true
     baseline-on-migrate: false
     locations: classpath:db/migration
+
+  mail:
+    host: ${SPRING_MAIL_HOST}
+    port: ${SPRING_MAIL_PORT:587}
+    username: ${SPRING_MAIL_USERNAME:}
+    password: ${SPRING_MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: ${SPRING_MAIL_SMTP_AUTH:true}
+          starttls:
+            enable: ${SPRING_MAIL_SMTP_STARTTLS:true}
+            required: ${SPRING_MAIL_SMTP_STARTTLS_REQUIRED:true}
+
+app:
+  security:
+    cookie:
+      # Strict __Host- prefix contract (ADR-03): Secure=true, Path=/, NO Domain attribute
+      name: __Host-ACADLYTIC_SID
+      secure: true
+      same-site: Lax
+      path: /
 
 logging:
   level:

@@ -75,7 +75,7 @@ Phase 01: Project & Application Foundation
     ↓
 Phase 02: Authentication & Authorization Foundation
     ↓
-Phase 03: College Registration & Approval (Option A MVP Onboarding)
+Phase 03: College Registration, Restricted Dashboard & Approval Workflow
     ↓
 Phase 04: College Management (Tenant Management & Profile)
     ↓
@@ -116,7 +116,7 @@ Phase 18: Future Platform Capabilities
           ├── Phase 18.3: Academic What-If Simulator
           ├── Phase 18.4: Predictive Academic Risk Intelligence
           ├── Phase 18.5: Natural-Language AI Query
-          └── Phase 18.6: Multi-Campus Enterprise Architecture
+          └── Phase 18.6: Branch Management, BRANCH_ADMIN & Multi-Campus Enterprise Architecture
 ```
 
 ---
@@ -146,81 +146,103 @@ Establish the repository, backend Spring Boot foundation, frontend React foundat
 ## Phase 02 — Authentication & Authorization Foundation
 
 ### Objective
-Implement secure authentication, session management, multi-tenant context resolution, account activation mechanism, and role-based access control for `SUPER_ADMIN` and `COLLEGE_ADMIN`.
+Implement stateful HTTP-only session authentication (Spring Session JDBC + MySQL, no JWT), Spring Security 6 SPA CSRF protection, multi-tenant context resolution, live approval-state-aware authorization, one-time `SUPER_ADMIN` bootstrap, and role-based access control for `SUPER_ADMIN` and `COLLEGE_ADMIN`.
 
 ### Module Scope
-- Backend: `users` schema, BCrypt hashing, JWT/Session authentication filter, `POST /api/v1/auth/login`, `POST /api/v1/auth/logout`, `GET /api/v1/auth/me`.
-- Account Activation: Token-based administrator account activation endpoint `POST /api/v1/auth/activate-account` used to establish credentials after college registration approval.
-- Password Security: Password change (`POST /api/v1/auth/change-password`) and token-based password reset (`POST /api/v1/auth/forgot-password`, `reset-password`).
-- Account States: `ACTIVE`, `INACTIVE`, `SUSPENDED` enforcement; brute-force lockout after 5 failed attempts.
-- Frontend: Login page (`/auth/login`), Forgot Password (`/auth/forgot-password`), Reset Password (`/auth/reset-password`), Account Activation (`/activate-account`), auth state store (Zustand), and role-aware route guards (`/admin/*`, `/college/*`).
+- **Backend Authentication & Session Persistence (`ADR-01` – `ADR-05`):**
+  - `users` schema with MySQL 8 `VIRTUAL` generated columns (`active_college_admin_college_id` + `UNIQUE` index for 1 active `COLLEGE_ADMIN`/college; `active_email` + `UNIQUE` index with `email_released` flag; `users.college_id` non-unique for Post-MVP multi-admin extensibility).
+  - Spring Session JDBC with MySQL (`SPRING_SESSION`, `SPRING_SESSION_ATTRIBUTES`), `30-min` idle timeout, `12-hour` absolute session lifetime, multi-device sessions allowed, session ID renewal on login & privilege changes.
+  - Cookie settings: Dev `ACADLYTIC_SID` (`HttpOnly`, `Secure=false`, `SameSite=Lax`, `Path=/`, no `Domain`); Prod `__Host-ACADLYTIC_SID` (`HttpOnly`, `Secure=true`, `SameSite=Lax`, `Path=/`, no `Domain` — same-origin reverse proxy); session cookie (no `Max-Age`).
+  - CSRF: Spring Security 6 SPA pattern (`CookieCsrfTokenRepository.withHttpOnlyFalse()`, `SpaCsrfTokenRequestHandler`, `GET /api/v1/auth/csrf`, `CsrfCookieFilter`; enforced on login, logout, registration & all state-changing APIs; `403 CSRF_TOKEN_INVALID` on failure).
+  - Endpoints: `GET /api/v1/auth/csrf`, `POST /api/v1/auth/login`, `POST /api/v1/auth/logout`, `GET /api/v1/auth/me` (returning authoritative `role`, `collegeId`, `userStatus`, `emailVerified`, `submittedForReview`, `collegeApprovalStatus`, `collegeStatus`, `managementUnlocked`).
+  - Server-side session revocation (`FindByIndexNameSessionRepository`): Logout = current session; Password Change & Email Change = all other sessions + rotate current; Password Reset, User Suspension, College Suspension, Permanent Rejection, Admin Replacement, `SUPER_ADMIN` Suspension = ALL sessions.
+- **Password, Email Change & Lockout Security:**
+  - BCrypt work factor `12`, password length `12–128` chars, reject common/compromised passwords.
+  - `POST /api/v1/auth/change-password`, `POST /api/v1/auth/forgot-password` / `reset-password` (single-use DB-hashed token, `1-hour` expiry), `POST /api/v1/auth/change-email` / `verify-email-change` (current password + `48-hour` DB-hashed token via `pending_email`).
+  - Account states (`ACTIVE`, `INACTIVE`, `SUSPENDED`) + brute-force protection (`5` consecutive failures &rarr; `15-minute` temporary lockout).
+- **One-Time `SUPER_ADMIN` Bootstrap (`ADR-17`):** Environment-driven, idempotent `SuperAdminBootstrapRunner` (zero public endpoint; disabled post-setup).
+- **Transactional Outbox & Email Abstraction (`ADR-15`, `ADR-18`):** `outbox_emails` table, 10s `@Scheduled` poller using `SELECT ... FOR UPDATE SKIP LOCKED`, 5-attempt exponential backoff to `FAILED_PERMANENT`, stale-`PROCESSING` recovery, post-send token scrubbing, `EmailSender` port wired to Mailpit (`dev`) and env-configured SMTP/TLS (`prod`).
+- **Approval-State-Aware Authorization:**
+  - Live server-side checks distinguishing restricted onboarding endpoints vs. protected academic management endpoints (`403 COLLEGE_NOT_APPROVED` while unapproved; `403 COLLEGE_SUSPENDED` / `COLLEGE_INACTIVE` and login blocked if an approved college is suspended).
+- **Testing (`ADR-19`):** Testcontainers MySQL `8.0.36` for Flyway migration, `VIRTUAL` generated-column unique-index, Spring Session JDBC, and security integration tests; JUnit 5 + Mockito for unit tests.
+- **Frontend:** Vite dev proxy (`/api` &rarr; `http://localhost:8080`) for same-origin cookies/CSRF, Axios `withCredentials: true` + `XSRF-TOKEN`/`X-XSRF-TOKEN`, Login (`/auth/login`), Forgot/Reset Password, auth store (Zustand), TanStack Query `/auth/me`, and role + approval-state route guards (`/admin/*`, `/college/*`).
 
-### Two-Role Rule:
+### Two-Role & Cardinality Rules:
 - Only `SUPER_ADMIN` and `COLLEGE_ADMIN` possess active accounts in MVP.
-- Staff and Student login attempts are disabled.
-- Direct public user self-registration is strictly forbidden.
+- MVP enforces **exactly one active `COLLEGE_ADMIN` per college tenant** via MySQL 8 `VIRTUAL` generated column + `UNIQUE` index (`users.college_id` remains non-unique).
+- `ACADEMIC_STAFF`, `STUDENT` login, and `BRANCH_ADMIN` are strictly Post-MVP and disabled in MVP.
+- Direct public general-user self-registration is strictly forbidden.
 
 ### Exit Criteria
-- `SUPER_ADMIN` can log in and access `/admin/*` routes.
-- `COLLEGE_ADMIN` can log in and access `/college/*` routes bound to their `college_id`.
-- Account activation verifies token, sets initial password, and enables login.
-- Tenant context is strictly resolved server-side from the authenticated user.
-- Backend unit and integration tests pass; Swagger endpoints verified.
+- `SUPER_ADMIN` bootstraps cleanly from environment variables and accesses `/admin/*` routes.
+- Stateful HTTP-only session + SPA CSRF flow works end-to-end across Vite dev proxy and Spring Boot.
+- `COLLEGE_ADMIN` logs in and receives authoritative `emailVerified`, `submittedForReview`, `collegeApprovalStatus`, `collegeStatus`, and `managementUnlocked` from `GET /api/v1/auth/me`.
+- Backend authorization strictly blocks academic management endpoints (`403 COLLEGE_NOT_APPROVED`) for unapproved colleges and blocks login (`403 COLLEGE_SUSPENDED`) for suspended colleges.
+- Testcontainers MySQL `8.0.36` integration tests verify generated-column constraints, session revocation, lockout, and outbox polling; Swagger endpoints verified.
 
 ---
 
-## Phase 03 — College Registration & Approval (Option A MVP Onboarding)
+## Phase 03 — College Registration, Email Verification, Restricted Dashboard & Approval Workflow
 
 ### Objective
-Implement public college registration application intake, storage with `PENDING` status, `SUPER_ADMIN` review and approval/rejection lifecycle, approved tenant initialization, and secure administrator activation invitation.
+Implement public college registration (rate-limited, no public multipart upload), immediate restricted dashboard access (`users.status = ACTIVE`), 48-hour email verification, authenticated verification document uploads outside webroot, submission into the frozen `PENDING` review queue, `SUPER_ADMIN` verification with `expectedVersion` (`APPROVED`, `ACTION_REQUIRED`, `REJECTED`, permanent rejection), bounded versioned resubmission preserving full history, automated 7-day abandoned-registration cleanup, and seamless management feature unlocking on approval.
 
 ### Module Scope
-- Backend Schema: `college_registrations` table (institution name, proposed college code, university affiliation, address, administrator contact name/email/phone, status `PENDING`/`APPROVED`/`REJECTED`, rejection reason, review timestamps).
-- APIs:
-  - `POST /api/v1/college-registrations` (Public: prospective college application submission).
-  - `GET /api/v1/college-registrations` (SUPER_ADMIN: paginated review queue, filter by status).
-  - `GET /api/v1/college-registrations/{id}` (SUPER_ADMIN: inspect application details).
-  - `POST /api/v1/college-registrations/{id}/approve` (SUPER_ADMIN: approve application, provision `colleges` tenant record, issue secure time-limited activation token to proposed administrator email).
-  - `POST /api/v1/college-registrations/{id}/reject` (SUPER_ADMIN: reject application with mandatory reason; no tenant access granted).
-  - `POST /api/v1/auth/activate-account` (Public with token: designated administrator sets password and activates user account bound strictly to the approved `college_id`).
-- Frontend:
-  - Public College Registration Form (`/register-college`) with institution and administrator contact fields.
-  - Registration Success Confirmation Page (`/registration-success`).
-  - SUPER_ADMIN Registration Review Hub (`/admin/registrations`) with pending queue, detail drawer, and Approve/Reject dialog.
-  - Administrator Account Activation Page (`/activate-account`) with token validation and password creation.
-- Tenant Isolation & Security Invariants:
-  - Public college registration is allowed; public user self-registration is disabled.
-  - College registration and user authentication are completely separate processes.
-  - Pending or rejected college applications cannot access protected college operations.
-  - A college cannot obtain an active `COLLEGE_ADMIN` account before approval.
-  - `SUPER_ADMIN` approves or rejects applications; it does not manually create administrator accounts.
-  - Designated administrator is bound strictly to the approved `college_id`.
+- **Backend Schema (`ADR-07`, `ADR-08`, `ADR-09`, `ADR-11`):**
+  - `colleges`: `approval_status` (`PENDING`, `ACTION_REQUIRED`, `APPROVED`, `REJECTED`), `status` (`PENDING_VERIFICATION`, `ACTIVE`, `INACTIVE`, `SUSPENDED`), `current_registration_id`, `resubmission_count`, `action_required_count`, `permanently_rejected`, `archived_at`, `active_college_code` (`VIRTUAL` generated column + `UNIQUE` index), `version`.
+  - `college_registrations`: `college_id`, `version_number` (`UNIQUE (college_id, version_number)`), `status`, institution snapshot, `submitted_for_review_at` (NULL until verified & submitted), `reviewer_user_id`, `review_notes`, `rejection_reason`, `is_permanent_rejection`, `reviewed_at`.
+  - `college_registration_documents`: immutable rows linked to `college_id` + `registration_id` (`document_category` enum: required `UNIVERSITY_AFFILIATION_CERTIFICATE`, `AUTHORIZED_SIGNATORY_ID`; optional `INSTITUTION_REGISTRATION_PROOF`, `ADDITIONAL_SUPPORTING_DOCUMENT`; `replaces_document_id`, random UUID `storage_key`, `mime_type`, `file_size_bytes`, `sha256_checksum`).
+  - `verification_tokens` / `password_reset_tokens`: single-use DB-hashed tokens (48h email verification / email change; 1h password reset).
+- **Document Storage & Validation (`ADR-11`, `ADR-16`):**
+  - `DocumentStorageService` abstraction (`LocalFileSystemDocumentStorage` outside webroot in dev; private S3-compatible object storage in prod, streamed through backend-authorized endpoints only).
+  - PDF/JPEG/PNG only, max `10 MB` per file, max `5` documents per revision, MIME + magic-byte signature validation, safe download headers (`Content-Disposition: attachment`, `X-Content-Type-Options: nosniff`).
+- **Rate Limiting & Cleanup (`ADR-12`, `ADR-13`):**
+  - `RateLimiter` abstraction (`5 attempts / IP / hour` on `POST /api/v1/college-registrations`, `429` + `Retry-After`, trusted proxy IP resolution) + configurable production `CaptchaVerifier`.
+  - Daily `@Scheduled` 7-day soft-archive cleanup for abandoned unverified + unsubmitted registrations (`email_verified_at IS NULL AND submitted_for_review_at IS NULL`), releasing `active_college_code`, `active_email`, and admin slot while never touching submitted/approved/historical records.
+- **Public & Restricted College Onboarding APIs:**
+  - `POST /api/v1/college-registrations` (Public, rate-limited: submits institution profile + proposed `COLLEGE_ADMIN` credentials -> creates restricted college context, `v1` application with `submitted_for_review_at = NULL`, `ACTIVE` user with `email_verified_at = NULL`, and outbox verification email).
+  - `POST /api/v1/auth/verify-email` & `POST /api/v1/auth/resend-verification` (48h single-use DB-hashed token).
+  - `GET /api/v1/college-registrations/my-application` (Authenticated `COLLEGE_ADMIN`: current status, version history, feedback, remaining resubmissions).
+  - `GET /api/v1/college-registrations/my-application/documents`, `POST .../documents`, `GET .../documents/{docId}` (Authenticated `COLLEGE_ADMIN`: tenant-scoped document inspection; upload permitted ONLY during pre-submission, `ACTION_REQUIRED`, or non-permanent `REJECTED` — strictly blocked while `PENDING` under review).
+  - `POST /api/v1/college-registrations/my-application/submit` (Pre-submission gate: requires `email_verified_at IS NOT NULL` + required document categories uploaded &rarr; sets `submitted_for_review_at = NOW()`, enters `SUPER_ADMIN` `PENDING` queue, and freezes mutations).
+  - `POST /api/v1/college-registrations/my-application/resubmit` (Allowed in `ACTION_REQUIRED` up to safety cap 10, or non-permanent `REJECTED` up to **3 revised submissions** &rarr; creates immutable `v+1` in frozen `PENDING` with `submitted_for_review_at = NOW()`).
+- **`SUPER_ADMIN` Verification APIs (Require `expectedVersion`; `409 Conflict` on stale):**
+  - `GET /api/v1/college-registrations` (Paginated review queue showing verified, submitted applications; filter by `PENDING`, `ACTION_REQUIRED`, `APPROVED`, `REJECTED`).
+  - `GET /api/v1/college-registrations/{id}` & `GET /api/v1/college-registrations/{id}/documents/{docId}` (Inspect revisions, history, and safely streamed documents).
+  - `POST /api/v1/college-registrations/{id}/approve` (DB tx verifies `expectedVersion`, marks `APPROVED`, sets `colleges` to `APPROVED` & `ACTIVE`, writes audit + outbox email; unlocks existing `COLLEGE_ADMIN` dashboard with no separate account/dashboard creation).
+  - `POST /api/v1/college-registrations/{id}/request-action` (`PENDING` &rarr; `ACTION_REQUIRED` with mandatory notes + outbox email).
+  - `POST /api/v1/college-registrations/{id}/reject` (Mandatory reason + optional `permanent: true`; auto-permanent on 3rd revision rejection; permanent rejection deactivates college & user, revokes all sessions, releases code/email/slot, preserves full history).
+- **Frontend:**
+  - Public Registration (`/register-college` — profile + credentials, optional CAPTCHA widget in prod), Email Verification (`/verify-email`), Restricted College Dashboard (`/college/dashboard` / `/college/onboarding`: verification checklist, document upload manager, Submit for Review, frozen `PENDING` banner, `ACTION_REQUIRED`/`REJECTED` feedback & resubmission, locked management links, automatic unlock via `/auth/me`), and `SUPER_ADMIN` Review Hub (`/admin/registrations`).
 
 ### Exit Criteria
-- Prospective college can submit a registration application through `/register-college`.
-- Application appears with `PENDING` status in the `SUPER_ADMIN` review queue.
-- Rejection marks application `REJECTED` and prevents tenant or credential creation.
-- Approval provisions the `colleges` tenant and generates an activation invitation.
-- Designated administrator activates account, establishes password, and logs in with `COLLEGE_ADMIN` role bound to the approved college.
+- Prospective college registers via `/register-college`, logs in immediately to Restricted Dashboard, verifies email (via Mailpit in dev), uploads required documents, and submits into frozen `PENDING` queue (all edits/uploads blocked while `PENDING`; academic management APIs return `403`).
+- `SUPER_ADMIN` inspects verified applications/documents and executes `request-action`, `reject`, `permanent reject`, and `approve` with `expectedVersion` (`409` on stale version).
+- `ACTION_REQUIRED` and `REJECTED` resubmissions create immutable `v+1` revisions preserving prior history, enforce the 3-rejection-revision limit, and handle permanent rejection with session revocation & reservation release.
+- Approval unlocks the existing dashboard (observed via `/api/v1/auth/me`) and delivers notification via the transactional outbox.
+- Automated 7-day abandoned-registration cleanup and IP rate limiting pass Testcontainers MySQL `8.0.36` integration tests.
 
 ---
 
 ## Phase 04 — College Management (Tenant Management & Profile)
 
 ### Objective
-Establish the college tenant boundary, active tenant management by `SUPER_ADMIN`, and college profile maintenance by `COLLEGE_ADMIN`.
+Establish active college tenant oversight by `SUPER_ADMIN` and full college profile maintenance by approved `COLLEGE_ADMIN` users.
 
 ### Module Scope
-- Backend: `colleges` schema with unique college code, university reference, status (`ACTIVE`, `INACTIVE`, `SUSPENDED`), and contact details.
+- Backend: `colleges` administrative management (unique `active_college_code`, university reference, approval status, operational status `ACTIVE`/`INACTIVE`/`SUSPENDED`, contact details).
+- **Explicit MVP Scope Boundary:** `BRANCH_ADMIN` and branch management are strictly Post-MVP. Do **not** create branch tables or implement branch functionality in MVP.
+- **Single Active Admin Rule:** Enforced via MySQL 8 `VIRTUAL` generated column + `UNIQUE` index (`ADR-06`); admin replacement deactivates outgoing admin, revokes all outgoing sessions (`ADR-05`), and preserves historical audit attribution.
+- **Suspension Enforcement (`ADR-10`):** Suspending or deactivating an approved college immediately revokes all active sessions of that college's users and blocks subsequent login attempts with `403 COLLEGE_SUSPENDED` / `COLLEGE_INACTIVE`.
 - APIs:
   - `GET /api/v1/colleges` (SUPER_ADMIN: list all college tenants).
   - `GET /api/v1/colleges/{id}` (SUPER_ADMIN: view college tenant details).
   - `PUT /api/v1/colleges/{id}` (SUPER_ADMIN: update administrative metadata).
-  - `PATCH /api/v1/colleges/{id}/status` (SUPER_ADMIN: activate/suspend college tenant).
-  - `GET /api/v1/colleges/my-college` (COLLEGE_ADMIN: view own college profile).
-  - `PUT /api/v1/colleges/my-college` (COLLEGE_ADMIN: update permitted metadata).
-- Frontend: SUPER_ADMIN College Tenant Hub (`/admin/colleges`) and COLLEGE_ADMIN College Profile editor (`/college/profile`).
-- Tenant Isolation: Enforce `college_id` scoping across all subsequent operations.
+  - `PATCH /api/v1/colleges/{id}/status` (SUPER_ADMIN: activate/suspend college tenant with immediate session revocation on suspend/deactivate).
+  - `GET /api/v1/colleges/my-college` (Approved & active `COLLEGE_ADMIN`: view own college profile).
+  - `PUT /api/v1/colleges/my-college` (Approved & active `COLLEGE_ADMIN`: update permitted metadata).
+- Frontend: SUPER_ADMIN College Tenant Hub (`/admin/colleges`) and approved COLLEGE_ADMIN College Profile editor (`/college/profile`).
+- Tenant Isolation: Enforce `college_id` scoping and live `APPROVED` + `ACTIVE` gating across all subsequent academic management operations.
 
 ### Exit Criteria
 - `SUPER_ADMIN` can view and manage active college tenants.
@@ -412,10 +434,12 @@ Deploy the validated MVP to production/staging and initiate pilot validation wit
 
 ### Deliverables & Checklist
 - Production Docker container build and environment variable validation.
+- Resolve Phase 14 deployment selections: production SMTP email vendor (`ADR-15b`), production S3-compatible bucket provider (`ADR-16b`, or backed-up local persistent volume for single-node pilot), and production CAPTCHA provider if enabled (`ADR-12`).
 - Database migrations executed and verified on production MySQL.
-- HTTPS certificates configured; security headers enabled.
+- HTTPS certificates configured; `__Host-ACADLYTIC_SID` (`Secure=true`, `Path=/`, no `Domain`) and same-origin reverse proxy verified; security headers enabled.
+- One-time `SUPER_ADMIN` bootstrap executed and `app.bootstrap.super-admin.enabled=false` confirmed.
 - Automated database backups verified.
-- Pilot college registration submitted, approved by `SUPER_ADMIN`, and activated by `COLLEGE_ADMIN`.
+- Pilot college registration submitted, email verified, documents uploaded, submitted for review, approved by `SUPER_ADMIN`, and full management dashboard unlocked for `COLLEGE_ADMIN`.
 - First real university result file imported, validated, and processed by `COLLEGE_ADMIN`.
 
 ---
@@ -462,11 +486,14 @@ Enable students to authenticate and access their personal academic information d
 ### Objective
 Provide automated, self-service customer onboarding through subscription plan selection and payment processing without requiring manual registration approval.
 
+### Architectural Relationship to MVP Onboarding
+Option C can reuse the common authentication, tenant scoping, and onboarding foundations built in Phases 02–03, while subscription plans, payment gateway integration, webhook verification, entitlement gating, and billing lifecycle management will require additional implementation.
+
 ### Planned Deliverables
 - Subscription plan management (Tier configuration: Starter, Growth, Enterprise).
-- Payment gateway integration (Stripe / Razorpay payment processing and webhook listeners).
+- Payment gateway integration (payment processing and signed webhook listeners).
 - Subscription lifecycle management: billing renewals, plan upgrades, downgrades, and cancellations.
-- Automated tenant onboarding: instant `colleges` tenant record creation and immediate administrator credential activation upon payment confirmation.
+- Automated tenant onboarding: `colleges` tenant activation and immediate management feature unlocking triggered upon verified payment confirmation.
 - Subscription-based access control and feature entitlement gating.
 
 ---
@@ -488,8 +515,11 @@ Provide automated, self-service customer onboarding through subscription plan se
 ### 18.5 Natural-Language AI Query
 - Natural-language interface allowing administrators to query academic records (e.g., *"Show students with backlogs in Math 3"*).
 
-### 18.6 Multi-Campus Enterprise Architecture
-- Multi-campus organizational hierarchies, group-level roll-up reporting, and consolidated enterprise analytics.
+### 18.6 Branch Management, `BRANCH_ADMIN` & Multi-Campus Enterprise Architecture
+- Branch tables, branch-level organizational hierarchies, `BRANCH_ADMIN` role authorization, group-level roll-up reporting, and consolidated enterprise analytics. (Explicitly deferred from MVP — no branch tables or branch functionality are created during MVP phases.)
+
+### 18.7 Production Security Hardening — Automated Document Malware Scanning
+- Automated AV/malware scanning pipeline (e.g., ClamAV or cloud scanner) for uploaded verification documents and result files (`ADR-11b`, deferred from MVP).
 
 ---
 
@@ -497,12 +527,15 @@ Provide automated, self-service customer onboarding through subscription plan se
 
 | Capability | In MVP (Phases 01 – 14) | Post-MVP (Phases 15 – 18) |
 |---|---|---|
-| **Active User Roles** | `SUPER_ADMIN`, `COLLEGE_ADMIN` | Adds `ACADEMIC_STAFF`, `STUDENT` |
-| **Onboarding Model** | Option A: Public Registration & Approval | Adds Option C: Subscription & Payment Gateway |
-| **Account Provisioning** | Admin activates account post-approval | College Admin creates Staff & Students |
+| **Authentication Mechanism** | Stateful HTTP-Only Session Cookies (Spring Session JDBC + MySQL) + SPA CSRF (**No JWT**) | Same (optional Redis session store scaling if needed) |
+| **Active User Roles** | `SUPER_ADMIN`, `COLLEGE_ADMIN` | Adds `ACADEMIC_STAFF`, `STUDENT`, `BRANCH_ADMIN` |
+| **College Admin Cardinality** | Exactly one active `COLLEGE_ADMIN` per college (MySQL 8 `VIRTUAL` generated column + `UNIQUE` index; `users.college_id` non-unique) | Multiple college administrators per tenant (drop generated column/index) |
+| **Branch Management & `BRANCH_ADMIN`** | **No** (No branch tables or branch functionality in MVP) | **Yes** (Phase 18.6) |
+| **Onboarding Model** | Public Registration → Restricted Dashboard (Email Verify + Doc Upload + Submit) → Frozen `PENDING` → `SUPER_ADMIN` Review (`APPROVED`/`ACTION_REQUIRED`/`REJECTED`/Permanent Reject) → Unlocked Dashboard | Adds Option C: Subscription & Payment Gateway (reuses common onboarding/auth foundations; requires additional billing implementation) |
+| **Account Provisioning** | Proposed `COLLEGE_ADMIN` establishes credentials during registration (`users.status = ACTIVE`); dashboard unlocked on approval | College Admin creates Staff & Students |
 | **Student Record Management** | **Yes (Full Admin CRUD)** | Yes (Full Admin + Staff CRUD) |
-| **Student Login Accounts** | **No** | **Yes (Self-service credentials)** |
-| **Student Portal** | **No** | **Yes (`/student/*` & `/me`)** |
+| **Student Login Accounts** | **No** | **Yes (Self-service credentials — Phase 16)** |
+| **Student Portal** | **No** | **Yes (`/student/*` & `/me` — Phase 16)** |
 | **Result File Ingestion** | Yes (Excel & CSV by Admin) | Yes (Admin + Delegated Staff) |
 | **Validation & Processing** | Yes (Executed by Admin) | Yes (Executed by Admin/Staff) |
 | **Backlog Tracking** | Yes (Automated Lifecycle) | Yes (Admin, Staff, Student Views) |
@@ -510,7 +543,7 @@ Provide automated, self-service customer onboarding through subscription plan se
 | **Academic Analytics** | Yes (College-Level Dashboards) | Yes (College, Department, Student Views) |
 | **University Connectors** | Staged File Imports Only | Direct APIs, Feeds, Webhooks |
 | **Predictive AI / What-If** | No | Yes (Risk models, simulators) |
-| **Commercial Billing / Stripe** | No | Yes (Phase 17 SaaS Billing & Option C) |
+| **Commercial Billing / Subscriptions** | **No** | **Yes (Phase 17 SaaS Billing & Option C)** |
 
 ---
 
@@ -518,10 +551,7 @@ Provide automated, self-service customer onboarding through subscription plan se
 
 1. **No Out-of-Sequence Development:** Modules must be implemented in the documented sequence (01 through 14).
 2. **Backend-First Discipline:** Do not build frontend screens before backend domain logic, tests, and API contracts are verified.
-3. **No Unapproved Role Expansion:** Do not implement student authentication or staff accounts during MVP phases.
-4. **Preserve Integrity:** Never compromise transactional boundaries or tenant isolation to complete a phase faster.
-5. **Phase Sign-Off:** A phase is marked `COMPLETED` only after its exit criteria and automated tests have been verified.
-2. **Backend-First Discipline:** Do not build frontend screens before backend domain logic, tests, and API contracts are verified.
-3. **No Unapproved Role Expansion:** Do not implement student authentication or staff accounts during MVP phases.
-4. **Preserve Integrity:** Never compromise transactional boundaries or tenant isolation to complete a phase faster.
-5. **Phase Sign-Off:** A phase is marked `COMPLETED` only after its exit criteria and automated tests have been verified.
+3. **No Unapproved Scope or Role Expansion:** Do not implement JWT authentication, student login, staff login, branch tables / `BRANCH_ADMIN`, or subscription billing during MVP phases.
+4. **Preserve Integrity:** Never compromise transactional boundaries, transactional-outbox email delivery outside DB transactions, `expectedVersion` optimistic checks, or tenant isolation to complete a phase faster.
+5. **Respect Approved Architecture Decisions:** Phase 02–03 backend implementation follows the finalized Decision Register (`ADR-01` – `ADR-19`). Deployment vendor selections (`ADR-15b` SMTP vendor, `ADR-16b` S3 provider) must be resolved before Phase 14; automated malware scanning (`ADR-11b`) is deferred to Phase 18.7.
+6. **Phase Sign-Off:** A phase is marked `COMPLETED` only after its exit criteria and Testcontainers MySQL `8.0.36` + frontend verification tests pass.

@@ -6,7 +6,7 @@ spring:
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/acadlytic?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true}
     username: ${SPRING_DATASOURCE_USERNAME:acadlytic_user}
-    password: ${SPRING_DATASOURCE_PASSWORD:acadlytic_s@mir1234}
+    password: ${SPRING_DATASOURCE_PASSWORD:acadlytic_password}
     driver-class-name: com.mysql.cj.jdbc.Driver
     hikari:
       maximum-pool-size: 10
@@ -22,7 +22,7 @@ spring:
     show-sql: false
     properties:
       hibernate:
-        format_sql: true
+        format_sql: false
 
   flyway:
     enabled: true
@@ -30,10 +30,29 @@ spring:
     baseline-version: 0
     locations: classpath:db/migration
 
+  mail:
+    host: ${SPRING_MAIL_HOST:localhost}
+    port: ${SPRING_MAIL_PORT:1025}
+    username: ${SPRING_MAIL_USERNAME:}
+    password: ${SPRING_MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: false
+          starttls:
+            enable: false
+
+app:
+  security:
+    cookie:
+      name: ACADLYTIC_SID
+      secure: false
+      same-site: Lax
+      path: /
+
 logging:
   level:
     root: INFO
     com.acadlytic: DEBUG
     org.springframework.security: INFO
-    org.hibernate.SQL: DEBUG
-    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+    org.hibernate.SQL: WARN

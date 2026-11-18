@@ -46,19 +46,22 @@ The primary objective of the MVP is to provide a working academic data platform 
 
 1. A platform operator (`SUPER_ADMIN`) to:
    - manage and oversee the Acadlytic SaaS platform;
-   - review, approve, or reject public college registration applications;
-   - activate and oversee college customer/tenant accounts.
-2. A college administrator (`COLLEGE_ADMIN`) belonging to an approved college tenant to:
-   - complete account activation and establish credentials upon college approval;
-   - configure the institution's academic structure (universities, courses, semesters, subjects, credits);
-   - create and maintain student academic records;
-   - import university examination result files (Excel and CSV);
-   - validate imported records and identify data anomalies;
-   - resolve supported validation exceptions;
-   - process validated results into authoritative academic records with full attempt preservation;
-   - track student backlog lifecycles (opening on failure, clearing on qualifying pass);
-   - view longitudinal student academic journeys via the Academic Passport read model;
-   - analyze institutional academic performance through college-level analytics dashboards.
+   - review verified college registration applications and documents;
+   - approve applications (`APPROVED`), request corrections/additional documents (`ACTION_REQUIRED`), or reject applications (`REJECTED`, including permanent rejection) with a mandatory reason;
+   - oversee approved college customer/tenant accounts.
+2. A college administrator (`COLLEGE_ADMIN`) to:
+   - register their college publicly and establish login credentials during registration (`users.status = ACTIVE` immediately);
+   - log in immediately after registration to a **restricted College Dashboard** to verify email, upload required verification documents, submit into the frozen `PENDING` review queue, and respond to `ACTION_REQUIRED`/`REJECTED` feedback via versioned resubmissions while academic management features remain locked until approval;
+   - upon `SUPER_ADMIN` approval, automatically unlock full college management capabilities on the same administrator identity and college dashboard to:
+     - configure the institution's academic structure (universities, courses, semesters, subjects, credits);
+     - create and maintain student academic records;
+     - import university examination result files (Excel and CSV);
+     - validate imported records and identify data anomalies;
+     - resolve supported validation exceptions;
+     - process validated results into authoritative academic records with full attempt preservation;
+     - track student backlog lifecycles (opening on failure, clearing on qualifying pass);
+     - view longitudinal student academic journeys via the Academic Passport read model;
+     - analyze institutional academic performance through college-level analytics dashboards.
 
 ---
 
@@ -75,6 +78,7 @@ The MVP is designed for **university-affiliated colleges**.
 - The **College** is the primary tenant boundary (`college_id`).
 - All academic structures, student records, examination attempts, backlogs, and analytics are strictly isolated by college tenant.
 - Cross-tenant data leakage is strictly prohibited and enforced at the server API layer.
+- **No Branch Hierarchy in MVP:** Branch management and `BRANCH_ADMIN` are strictly Post-MVP. No branch tables or branch-level functionality are created or implemented in the MVP.
 
 ---
 
@@ -83,19 +87,20 @@ The MVP is designed for **university-affiliated colleges**.
 The Acadlytic MVP initially supports **exactly TWO active user roles**:
 
 1. **`SUPER_ADMIN`** (Active in MVP)
-2. **`COLLEGE_ADMIN`** (Active in MVP)
+2. **`COLLEGE_ADMIN`** (Active in MVP — **exactly one active `COLLEGE_ADMIN` per college tenant in MVP**, while keeping the schema extensible for future multiple-admin support without redesign)
 
-The following two roles are planned and architected, but explicitly classified as **POST-MVP**:
+The following roles are explicitly classified as **POST-MVP**:
 
 3. **`ACADEMIC_STAFF`** (Post-MVP)
 4. **`STUDENT`** (Post-MVP)
+5. **`BRANCH_ADMIN`** (Post-MVP — deferred with branch management; no branch tables or branch functionality in MVP)
 
 ### Active MVP Roles Summary
 
 | Role | Scope | MVP Responsibilities |
 |---|---|---|
-| **`SUPER_ADMIN`** | Platform | Platform owner and operator. Reviews and approves/rejects public college registration applications, activates/suspends college tenant accounts, manages platform reference data, monitors system operations. Does not manually create individual `COLLEGE_ADMIN` accounts. |
-| **`COLLEGE_ADMIN`** | College Tenant | Administrator belonging to an approved and activated college customer/tenant. Completes account activation upon application approval, manages college profile, configures academic structures, manages student records, imports result files, validates and reviews results, processes results into authoritative records, tracks backlogs, views Academic Passports, views college analytics. |
+| **`SUPER_ADMIN`** | Platform | Platform owner and operator (bootstrapped securely via one-time env-driven startup runner — no public endpoint). Reviews verified college registration applications and documents using optimistic version checks (`expectedVersion`), approves applications (`APPROVED`), requests corrections/documents (`ACTION_REQUIRED`), or rejects applications (`REJECTED`, including permanent rejection) with mandatory reason; activates/suspends college tenant accounts, manages platform reference data, monitors system operations. Does not manually create individual `COLLEGE_ADMIN` credentials. |
+| **`COLLEGE_ADMIN`** | College Tenant | Sole active administrator per college tenant in MVP (enforced via MySQL 8 `VIRTUAL` generated column + `UNIQUE` index while keeping `users.college_id` non-unique for Post-MVP multi-admin extensibility). Establishes credentials during public registration (`users.status = ACTIVE` immediately), accesses a restricted onboarding dashboard immediately to verify email and upload required documents before submitting to the frozen `PENDING` review queue, responds to `ACTION_REQUIRED`/`REJECTED` feedback via versioned resubmissions, and upon `APPROVED` status unlocks full college management on the same account and dashboard (college profile, academic structures, student records, result imports, validation, processing, backlogs, Academic Passports, college analytics). |
 
 ### Post-MVP Roles Summary
 
@@ -103,6 +108,7 @@ The following two roles are planned and architected, but explicitly classified a
 |---|---|---|
 | **`ACADEMIC_STAFF`** | College Tenant | Delegated departmental operations, assistant result importing, validation review. |
 | **`STUDENT`** | Individual (`/me`) | Authenticated personal login, student dashboard, personal Academic Passport, semester results, personal backlog tracking, personal analytics. |
+| **`BRANCH_ADMIN`** | College Branch | Delegated branch/campus-level administration within multi-branch institutions (requires Post-MVP branch management). |
 
 > [!IMPORTANT]
 > **Essential Scope Distinction: Student Records vs. Student User Accounts**  
@@ -115,27 +121,39 @@ The following two roles are planned and architected, but explicitly classified a
 
 The complete end-to-end MVP workflow follows the SaaS customer onboarding and operational lifecycle:
 
+`College Registration → Restricted Dashboard → SUPER_ADMIN Verification → Approval or Correction/Resubmission → Full Management Dashboard`
+
 ```text
 Prospective College (Customer / Tenant)
      ↓
-Submits Public College Registration Application (/register-college)
+Submits Public College Registration (/register-college)
+(Institution Profile + Proposed COLLEGE_ADMIN Credentials; Rate-Limited 5/IP/hr; No Public Doc Multipart)
      ↓
-Application Stored with PENDING Status
+Restricted College Context (approval_status = PENDING, status = PENDING_VERIFICATION)
++ Proposed COLLEGE_ADMIN User Created (users.status = ACTIVE, email_verified_at = NULL)
++ Application v1 Created (status = PENDING, submitted_for_review_at = NULL — not yet in SUPER_ADMIN queue)
      ↓
-SUPER_ADMIN (Platform Owner)
+COLLEGE_ADMIN Logs In Immediately (/auth/login, Stateful HTTP-Only Session Cookie + CSRF)
+-> Restricted College Dashboard (Pre-Submission Onboarding)
+   1. Verifies Email via 48-hour Single-Use DB-Hashed Token (Transactional Outbox)
+   2. Uploads Required Verification Documents (PDF/JPEG/PNG, max 10 MB each, max 5 docs/revision)
+   3. Clicks "Submit for Review" -> Sets submitted_for_review_at (Enters SUPER_ADMIN PENDING Queue; Frozen/Read-Only)
+   [All Academic Management APIs Blocked with 403 COLLEGE_NOT_APPROVED]
      ↓
-Reviews Registration in Admin Dashboard (/admin/registrations)
+SUPER_ADMIN Reviews Verified Application & Documents (/admin/registrations, requires expectedVersion)
+     ├── Request Corrections / Docs -> Status = ACTION_REQUIRED (mandatory notes; safety cap 10 revisions)
+     │        └── College Reviews Feedback -> Uploads New Immutable Docs / Edits -> Resubmits v+1 -> PENDING (Frozen)
+     ├── Reject (Non-Permanent, up to 3 revised submissions) -> Status = REJECTED (mandatory reason)
+     │        └── College Reviews Reason -> Revises & Resubmits v+1 (History Preserved) -> PENDING (Frozen)
+     ├── Permanent Rejection (explicit flag or 3rd revision rejected) -> permanently_rejected = true,
+     │        colleges.status = INACTIVE, users.status = INACTIVE, ALL Sessions Revoked,
+     │        Reservations Released (code/email/slot) while Full Audit History Retained
+     └── Approve -> Status = APPROVED
+              ↓
+College Tenant Activated (approval_status = APPROVED, status = ACTIVE)
+(Existing ACTIVE COLLEGE_ADMIN Identity & college_id Preserved; Approval Email Dispatched via Transactional Outbox)
      ↓
-Approves Application (System creates college tenant with college_id)
-[If Rejected: registration marked REJECTED with reason; no tenant access granted]
-     ↓
-Secure Account Activation Token Issued to Proposed College Administrator
-     ↓
-Designated Administrator Completes Account Activation & Sets Password
-     ↓
-Administrator User Created with COLLEGE_ADMIN Role Bound to college_id
-     ↓
-COLLEGE_ADMIN Logs In (/auth/login) & Accesses College Dashboard
+Session Observes Updated Approval State via GET /api/v1/auth/me -> Full Management Dashboard Unlocked
      ↓
 Configure Academic Structure (Programs, Semesters, Subjects, Credits)
      ↓
@@ -166,11 +184,12 @@ Analyze Institutional Performance via College Analytics Dashboard
 
 | Product Capability | MVP Status | Responsible Role / Notes |
 |---|---|---|
-| **Authentication & Authorization** | **In Scope** | Supported for `SUPER_ADMIN` and `COLLEGE_ADMIN` only. |
-| **Public College Registration** | **In Scope** | Public application submission by prospective college (`/register-college`). |
-| **College Registration & Approval**| **In Scope** | `SUPER_ADMIN` reviews, approves, or rejects pending college applications. |
-| **College Admin Account Activation**| **In Scope** | Designated administrator establishes credentials post-approval via secure token. |
-| **Public User Self-Registration**  | **Disabled** | Public self-registration without approved college tenant is strictly forbidden. |
+| **Authentication & Authorization** | **In Scope** | Stateful HTTP-only session cookies (Spring Session JDBC + MySQL) + CSRF (no JWT). Supported for `SUPER_ADMIN` and `COLLEGE_ADMIN` only. Backend enforces live role, user status, and college approval/operational status. |
+| **Public College Registration** | **In Scope** | Public application submission (`/register-college`) with proposed `COLLEGE_ADMIN` credentials (`users.status = ACTIVE` immediately); IP rate-limited (5/hr) + configurable prod CAPTCHA. Documents uploaded post-login on restricted dashboard. |
+| **Email Verification & Restricted Dashboard** | **In Scope** | Immediate post-registration login to restricted dashboard. College verifies email (48h hashed token) and uploads required documents before submitting into the frozen `PENDING` review queue. Academic management APIs return `403`. |
+| **College Verification, Resubmission & Approval** | **In Scope** | `SUPER_ADMIN` reviews verified applications using `expectedVersion` (`409` on stale) and marks `APPROVED`, `ACTION_REQUIRED` (safety cap 10), `REJECTED` (up to 3 revisions), or permanently rejected. Immutable versions, documents, and audit history preserved. |
+| **Post-Approval Feature Unlocking** | **In Scope** | Approval sets `colleges` to `APPROVED` & `ACTIVE`, unlocking the existing `COLLEGE_ADMIN` dashboard (same identity & `college_id`) with zero separate account/dashboard creation. |
+| **Public General-User Self-Registration** | **Disabled** | General public user self-registration outside college registration is strictly forbidden. |
 | **Staff & Student Account Provisioning** | **Post-MVP** | User accounts for staff and students are deferred. |
 | **College Tenant Management** | **In Scope** | Platform tenant oversight by `SUPER_ADMIN`; profile by `COLLEGE_ADMIN`. |
 | **Academic Structure** | **In Scope** | Programs, semesters, subjects, credits managed by `COLLEGE_ADMIN`. |
@@ -191,7 +210,8 @@ Analyze Institutional Performance via College Analytics Dashboard
 | **What-If Academic Simulator**     | **Post-MVP** | Hypothetical grade modeling deferred. |
 | **Full Regulation / Eligibility**  | **Post-MVP** | Automated progression engine deferred. |
 | **Mobile Application**             | **Post-MVP** | Native iOS/Android apps deferred. |
-| **Subscription Self-Service (Option C)** | **Post-MVP** | Self-service plan purchase, automated provisioning, billing deferred. |
+| **Branch Management & `BRANCH_ADMIN`** | **Post-MVP** | Multi-branch/campus hierarchy deferred; no branch tables or branch functionality in MVP. |
+| **Subscription Self-Service (Option C)** | **Post-MVP** | Can reuse common onboarding and authentication foundations; subscription plans, payment gateway, and billing require additional implementation. |
 
 ---
 
@@ -200,61 +220,64 @@ Analyze Institutional Performance via College Analytics Dashboard
 ## 8.1 Module 1 — Authentication & Authorization (Two-Role MVP)
 
 ### Included:
-- Secure login with email and password (`POST /api/v1/auth/login`).
-- Secure logout and credential invalidation (`POST /api/v1/auth/logout`).
-- Current authenticated user context (`GET /api/v1/auth/me`).
-- Role-based authorization enforcing the two active MVP roles:
-  - `SUPER_ADMIN`
-  - `COLLEGE_ADMIN`
-- Password change and secure password reset workflow (token-based).
-- College administrator account activation (`POST /api/v1/auth/activate-account`).
-- Account status enforcement (`ACTIVE`, `INACTIVE`, `SUSPENDED`).
-- Brute-force protection (failed-login tracking, temporary lockout).
-- Security audit events for authentication and onboarding lifecycle.
-- Strict server-side college tenant context binding (`college_id`).
+- **Stateful HTTP-Only Session Authentication (No JWT):** Spring Session JDBC persisted in MySQL (`30-min` idle timeout, `12-hour` absolute lifetime, multi-device allowed, session ID rotation on login and privilege changes). Production cookie uses `__Host-ACADLYTIC_SID` (`HttpOnly`, `Secure=true`, `SameSite=Lax`, `Path=/`, no `Domain`).
+- **CSRF Protection:** Spring Security 6 SPA CSRF pattern (`CookieCsrfTokenRepository.withHttpOnlyFalse()`, `SpaCsrfTokenRequestHandler`, `GET /api/v1/auth/csrf`, enforced on login, logout, registration, and all state-changing requests; `403 CSRF_TOKEN_INVALID` on failure).
+- Secure login (`POST /api/v1/auth/login`), logout (`POST /api/v1/auth/logout`), and authoritative current-user & college verification context (`GET /api/v1/auth/me` returning role, `collegeId`, `userStatus`, `emailVerified`, `submittedForReview`, `collegeApprovalStatus`, `collegeStatus`, and `managementUnlocked`).
+- Role-based and live approval-state-aware authorization enforcing the two active MVP roles (`SUPER_ADMIN`, `COLLEGE_ADMIN`).
+- **User Status vs. College Approval Status:** `COLLEGE_ADMIN` receives `users.status = ACTIVE` immediately on registration so they can log into the restricted dashboard; **`colleges.approval_status` + `colleges.status`** strictly gate all academic management APIs (`403 COLLEGE_NOT_APPROVED` while unapproved; `403 COLLEGE_SUSPENDED` / `COLLEGE_INACTIVE` and login blocked if an approved college is suspended).
+- **Password & Token Security:** BCrypt work factor `12`, password length `12–128` characters with common/compromised password rejection, authenticated password change (`POST /api/v1/auth/change-password`), single-use DB-hashed password reset token (`1-hour` expiry), single-use DB-hashed email verification token (`48-hour` expiry), and password-confirmed email change (`POST /api/v1/auth/change-email` with 48h re-verification).
+- **Brute-Force & Abuse Protection:** `5` consecutive failed logins &rarr; `15-minute` temporary lockout; IP-based rate limiting on public registration (`5 attempts / IP / hour`, `429` + `Retry-After`) and configurable production CAPTCHA.
+- **Server-Side Session Revocation:** Logout revokes current session; password change & email change revoke all other sessions and rotate current session ID; password reset, user suspension, college suspension, permanent rejection, admin replacement, and `SUPER_ADMIN` suspension revoke **all** active sessions of affected user(s).
+- **One-Time `SUPER_ADMIN` Bootstrap:** Environment-driven, idempotent startup runner (zero public `SUPER_ADMIN` registration endpoint).
+- Security audit events and transactional outbox email dispatch (Mailpit in dev; environment-configured SMTP/TLS abstraction in prod).
 
-### College Onboarding & Account Provisioning Model (Option A):
+### College Onboarding & Account Provisioning Model:
 - Acadlytic is a multi-tenant SaaS platform where `SUPER_ADMIN` is the platform owner/operator and Colleges are customers/tenants.
-- `SUPER_ADMIN` does **not** manually create individual `COLLEGE_ADMIN` accounts.
-- Prospective colleges apply via a public registration form (`/register-college`, `POST /api/v1/college-registrations`).
-- Applications are recorded with `PENDING` status.
-- `SUPER_ADMIN` reviews applications and can approve or reject each submission (`POST /api/v1/college-registrations/{id}/approve` or `/reject`).
-- Upon approval, the system creates the college tenant and issues a secure, time-limited activation token to the designated administrator.
-- The designated administrator activates their account, establishes their login password, and receives the `COLLEGE_ADMIN` role bound strictly to the approved `college_id`.
-- Public user self-registration is strictly disabled: individual users cannot register without an approved college tenant application.
-- College registration and user authentication are completely separate processes.
-- Pending or rejected college applications cannot access protected college operations.
+- `SUPER_ADMIN` does **not** manually create individual `COLLEGE_ADMIN` credentials.
+- Prospective colleges register via `/register-college` (`POST /api/v1/college-registrations`) with institution profile and proposed `COLLEGE_ADMIN` credentials (no multipart document upload on public registration).
+- Registration atomically creates a restricted college context (`colleges`: `approval_status = PENDING`, `status = PENDING_VERIFICATION`), application `v1` (`status = PENDING`, `submitted_for_review_at = NULL`), and proposed `COLLEGE_ADMIN` user (`users.status = ACTIVE`, `email_verified_at = NULL`) bound strictly to `college_id`.
+- Immediately after registration, `COLLEGE_ADMIN` logs into the **restricted College Dashboard** to verify email (48h hashed token), upload required verification documents (PDF/JPEG/PNG, max 10 MB each, max 5 docs/revision; required categories: `UNIVERSITY_AFFILIATION_CERTIFICATE` and `AUTHORIZED_SIGNATORY_ID`), and click **"Submit for Review"** (`POST /api/v1/college-registrations/my-application/submit`). Only verified, submitted applications enter the `SUPER_ADMIN` `PENDING` review queue, at which point edits and uploads are **frozen/read-only**.
+- Unverified and unsubmitted registrations abandoned for **7 days** are automatically soft-archived daily (releasing `college_code`, `email`, and the single-admin slot without touching submitted/approved/historical records).
+- `SUPER_ADMIN` inspects verified applications and documents using `expectedVersion` (`409 Conflict` on stale version) and can:
+  - **Approve** (`APPROVED`): sets `colleges` to `APPROVED` and `ACTIVE`, unlocking full management features on the existing `COLLEGE_ADMIN` account and dashboard (same `user_id` and `college_id`; zero separate account/dashboard creation), and queues approval email via the transactional outbox.
+  - **Request Corrections / Documents** (`ACTION_REQUIRED`, safety cap 10 revisions): records mandatory reviewer feedback; college reviews feedback, uploads new immutable document records, and resubmits `v+1` &rarr; frozen `PENDING`.
+  - **Reject** (`REJECTED`, mandatory reason): allows up to **3 revised applications** after initial submission (`v1` initial + up to 3 revisions) with full version/document/decision preservation, OR **permanent rejection** (explicit flag or 3rd revision rejected), which sets `colleges.status = INACTIVE`, `users.status = INACTIVE`, revokes all sessions, releases code/email/slot reservations, and retains full historical audit records.
+- **Single Active `COLLEGE_ADMIN` per College (MVP):** Enforced atomically via a MySQL 8 `VIRTUAL` generated column (`active_college_admin_college_id`) + `UNIQUE` index on `users`, while keeping `users.college_id` non-unique (1-to-many) for future multiple-admin support without redesign.
+- Public general-user self-registration is strictly disabled.
+- Deployment-level selections (exact commercial production SMTP vendor and exact production S3-compatible bucket provider) are explicitly deferred to **Phase 14**; automated document malware scanning is deferred to **Post-MVP (Phase 18)**.
 
 ### Excluded from MVP:
+- JWT-based authentication.
 - `ACADEMIC_STAFF` account login.
 - `STUDENT` account login.
-- Social authentication (Google, Microsoft).
-- University SSO / SAML / LDAP integration.
+- `BRANCH_ADMIN` role and branch-scoped authorization.
+- Automated malware scanning for uploaded verification documents (deferred to Post-MVP; MVP enforces MIME + magic-byte validation, allow-list, size/count caps, random keys outside webroot, and safe download headers).
+- Social authentication (Google, Microsoft) and University SSO / SAML / LDAP integration.
 
 ---
 
 ## 8.2 Module 2 — College & Registration Management
 
 ### Included:
-- **College Registration Lifecycle (Option A):**
-  - Public registration application submission by prospective colleges.
-  - Review queue for `SUPER_ADMIN` with detailed application inspection.
-  - Approval workflow: creates college tenant record, binds administrator contact, issues activation invitation.
-  - Rejection workflow: records formal rejection reason; ensures no tenant credentials are generated.
+- **College Registration & Verification Lifecycle:**
+  - Public registration application submission by prospective colleges (credentials + institution profile; IP rate-limited 5/hr; configurable prod CAPTCHA).
+  - Authenticated restricted onboarding dashboard for email verification, verification document uploads (PDF/JPEG/PNG, max 10 MB, max 5/revision, immutable rows, tenant-scoped streaming outside webroot), initial submission into the frozen `PENDING` review queue, and correction/resubmission for `ACTION_REQUIRED` and non-permanent `REJECTED` applications without discarding historical versions, documents, or review decisions.
+  - Review queue for `SUPER_ADMIN` displaying verified, submitted applications with revision history, document inspection, and `expectedVersion`-guarded Approve, Request Action (`ACTION_REQUIRED`), Reject (`REJECTED`), and Permanent Reject actions.
+  - Approval workflow: activates the college tenant (`APPROVED` & `ACTIVE`), unlocks management features on the existing `COLLEGE_ADMIN` account, and queues approval email via the transactional outbox (never dispatched inside the DB transaction).
+  - Automated 7-day soft-archive cleanup for abandoned unverified/unsubmitted registrations.
 - **`SUPER_ADMIN` Tenant Management:**
   - View list and detailed profiles of registered and active colleges.
   - Update college administrative information.
-  - Activate, deactivate, or suspend college tenants.
-- **`COLLEGE_ADMIN` Tenant Operations:**
+  - Activate, deactivate, or suspend college tenants (suspending/deactivating immediately revokes all sessions and blocks login with `403 COLLEGE_SUSPENDED` / `COLLEGE_INACTIVE`).
+- **`COLLEGE_ADMIN` Tenant Operations (Unlocked upon `APPROVED` & `ACTIVE`):**
   - View own college profile.
   - Update permitted college metadata (contact, address).
-- Tenant isolation enforcement: all college operations strictly isolated by `college_id`.
-- Data preservation: deactivating a college retains its historical academic records.
+- Tenant isolation enforcement: all college operations strictly isolated by server-derived `college_id`.
+- Data preservation: deactivating/suspending or permanently rejecting a college retains its historical records and audit trails.
 
 ### Excluded:
-- Multi-campus organizational hierarchies.
-- Commercial billing, payment gateways, and subscription tier management (Option C deferred to Post-MVP).
-- Subscription billing and automated tier management.
+- Branch management, `BRANCH_ADMIN` role, and multi-campus organizational hierarchies (no branch tables or branch functionality are created in MVP).
+- Commercial billing, payment gateways, and subscription tier management (Option C deferred to Post-MVP; while Option C can reuse the common onboarding and authentication foundations, subscription and billing integration will require additional implementation).
 
 ---
 
@@ -407,7 +430,8 @@ The following capabilities are explicitly deferred to post-MVP phases:
 6. **Advanced Regulation & Eligibility Engine:** Complex credit-rule automation before explicit university specifications are gathered.
 7. **Comprehensive College ERP Features:** Fees, attendance, hostel, library, timetable, payroll, and placement.
 8. **Mobile Native Apps:** iOS and Android applications.
-9. **Subscription-Based Self-Service Onboarding & SaaS Billing (Option C):** Self-service plan selection, Stripe/payment gateway integration, subscription lifecycle management, and instant automated tenant provisioning.
+9. **Branch Management & `BRANCH_ADMIN`:** Multi-branch / multi-campus hierarchies and branch-level administration. No branch tables or branch functionality will be created in the MVP.
+10. **Subscription-Based Self-Service Onboarding & SaaS Billing (Option C):** Self-service plan selection, payment gateway integration, and subscription lifecycle management. Option C can reuse the common onboarding and authentication foundations established in the MVP, while subscription management and billing integration will require additional implementation.
 
 ---
 
@@ -417,29 +441,34 @@ The MVP user interface is structured for public prospective college onboarding a
 
 ### 1. Public Web Interface
 - Public Homepage / Landing page.
-- College Registration Application Form (`/register-college`).
-- Registration Success Confirmation (`/registration-success`).
-- Account Activation & Password Setup (`/activate-account`).
+- College Registration Form (`/register-college` — institution profile and proposed `COLLEGE_ADMIN` credential setup; verification documents uploaded post-login on the restricted dashboard).
+- Email Verification Confirmation (`/verify-email`) & Email Change Confirmation (`/verify-email-change`).
 - User Login (`/auth/login`), Forgot Password (`/auth/forgot-password`), and Reset Password (`/auth/reset-password`).
 
 ### 2. `SUPER_ADMIN` Portal
-- Platform Overview Dashboard (active colleges, system health, pending applications count).
-- College Registration Applications Hub (`/admin/registrations`): Review pending queue, application inspection, Approve / Reject action with audit reason.
+- Platform Overview Dashboard (active colleges, system health, verified `PENDING` / `ACTION_REQUIRED` applications count).
+- College Registration Applications Hub (`/admin/registrations`): Review verified `PENDING`, `ACTION_REQUIRED`, `APPROVED`, and `REJECTED` queue, inspect application revisions and verification documents, and execute Approve, Request Action (`ACTION_REQUIRED`), Reject (`REJECTED`), or Permanent Reject with mandatory notes/reason and `expectedVersion`.
 - College Tenant Management (`/admin/colleges`): Active tenants list, college profile details, tenant status toggle (Active/Suspended).
 - Platform Reference Data (Universities Master).
 - Security Audit Log Viewer.
 
 ### 3. `COLLEGE_ADMIN` Portal
-- College Executive Dashboard (student count, latest imports, open backlogs, pass rates).
-- College Profile Settings.
-- Academic Structure Configuration (Programs, Batches, Semesters, Subjects).
-- Student Management (List, Add Student, Edit, Search, Filters, Student Profile).
-- Result Import Hub (Upload File, Job History, Column Mapping).
-- Validation & Review Center (Validation Summary, Record Table, Error Resolution).
-- Processing Operations (Trigger Process, Processing Audit).
-- Backlog Management (Active Backlogs, Cleared Backlogs, Subject Analytics).
-- Student Academic Passport Viewer (Comprehensive longitudinal student inspection).
-- Academic Analytics Dashboard (Institutional charts, cohort analysis).
+- **Restricted Onboarding Dashboard (While Pre-Submission, `PENDING`, `ACTION_REQUIRED`, or Non-Permanent `REJECTED`):**
+  - Pre-Submission Checklist (Email verification status/resend, required document upload manager, "Submit for Review" action).
+  - Application Status & Verification Tracker (frozen read-only status banner while `PENDING` under review; reviewer feedback/rejection reason & remaining resubmission count when `ACTION_REQUIRED` or `REJECTED`; immutable submission version history).
+  - Verification Document Manager & Correction/Resubmission View (enabled during pre-submission, `ACTION_REQUIRED`, and non-permanent `REJECTED`; frozen while `PENDING` under review).
+  - Locked Academic Management Navigation (visually locked and server-enforced with `403 COLLEGE_NOT_APPROVED` until `APPROVED` & `ACTIVE`).
+- **Full College Management Dashboard (Unlocked upon `APPROVED` & `ACTIVE`):**
+  - College Executive Dashboard (student count, latest imports, open backlogs, pass rates).
+  - College Profile Settings & Email Change Settings.
+  - Academic Structure Configuration (Programs, Batches, Semesters, Subjects).
+  - Student Management (List, Add Student, Edit, Search, Filters, Student Profile).
+  - Result Import Hub (Upload File, Job History, Column Mapping).
+  - Validation & Review Center (Validation Summary, Record Table, Error Resolution).
+  - Processing Operations (Trigger Process, Processing Audit).
+  - Backlog Management (Active Backlogs, Cleared Backlogs, Subject Analytics).
+  - Student Academic Passport Viewer (Comprehensive longitudinal student inspection).
+  - Academic Analytics Dashboard (Institutional charts, cohort analysis).
 
 ---
 
@@ -448,10 +477,12 @@ The MVP user interface is structured for public prospective college onboarding a
 The Acadlytic MVP is successful when an affiliated college can reliably execute the full lifecycle:
 
 ```text
-1. College submits public registration application (/register-college).
-2. SUPER_ADMIN reviews and approves the application in Admin Dashboard (/admin/registrations).
-3. Designated administrator receives activation link, activates account, and establishes password.
-4. COLLEGE_ADMIN logs in (/auth/login) with tenant context strictly bound to approved college_id.
+1. College submits public registration (/register-college) with institution profile and proposed COLLEGE_ADMIN credentials (users.status = ACTIVE immediately).
+2. COLLEGE_ADMIN logs in immediately (/auth/login, stateful HTTP-only session cookie + CSRF) to the restricted College Dashboard, verifies email (48h hashed token), uploads required verification documents (PDF/JPEG/PNG, max 10 MB), and clicks "Submit for Review" to enter the frozen PENDING review queue while academic management APIs remain locked (403 COLLEGE_NOT_APPROVED).
+3. SUPER_ADMIN reviews the verified application and documents in Admin Dashboard (/admin/registrations) using expectedVersion:
+   - If corrections/documents are needed (ACTION_REQUIRED) or rejected (REJECTED, up to 3 revised submissions), COLLEGE_ADMIN reviews feedback on the restricted dashboard, uploads new immutable documents/details, and resubmits a new application version (preserving history) back to frozen PENDING.
+   - When verified, SUPER_ADMIN approves the application (APPROVED).
+4. Approval transitions colleges to APPROVED & ACTIVE, queues notification via transactional outbox, and unlocks all management features on the existing COLLEGE_ADMIN account and dashboard (observed via GET /api/v1/auth/me without creating a second account or dashboard).
 5. COLLEGE_ADMIN configures Programs, Semesters, and Subjects.
 6. COLLEGE_ADMIN adds or verifies Student Records.
 7. COLLEGE_ADMIN imports a university result Excel or CSV file.
@@ -467,9 +498,15 @@ The Acadlytic MVP is successful when an affiliated college can reliably execute 
 
 # 12. Non-Negotiable MVP Principles
 
-1. **Two Active Roles Only:** Only `SUPER_ADMIN` and `COLLEGE_ADMIN` possess active accounts.
-2. **Student Records $\neq$ Student Accounts:** Student data is processed in MVP; student login is Post-MVP.
-3. **No Unvalidated Writes:** Uploaded files never directly modify authoritative academic records.
-4. **Preserve History:** Failed attempts are never overwritten by subsequent passes.
-5. **Strict Multi-Tenancy:** All college data is isolated by `college_id` at the database and API layers.
-6. **No Fabricated Formulas:** Academic metrics are calculated only according to approved university regulations.
+1. **Two Active Roles Only:** Only `SUPER_ADMIN` and `COLLEGE_ADMIN` possess active accounts. `ACADEMIC_STAFF`, `STUDENT` login, and `BRANCH_ADMIN` are strictly Post-MVP.
+2. **Stateful Sessions Only (No JWT):** Authentication uses stateful HTTP-only session cookies (Spring Session JDBC + MySQL) with CSRF protection; backend is the sole source of truth.
+3. **One Active `COLLEGE_ADMIN` per College (MVP):** Enforced atomically via MySQL 8 `VIRTUAL` generated column + `UNIQUE` index on `users`, while keeping `users.college_id` non-unique for future multiple-admin support without redesign.
+4. **User Status $\neq$ College Approval Status:** Newly registered `COLLEGE_ADMIN` users receive `users.status = ACTIVE` immediately for restricted dashboard access; `colleges.approval_status` (`APPROVED`) and `colleges.status` (`ACTIVE`) strictly gate all academic management APIs.
+5. **Verified Queue Entry & Frozen `PENDING`:** Applications require verified email and uploaded documents before entering the `SUPER_ADMIN` `PENDING` queue, and remain read-only/frozen while under review (`expectedVersion` enforced on review actions).
+6. **Preserve Application & Audit History:** Resubmissions from `ACTION_REQUIRED` or `REJECTED` (capped at 3 rejection revisions) and permanent rejections never overwrite or discard prior application versions, immutable documents, or review decisions.
+7. **No Branch Functionality in MVP:** Branch management and `BRANCH_ADMIN` are Post-MVP; do not create branch tables or implement branch functionality in MVP.
+8. **Student Records $\neq$ Student Accounts:** Student data is processed in MVP; student login is Post-MVP.
+9. **No Unvalidated Writes:** Uploaded result files never directly modify authoritative academic records.
+10. **Preserve History:** Failed exam attempts are never overwritten by subsequent passes.
+11. **Strict Multi-Tenancy:** All college data is isolated by `college_id` at the database and API layers.
+12. **No Fabricated Formulas:** Academic metrics are calculated only according to approved university regulations.

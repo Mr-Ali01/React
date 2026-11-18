@@ -3,7 +3,7 @@
 **Document:** `09-development/implementation-notes/authentication-implementation.md`  
 **Project:** Acadlytic  
 **Phase:** Development — Authentication & User Provisioning  
-**Status:** Draft / Under Review  
+**Status:** Approved / Implementation Ready (Architecture Decision Closure Complete)  
 **Audience:** Backend Developers, Frontend Developers, Security Reviewers, QA Engineers, AI Coding Assistants
 
 ---
@@ -39,29 +39,32 @@ This document covers the authentication foundation required before implementing 
 
 The MVP authentication and onboarding system must support:
 
-- college registration application intake (Option A Onboarding)
-- registration status lifecycle (`PENDING`, `APPROVED`, `REJECTED`)
-- platform administrative review queue for `SUPER_ADMIN`
-- registration approval and rejection operations
-- automated college tenant initialization upon approval
-- token-based college administrator account activation
-- login
-- logout
-- current authenticated user context (`/me`)
-- role-based authorization foundation (`SUPER_ADMIN`, `COLLEGE_ADMIN`)
-- tenant/college context binding (`college_id`)
-- account status enforcement (`ACTIVE`, `INACTIVE`, `SUSPENDED`)
-- password setup, change, and token-based reset
-- failed-login protection (lockout after threshold)
-- protected backend APIs
-- protected frontend routes
-- security and onboarding audit events
-- strict tenant isolation
+- **stateful HTTP-only session cookies persisted in MySQL via Spring Session JDBC (no JWT)** (`30-min` idle timeout, `12-hour` absolute lifetime, session ID renewal on login & privilege changes, multi-device allowed)
+- **Spring Security 6 SPA CSRF protection** (`CookieCsrfTokenRepository.withHttpOnlyFalse()`, `SpaCsrfTokenRequestHandler`, `GET /api/v1/auth/csrf`, `CsrfCookieFilter`, Vite dev proxy, `403 CSRF_TOKEN_INVALID`)
+- public college registration intake (IP rate-limited `5/IP/hour` + configurable prod CAPTCHA; institution profile + proposed `COLLEGE_ADMIN` credentials; **no** public multipart document upload)
+- immediate restricted College Dashboard access (`users.status = ACTIVE` immediately; `email_verified_at = NULL`, `submitted_for_review_at = NULL`)
+- 48-hour single-use DB-hashed email verification + authenticated verification document uploads (PDF/JPEG/PNG, max `10 MB`, max `5/revision`, MIME + magic-byte validated, random UUID storage keys outside webroot) + explicit **Submit for Review** into the frozen `PENDING` review queue
+- full application status lifecycle (`PENDING`, `ACTION_REQUIRED`, `APPROVED`, `REJECTED`) with `expectedVersion` optimistic concurrency (`409 Conflict`), bounded versioned resubmission (`ACTION_REQUIRED` safety cap `10`; `REJECTED` max `3` revised applications), and permanent rejection preserving all prior versions, immutable documents, decisions, and audit history
+- automated 7-day soft-archive cleanup for abandoned unverified + unsubmitted registrations
+- unlocking of full management features on the existing `COLLEGE_ADMIN` account and dashboard upon `SUPER_ADMIN` approval (zero separate account/dashboard creation)
+- login, logout, and authoritative current-user + verification context (`GET /api/v1/auth/me`)
+- role-based and live approval-state-aware authorization (`SUPER_ADMIN`, `COLLEGE_ADMIN`; suspended colleges blocked from login with `403 COLLEGE_SUSPENDED` + all sessions revoked)
+- single active `COLLEGE_ADMIN` per college enforced via MySQL 8 `VIRTUAL` generated column + `UNIQUE` index (`users.college_id` non-unique for Post-MVP multi-admin extensibility)
+- BCrypt work factor `12`, password policy (`12–128` chars, reject common/compromised passwords), password change, 1-hour DB-hashed password reset, password-confirmed email change (`48h` re-verification via `pending_email`)
+- brute-force protection (`5` consecutive failures &rarr; `15-minute` temporary lockout)
+- transactional outbox email delivery (`outbox_emails`, `FOR UPDATE SKIP LOCKED` poller, Mailpit in dev, env-configured SMTP/TLS in prod)
+- one-time env-driven `SUPER_ADMIN` startup bootstrap (zero public endpoint)
+- Testcontainers MySQL `8.0.36` integration testing for MySQL-specific constraints and migrations
 
 ### Key Scope Boundary:
-- **Public College Registration is ENABLED:** Prospective colleges can submit an onboarding application.
-- **Public User Self-Registration is DISABLED:** Individual users cannot create unattached accounts.
-- **SUPER_ADMIN Manual User Provisioning is REMOVED:** `SUPER_ADMIN` approves college applications; the college's designated administrator activates their own account and establishes credentials.
+- **Stateful Sessions Only (No JWT):** Authentication uses Spring Session JDBC + HTTP-only cookies + SPA CSRF; JWT is explicitly excluded.
+- **Public College Registration is ENABLED (Rate-Limited):** Prospective colleges submit institution details + proposed `COLLEGE_ADMIN` credentials (`users.status = ACTIVE` immediately); verification documents are uploaded post-login on the restricted dashboard.
+- **Public General-User Self-Registration is DISABLED:** Individual users cannot create standalone unattached accounts outside college registration.
+- **Immediate Restricted Dashboard & Frozen `PENDING`:** Newly registered colleges verify email and upload required documents before submitting into the frozen `PENDING` review queue; backend authorization strictly blocks all academic management APIs (`403 COLLEGE_NOT_APPROVED`) until `APPROVED` & `ACTIVE`.
+- **SUPER_ADMIN Manual User Provisioning is REMOVED:** `SUPER_ADMIN` reviews, approves, requests action on, or rejects college applications using `expectedVersion`; `SUPER_ADMIN` never manually creates administrator credentials.
+- **Single Active `COLLEGE_ADMIN` per College (`ADR-06`):** Enforced via MySQL 8 `VIRTUAL` generated column `active_college_admin_college_id` + `UNIQUE` index on `users`, while keeping `users.college_id` non-unique for future multi-admin support without redesign.
+- **No Branch Management in MVP:** `BRANCH_ADMIN` and branch management are strictly Post-MVP; do not create branch tables or implement branch functionality in MVP.
+- **Transactional Outbox Email Dispatch (`ADR-18`):** Emails are queued in `outbox_emails` inside the DB transaction and dispatched outside DB transactions by a `SKIP LOCKED` poller.
 
 ---
 
@@ -71,9 +74,10 @@ Acadlytic supports the following actors across its lifecycle:
 
 ```text
 SUPER_ADMIN                      (MVP Active: Platform Owner & Operator)
-COLLEGE_ADMIN                    (MVP Active: Approved College Administrator)
+COLLEGE_ADMIN                    (MVP Active: College Administrator — 1 active per college in MVP; restricted dashboard until APPROVED, full dashboard once APPROVED & ACTIVE)
 ACADEMIC_STAFF                   (Post-MVP: Delegated Departmental Staff)
 STUDENT                          (Post-MVP: Authenticated Student Self-Service)
+BRANCH_ADMIN                     (Post-MVP: Branch Administration — no branch tables/features in MVP)
 Prospective College / Applicant  (MVP Active: Public Onboarding via /register-college)
 ```
 
@@ -106,9 +110,10 @@ Answers:
 
 Examples:
 
-- role checks
+- role checks (`SUPER_ADMIN` vs. `COLLEGE_ADMIN`)
+- college approval-state checks (restricted onboarding endpoints vs. `APPROVED` + `ACTIVE` management endpoints)
 - permission checks
-- tenant checks
+- tenant checks (`college_id`)
 - resource ownership checks
 
 ### College Onboarding & Account Provisioning
@@ -117,17 +122,21 @@ Answers:
 
 > How does a customer tenant and application identity enter the system?
 
-MVP Workflow (Option A):
+Confirmed MVP Workflow:
 
-- Prospective College submits public registration application
-- Super Admin reviews and approves/rejects the application
-- Designated Administrator activates account via secure token and sets password
+- Prospective College submits public registration with verification documents and proposed `COLLEGE_ADMIN` credentials
+- System establishes a restricted college context (`PENDING`), versioned application v1, and proposed `COLLEGE_ADMIN` user bound to `college_id`
+- College logs in immediately to the Restricted College Dashboard (academic management APIs locked by backend)
+- `SUPER_ADMIN` inspects the application and documents and executes `APPROVED`, `ACTION_REQUIRED`, or `REJECTED`
+- On `ACTION_REQUIRED` or `REJECTED`, college reviews feedback on its restricted dashboard, uploads corrected documents, and resubmits a new `PENDING` version (preserving history)
+- On `APPROVED`, system activates the college tenant and existing `COLLEGE_ADMIN` account (same user identity & `college_id`) and unlocks full management features without a second unrelated activation workflow
 
 Post-MVP Extensions:
 
-- Option C: Self-service plan purchase and automated instant provisioning
+- Option C: Self-service subscription purchase and automated onboarding (can reuse the common onboarding and authentication foundations, while subscription plans, payment gateway integration, and billing will require additional implementation)
 - College Admin provisions Academic Staff accounts
 - College Admin provisions Student user accounts linked to academic records
+- Branch management and `BRANCH_ADMIN` (deferred; no branch tables or branch functionality in MVP)
 
 ---
 
@@ -135,77 +144,86 @@ Post-MVP Extensions:
 
 General public user self-registration is strictly disabled in the MVP.
 
-Customer onboarding and account establishment follow **Option A: College Registration & Approval**:
+Customer onboarding and account establishment follow the confirmed workflow:
+**`College Registration → Restricted Dashboard → SUPER_ADMIN Verification → Approval or Correction/Resubmission → Full Management Dashboard`**
 
 ```text
 Prospective College (Customer / Tenant)
        │
        ▼ Public Registration Form (/register-college)
-Submits College Registration Application (POST /api/v1/college-registrations)
-(Institution Profile + Designated Administrator Contact)
+Submits College Registration (POST /api/v1/college-registrations)
+(Institution Profile + Verification Documents + Proposed COLLEGE_ADMIN Credentials)
        │
-       ▼ Stored in Database
-Application Stored with status = PENDING
-[No tenant record or user credentials created yet]
+       ▼ Atomic Registration Setup
+- Creates restricted college context (colleges: approval_status = PENDING, status = PENDING_VERIFICATION)
+- Creates application v1 (college_registrations: status = PENDING) & stores verification documents
+- Creates proposed COLLEGE_ADMIN user in users table (`status = ACTIVE`, `email_verified_at = NULL`, bound to `college_id`)
+- Writes 48h verification email to `outbox_emails`
        │
-       ▼ Review by SUPER_ADMIN (/admin/registrations)
-SUPER_ADMIN Reviews Pending Queue
+       ▼ Immediate Restricted Dashboard Access (Pre-Submission Onboarding)
+COLLEGE_ADMIN logs in (/auth/login, Stateful HTTP-Only Session Cookie + SPA CSRF)
+- Verifies email (48h hashed token) & uploads required docs (PDF/JPEG/PNG, <=10 MB, <=5 docs/rev)
+- Clicks "Submit for Review" -> sets `submitted_for_review_at` -> enters FROZEN `PENDING` queue
+- Blocked (403 COLLEGE_NOT_APPROVED): All academic management APIs
+- [Abandoned unverified + unsubmitted registrations soft-archived after 7 days]
        │
-       ├──────────────────────────────────────────────┐
-       ▼                                              ▼
-[REJECT APPLICATION]                             [APPROVE APPLICATION]
-POST .../{id}/reject                             POST .../{id}/approve
-       │                                              │
-       ▼                                              ▼
-Status = REJECTED                                Status = APPROVED
-Rejection reason captured                        1. College tenant created (colleges table)
-Registration remains inaccessible                2. Secure activation token generated
-Zero tenant access granted                       3. Invitation delivered to administrator
-                                                      │
-                                                      ▼ Administrator Sets Credentials
-                                                 Opens /activate-account?token=...
-                                                 Submits POST /api/v1/auth/activate-account
-                                                      │
-                                                      ▼ Account Created & Bound
-                                                 User record created in users table:
-                                                 - role = COLLEGE_ADMIN
-                                                 - college_id = approved college_id
-                                                 - status = ACTIVE
-                                                      │
-                                                      ▼ Active Operations
-                                                 COLLEGE_ADMIN logs in (/auth/login)
-                                                 Redirected to /college/dashboard
+       ▼ Review by SUPER_ADMIN (/admin/registrations — requires `expectedVersion`; 409 on stale)
+SUPER_ADMIN Inspects Verified Application Revisions & Safely Streamed Documents
+       │
+       ├──────────────────────────┼──────────────────────────┼──────────────────────────┐
+       ▼                          ▼                          ▼                          ▼
+[REQUEST ACTION]           [REJECT (Non-Permanent)]   [PERMANENT REJECTION]      [APPROVE]
+POST .../request-action    POST .../reject            POST .../reject            POST .../approve
+(safety cap 10)            (up to 3 revisions)        (permanent=true OR rev 4)
+       │                          │                          │                          │
+       ▼                          ▼                          ▼                          ▼
+Status = ACTION_REQUIRED   Status = REJECTED          permanently_rejected=true  [DB Approval Tx]:
+Mandatory notes saved      Mandatory reason saved     colleges.status=INACTIVE   1. Verify expectedVersion
+Outbox email queued        Outbox email queued        users.status=INACTIVE      2. Application = APPROVED
+       │                          │                   ALL sessions revoked       3. colleges = APPROVED/ACTIVE
+       └─────────────┬────────────┘                   code/email/slot released   4. Audit + outbox_emails
+                     │                                Full history retained      5. Commit DB tx
+                     ▼                                                                  │
+College reviews feedback on Restricted Dashboard                                        ▼ (Outbox Poller)
+Uploads new immutable docs & submits v+1                                         Approval email dispatched
+(POST /api/v1/college-registrations/my-application/resubmit)                     via SKIP LOCKED worker
+Prior versions, docs & decisions preserved                                              │
+v+1 enters frozen PENDING queue                                                         ▼
+                                                                      Active Session Observes Approval
+                                                                      via GET /api/v1/auth/me -> Unlocked
+                                                                      (Same user & dashboard; no re-activation)
 ```
 
 ### Post-MVP Account Provisioning:
 In Post-MVP phases:
-1. **Option C Onboarding:** Colleges purchase subscription plans via payment gateway, triggering automated tenant and administrator provisioning without manual review.
+1. **Option C Onboarding:** Colleges purchase subscription plans via a payment gateway, triggering automated tenant activation and immediate management feature unlocking. Option C can reuse the common onboarding and authentication foundations, while subscription plans, payment gateway integration, webhook handling, and billing lifecycle management will require additional implementation.
 2. **Staff Provisioning:** `COLLEGE_ADMIN` creates `ACADEMIC_STAFF` accounts within their college.
 3. **Student Account Provisioning:** `COLLEGE_ADMIN` or authorized staff provisions `STUDENT` login accounts linked to existing student records.
+4. **Multiple College Admins & Branch Management:** Future support for multiple active `COLLEGE_ADMIN` accounts per college (drop `VIRTUAL` generated column/index with zero table redesign) and Post-MVP branch management / `BRANCH_ADMIN` (no branch tables or branch features in MVP).
 
 The following users cannot create accounts:
 
 ```text
 STUDENT
-PUBLIC VISITOR
+PUBLIC VISITOR (outside public college registration)
 ```
 
 ---
 
 # 6. Account Provisioning Principle
 
-Establishing a tenant or user account must validate:
+Establishing or transitioning a college context or user account must validate:
 
-- application status (must be `APPROVED` before user activation)
-- activation token validity and non-expiration
-- creator/approver identity and authority
-- target role (strictly `COLLEGE_ADMIN` for approved college administrators in MVP)
-- tenant context binding (`college_id`)
-- email normalization and platform-wide uniqueness
-- required profile and institutional data
-- account status initialization (`ACTIVE`)
-- password strength policy
-- audit requirements (registration submission, approval/rejection, account activation)
+- required institutional profile data (documents uploaded post-login on restricted dashboard)
+- email normalization (lowercase, trimmed) and `active_email` uniqueness
+- `active_college_code` uniqueness
+- target role (strictly `COLLEGE_ADMIN` for registering college administrators in MVP; never client-supplied)
+- tenant context binding (`college_id` assigned server-side)
+- single active `COLLEGE_ADMIN` per college enforced by MySQL 8 `VIRTUAL` generated column + `UNIQUE` index (`users.college_id` non-unique)
+- application status transition validity (`PENDING`, `ACTION_REQUIRED`, `APPROVED`, `REJECTED`), `email_verified_at` + `submitted_for_review_at` gate, and `expectedVersion` optimistic check
+- bounded resubmission caps (`3` after `REJECTED`; safety cap `10` for `ACTION_REQUIRED`) and preservation of prior application versions, immutable documents, and decisions
+- approved password policy (`12–128` chars, reject common/compromised passwords, BCrypt work factor `12`)
+- audit requirements (registration, email verification, document uploads, queue submission, action requests, resubmissions, rejections, permanent rejections, approvals, cleanup)
 
 The frontend must not be allowed to bypass these checks.
 
@@ -213,70 +231,85 @@ The frontend must not be allowed to bypass these checks.
 
 # 7. User and College Lifecycle
 
-### College Registration Lifecycle:
+### College Application & Tenant Lifecycle:
 ```text
-Application Submitted (PENDING)
+Registration Submitted (v1: PENDING, submitted_for_review_at = NULL, email_verified_at = NULL)
        │
-       ├── SUPER_ADMIN Rejection ──→ REJECTED (Reason captured; zero access)
+       ├── Unverified & Unsubmitted >= 7 Days ──→ Soft-Archived (archived_at != NULL, INACTIVE, code/email/slot released)
        │
-       └── SUPER_ADMIN Approval  ──→ APPROVED
-                                         │
-                                         ▼
-                                     College Tenant Created (colleges table)
-                                     Status = ACTIVE (or SUSPENDED / INACTIVE by Admin)
+       └── Email Verified + Required Docs Uploaded + Submit for Review
+                │
+                ▼
+         PENDING (Frozen in Review Queue) ◄──────────────────────────┐
+                │                                                    │ (Resubmit v+1; prior
+                ├── SUPER_ADMIN Request Action ──→ ACTION_REQUIRED ──┤  versions, docs &
+                │       │                           (cap 10)         │  decisions preserved)
+                │       ├── SUPER_ADMIN Reject ──→ REJECTED ─────────┘ (max 3 revisions)
+                │       │                           │
+                ├── SUPER_ADMIN Reject ─────────────┤
+                │                                   └── permanent=true OR rev 4 ──→ Permanently Rejected
+                │                                       (INACTIVE, ALL sessions revoked, code/email/slot released, history retained)
+                │
+                └── SUPER_ADMIN Approve ──→ APPROVED
+                                                │
+                                                ▼
+                                    College Tenant Activated (ACTIVE)
+                                    Existing ACTIVE COLLEGE_ADMIN Unlocked for Full Management
+                                    (If later SUSPENDED/INACTIVE: ALL sessions revoked & login blocked 403)
 ```
 
-### User Account Lifecycle:
+### User Account Lifecycle (`COLLEGE_ADMIN`):
 ```text
-Activation Token Issued (Pending Activation)
+Registration Submitted (Credentials Established by Applicant; BCrypt 12)
        │
-       ▼ Token Validated & Password Established
-ACTIVE
+       ▼
+ACTIVE (Restricted Onboarding Dashboard while college is unapproved; email_verified_at set upon 48h token)
        │
-       ├── Administrative Deactivation ──→ INACTIVE
+       ├── SUPER_ADMIN Approves College ──→ ACTIVE (Same user_id & college_id; Full Management Dashboard Unlocked)
        │
-       └── Security / Lockout Policy   ──→ SUSPENDED
+       ├── Permanent Rejection / 7-Day Abandoned Cleanup ──→ INACTIVE (email_released = true; ALL sessions revoked; slot released)
+       │
+       ├── Administrative Deactivation / Replacement ──→ INACTIVE (email_released = false; ALL sessions revoked; slot released)
+       │
+       └── Security / Admin Suspension ──→ SUSPENDED (email_released = false; ALL sessions revoked)
 ```
 
 The persisted status values must remain consistent with the database schema design.
 
 ---
 
-# 8. User Identity
+# 8. User Identity & Finalized Schema Columns
 
-A user should have a stable database identifier.
-
-Conceptually:
+A user has a stable database identifier with finalized MySQL 8 `VIRTUAL` generated columns for single-admin and releasable-email constraints:
 
 ```text
 users
 ├── id
-├── email
-├── password_hash
-├── role
-├── college_id
-├── status
-├── created_at
-└── updated_at
+├── email                             (normalized lowercase, trimmed)
+├── pending_email                     (nullable — used during verified email change)
+├── email_verified_at                 (TIMESTAMP UTC, nullable)
+├── email_released                    (BOOLEAN NOT NULL DEFAULT FALSE — TRUE only on permanent rejection / 7-day abandoned cleanup)
+├── active_email                      (VIRTUAL generated: CASE WHEN email_released = FALSE THEN email ELSE NULL END + UNIQUE)
+├── password_hash                     (BCrypt work factor 12)
+├── first_name / last_name
+├── role                              (SUPER_ADMIN | COLLEGE_ADMIN | ACADEMIC_STAFF | STUDENT)
+├── college_id                        (BIGINT, nullable for SUPER_ADMIN, NON-UNIQUE FK to colleges.id)
+├── active_college_admin_college_id   (VIRTUAL generated: CASE WHEN role='COLLEGE_ADMIN' AND status='ACTIVE' THEN college_id ELSE NULL END + UNIQUE)
+├── status                            (ACTIVE | INACTIVE | SUSPENDED)
+├── failed_login_attempts             (INT DEFAULT 0)
+├── locked_until                      (TIMESTAMP UTC, nullable)
+├── last_login_at                     (TIMESTAMP UTC, nullable)
+├── created_at / updated_at           (TIMESTAMP UTC)
 ```
-
-This is conceptual only. The final schema must be implemented through the database migration strategy.
 
 ---
 
 # 9. Email Identity
 
-Email should be treated as a login identity where the authentication design uses email login.
+Email is normalized consistently (`trim().toLowerCase(Locale.ROOT)`) before validation, lookup, storage, and uniqueness checks.
 
-Requirements:
-
-- normalize email consistently
-- enforce appropriate uniqueness
-- avoid duplicate active identities
-- prevent accidental whitespace variations
-- validate format
-
-The final case-normalization policy must be standardized.
+- Uniqueness is enforced atomically at the database level via `UNIQUE (active_email)` on the `VIRTUAL` generated column `active_email`.
+- `email_released` is set `TRUE` **only** upon permanent rejection (`ADR-09`) or 7-day abandoned-unverified cleanup (`ADR-13`). It is **never** set `TRUE` for `ACTIVE`, `SUSPENDED`, or replaced/inactive approved-college accounts, preventing account collision or impersonation of historical approved users.
 
 ---
 
@@ -284,133 +317,105 @@ The final case-normalization policy must be standardized.
 
 Passwords must never be stored in plaintext.
 
-The database should contain only a secure password hash.
-
-Conceptually:
-
-```text
-User Password
-      ↓
-Password Hashing
-      ↓
-password_hash
-```
-
-Password hashes must never be returned through an API.
+The database stores only a BCrypt hash (`password_hash`). Password hashes must never be returned through an API or logged.
 
 ---
 
-# 11. Password Hashing
+# 11. Password Hashing (Finalized)
 
-The backend security implementation should use a modern password hashing mechanism supported by Spring Security.
-
-The selected hashing configuration must:
-
-- use a strong adaptive password hashing algorithm
-- use an appropriate work factor
-- support secure password verification
-- allow future work-factor upgrades
-
-The exact encoder configuration is an implementation decision.
+- **Encoder:** Spring Security `BCryptPasswordEncoder(12)` (**work factor `12`**).
+- Must never log plaintext passwords or hashes (disable `org.hibernate.type.descriptor.sql.BasicBinder: TRACE` in dev configuration before Phase 02 implementation).
 
 ---
 
-# 12. Spring Security Foundation
+# 12. Spring Security Foundation & Session Architecture (`ADR-01` – `ADR-05`)
 
-Spring Security should be the primary backend security framework.
+Spring Security `6.3` (Spring Boot `3.3.4`) is the primary backend security framework.
 
-The security layer should provide:
-
-- authentication
-- request authorization
-- password verification
-- security context
-- protected endpoints
-- authentication failure handling
-- logout handling
-- security headers where appropriate
-- session/token integration
-
-The exact authentication mechanism remains an unresolved implementation decision.
+The finalized authentication architecture uses **stateful HTTP-only session cookies persisted in MySQL via Spring Session JDBC (`spring-session-jdbc`)** — **JWT-based authentication is explicitly prohibited**.
 
 ---
 
-# 13. Authentication Mechanism
+# 13. Session Lifecycle, Persistence, Cookies & SPA CSRF Contract (Finalized)
 
-The final authentication/session strategy must be selected before production implementation.
+### 13.1 Session Lifecycle (`ADR-01`)
+- **Idle Timeout:** `30 minutes` (Spring Session `maxInactiveIntervalInSeconds = 1800`, configurable).
+- **Absolute Session Lifetime:** `12 hours` (enforced via server-side `SESSION_CREATED_AT` attribute checked on every authenticated request; expired sessions are invalidated and return `401 Unauthorized`).
+- **Session Fixation Protection:** Mandatory session ID renewal (`changeSessionId` / `migrateSession`) on **login** and upon any **privilege/security change** (password change, email change, future role elevation).
+- **Multi-Device Concurrency:** Multiple concurrent device sessions per user are **allowed**; every session is tracked by `PRINCIPAL_NAME` in Spring Session JDBC for targeted or bulk server-side revocation.
 
-Possible approaches include:
+### 13.2 Session Persistence (`ADR-02`)
+- **Store:** **Spring Session JDBC with MySQL** (`SPRING_SESSION` and `SPRING_SESSION_ATTRIBUTES` managed via Flyway migration).
+- Enables instant server-side revocation of one or all sessions for a principal via `FindByIndexNameSessionRepository`, survives restarts, and supports horizontal scaling without introducing Redis in MVP.
 
-### Session-Based Authentication
+### 13.3 Cookie Configuration (`ADR-03`)
 
-```text
-Browser
- ↓
-Login
- ↓
-Server Session
- ↓
-Secure Session Cookie
-```
+| Attribute | Development (`dev`) | Production (`prod`) |
+|---|---|---|
+| **Cookie Name** | `ACADLYTIC_SID` | `__Host-ACADLYTIC_SID` |
+| **`HttpOnly`** | `true` | `true` |
+| **`Secure`** | `false` (HTTP localhost) | `true` (HTTPS mandatory) |
+| **`SameSite`** | `Lax` | `Lax` |
+| **`Domain`** | Omitted (host-only) | **Omitted (host-only — required by `__Host-` browser spec)** |
+| **`Path`** | `/` | `/` |
+| **Expiration** | Session cookie (`Max-Age` omitted) | Session cookie (`Max-Age` omitted) |
 
-### Token-Based Authentication
+Production serves the React SPA and `/api/v1/*` behind the same origin (reverse proxy) so `__Host-ACADLYTIC_SID` complies with every browser `__Host-` requirement (`Secure=true`, `Path=/`, no `Domain`).
 
-```text
-Browser
- ↓
-Login
- ↓
-Access Token / Session Strategy
- ↓
-Authenticated API Requests
-```
+### 13.4 SPA CSRF Implementation Contract (`ADR-04`)
+- **Spring Security 6 Configuration:**
+  - `CookieCsrfTokenRepository.withHttpOnlyFalse()` (sets `XSRF-TOKEN` cookie with `Path=/`, `SameSite=Lax`, `Secure=true` in prod, `HttpOnly=false`).
+  - `SpaCsrfTokenRequestHandler` (combining `XorCsrfTokenRequestAttributeHandler` and plain cookie resolution per Spring Security 6 SPA guidance).
+  - `CsrfCookieFilter` registered after `BasicAuthenticationFilter` to materialize deferred `CsrfToken` cookies cleanly after session creation/rotation.
+  - Public bootstrap endpoint: `GET /api/v1/auth/csrf` returning `204 No Content` and guaranteeing `XSRF-TOKEN` cookie issuance before the first state-changing request.
+- **React / Vite / Axios Integration:**
+  - Local dev uses the **Vite development proxy** (`/api` &rarr; `http://localhost:8080`) for same-origin cookies and CSRF; `X-XSRF-TOKEN` is also added to backend CORS `allowed-headers`.
+  - Axios is configured with `withCredentials: true`, `xsrfCookieName: 'XSRF-TOKEN'`, and `xsrfHeaderName: 'X-XSRF-TOKEN'`.
+- **Enforcement Scope & Failure Response:**
+  - Enforced on **`POST /api/v1/auth/login`**, **`POST /api/v1/auth/logout`**, **`POST /api/v1/college-registrations`**, and every state-changing (`POST`, `PUT`, `PATCH`, `DELETE`) endpoint.
+  - CSRF failure returns HTTP **`403 Forbidden`** with JSON error code `CSRF_TOKEN_INVALID`.
 
-The project should choose one coherent strategy.
-
-Do not mix authentication models unnecessarily.
+### 13.5 Session Revocation Rules (`ADR-05`)
+- **Normal Logout:** Revokes current session only.
+- **Password Change & Email Change:** Revokes **all other** sessions of the user + rotates current session ID.
+- **Password Reset, User Suspension/Deactivation, College Suspension/Deactivation, Permanent Rejection, College Admin Replacement, `SUPER_ADMIN` Suspension:** Immediately revokes **ALL** active sessions of affected user(s) via `FindByIndexNameSessionRepository`.
 
 ---
 
-# 14. Authentication Recommendation Boundary
+# 14. Authentication Security Guarantees
 
-Regardless of the selected mechanism, the implementation must provide:
+The finalized Spring Session JDBC + SPA CSRF implementation guarantees:
 
-- secure authentication state
-- secure logout
-- expiration handling
-- session invalidation where applicable
-- protection against credential exposure
-- backend authorization
-- tenant isolation
-
-The exact storage mechanism must be formally reviewed before implementation is marked `Approved`.
+- server-side authoritative session state (zero JWT trust or client-side token storage)
+- immediate server-side session revocation
+- 30-minute idle and 12-hour absolute expiration enforcement
+- protection against XSS token theft (`HttpOnly`), CSRF (`XSRF-TOKEN` / `X-XSRF-TOKEN`), and session fixation (ID rotation)
+- live backend authorization and strict tenant isolation on every request
 
 ---
 
 # 15. Login Flow
 
-Conceptual login flow:
-
 ```text
 User
  ↓
-Login Form
+GET /api/v1/auth/csrf (ensures XSRF-TOKEN cookie)
  ↓
-POST /api/v1/auth/login
+POST /api/v1/auth/login (+ X-XSRF-TOKEN header)
  ↓
-Validate Credentials
+Validate CSRF & Credentials (BCrypt work factor 12; 5 failures -> 15-min lockout)
  ↓
-Authenticate User
+Verify User Status == ACTIVE & Role in (SUPER_ADMIN, COLLEGE_ADMIN)
  ↓
-Verify Account Status
+If COLLEGE_ADMIN: Verify College Not SUSPENDED / INACTIVE / Permanently Rejected
  ↓
-Establish Authentication State
+Rotate Session ID & Persist Spring Session JDBC (30m idle / 12h max)
  ↓
-Return Safe User Context
+Set HttpOnly Cookie (ACADLYTIC_SID / __Host-ACADLYTIC_SID)
  ↓
-Frontend Loads /api/v1/me
+Frontend Loads GET /api/v1/auth/me
  ↓
-Application Dashboard
+Role + Approval-State Dashboard Routing
 ```
 
 ---
@@ -453,48 +458,54 @@ The exact response depends on the final authentication mechanism.
 
 ---
 
-# 18. Current User
+# 18. Current User (`/api/v1/auth/me`) & Live Approval Observation
 
-The frontend should retrieve authenticated user information through:
+The frontend should retrieve authoritative authenticated user and college verification context through:
 
 ```text
-GET /api/v1/me
+GET /api/v1/auth/me
 ```
 
-The response may contain:
+The response should contain:
 
 ```text
 id
 name
 email
 role
-college
-status
+collegeId
+userStatus              (ACTIVE | INACTIVE | SUSPENDED)
+emailVerified           (boolean: users.email_verified_at != null)
+submittedForReview      (boolean: current registration submitted_for_review_at != null)
+collegeApprovalStatus   (PENDING | ACTION_REQUIRED | APPROVED | REJECTED)
+collegeStatus           (PENDING_VERIFICATION | ACTIVE | INACTIVE | SUSPENDED)
+managementUnlocked      (boolean: true only when APPROVED and ACTIVE)
 ```
 
 The exact DTO must be defined by the backend API contract.
 
 ---
 
-# 19. Current User Purpose
+# 19. Current User Purpose & Observing Approval Transitions
 
-`/me` provides the frontend with the authoritative authenticated context.
+`/api/v1/auth/me` provides the frontend with the authoritative authenticated and onboarding-verification context directly from server state.
 
 It should support:
 
 - role-aware navigation
-- tenant context
-- profile display
-- protected route behavior
-- permission-aware UI
+- tenant context (`collegeId`)
+- pre-submission email verification & document upload checklist (`emailVerified`, `submittedForReview`)
+- approval-state-aware dashboard rendering (Restricted Onboarding Dashboard vs. Full College Management Dashboard)
+- live observation of `SUPER_ADMIN` approval transitions for already-authenticated sessions (via page refresh, "Refresh Status" button, window focus, or TanStack Query background refetch) without forcing re-registration or creating a separate account/dashboard
+- profile display and protected route behavior
 
-The frontend should not reconstruct the current user from arbitrary local values.
+The frontend must never reconstruct the current user or approval status from arbitrary local values, and backend endpoints must independently verify live approval and operational status from MySQL on every protected request.
 
 ---
 
 # 20. Logout
 
-Logout should invalidate the authentication state according to the selected authentication mechanism.
+Logout invalidates the **current** Spring Session JDBC session only (preserving other logged-in devices per `ADR-05`) and requires a valid CSRF token (`X-XSRF-TOKEN`).
 
 Endpoint:
 
@@ -502,12 +513,13 @@ Endpoint:
 POST /api/v1/auth/logout
 ```
 
-The operation should:
+The operation must:
 
-- invalidate session/token state where applicable
-- clear server-side authentication state where required
-- clear client authentication state
-- return the user to the login/public area
+- validate CSRF (`403 CSRF_TOKEN_INVALID` on mismatch)
+- invalidate the current Spring Session JDBC record in MySQL
+- expire the HTTP-only session cookie (`ACADLYTIC_SID` / `__Host-ACADLYTIC_SID`)
+- record `LOGOUT` audit event
+- clear client TanStack Query / Zustand authentication state and redirect to `/auth/login`
 
 ---
 
@@ -599,13 +611,14 @@ as the security mechanism.
 
 # 25. Role Hierarchy
 
-Roles are:
+Roles across the platform lifecycle:
 
 ```text
-SUPER_ADMIN
-COLLEGE_ADMIN
-ACADEMIC_STAFF
-STUDENT
+SUPER_ADMIN      (Active in MVP)
+COLLEGE_ADMIN    (Active in MVP — 1 active per college)
+ACADEMIC_STAFF   (Post-MVP)
+STUDENT          (Post-MVP — student academic records are in MVP; student login is Post-MVP)
+BRANCH_ADMIN     (Post-MVP — deferred with branch management; no branch tables or branch functionality in MVP)
 ```
 
 The implementation must not assume that role names alone define every permission.
@@ -616,15 +629,17 @@ Authorization should be based on explicit role/permission rules.
 
 # 26. SUPER_ADMIN
 
-`SUPER_ADMIN` operates at the platform level.
+`SUPER_ADMIN` operates at the platform level as owner and operator.
 
 MVP capabilities include:
 
-- manage colleges
-- create College Admin accounts
-- manage College Admin assignment
-- view platform-level information permitted by the application
+- review public college registration applications, revision histories, and verification documents
+- approve (`APPROVED`), request corrections/documents (`ACTION_REQUIRED`), or reject (`REJECTED`) college registration applications
+- manage college tenants (view, update metadata, activate, deactivate, suspend)
+- view platform-level information and security/onboarding audit logs permitted by the application
 - manage platform-level configuration where defined
+
+`SUPER_ADMIN` does **not** manually create `COLLEGE_ADMIN` credentials or set passwords for individual colleges; credentials are established by the proposed college administrator during registration.
 
 A Super Admin is not automatically allowed to perform every future feature.
 
@@ -634,28 +649,43 @@ Permissions must remain explicit.
 
 # 27. COLLEGE_ADMIN
 
-`COLLEGE_ADMIN` operates within an assigned college tenant.
+`COLLEGE_ADMIN` operates within their assigned college tenant (`college_id`).
 
-Capabilities include:
+MVP enforces **exactly one active `COLLEGE_ADMIN` per college tenant** via MySQL 8 `VIRTUAL` generated column `active_college_admin_college_id` + `UNIQUE` index (`ADR-06`), while keeping `users.college_id` non-unique for future multiple-admin support without redesign.
 
-- manage permitted college information
-- create Academic Staff
-- create Student accounts
-- manage students
-- manage academic workflows permitted by the role
-- access authorized college analytics
+MVP capabilities by college verification state:
+
+- **Pre-Submission Restricted Dashboard (`PENDING`, `submitted_for_review_at = NULL`):**
+  - log in immediately after registration (`users.status = ACTIVE`)
+  - verify email (`48h` single-use DB-hashed token) or fix email typo with password confirmation
+  - upload required verification documents (PDF/JPEG/PNG, max `10 MB`, max `5/revision`) and click **Submit for Review** (`POST .../my-application/submit`)
+- **Frozen `PENDING` Restricted Dashboard (`submitted_for_review_at != NULL`):**
+  - view application status, submitted information, and documents strictly **read-only** (edits and document uploads frozen while under `SUPER_ADMIN` review)
+- **`ACTION_REQUIRED` (cap 10) & Non-Permanent `REJECTED` (max 3 revisions) Restricted Dashboard:**
+  - view reviewer notes / rejection reason and remaining resubmissions, upload new immutable documents, and submit revised application version `v+1` &rarr; frozen `PENDING`
+- **Permanent Rejection or Suspended Approved College:**
+  - **All sessions revoked immediately and login blocked** (`403 REGISTRATION_PERMANENTLY_REJECTED` / `COLLEGE_SUSPENDED` / `COLLEGE_INACTIVE`)
+- **Full Management Dashboard (Unlocked upon `APPROVED` & `ACTIVE` — preserving same user identity & `college_id`):**
+  - manage permitted college profile information, academic structures, student academic records (no student login accounts), result imports/validation/processing, backlog tracking, Academic Passports, and college academic analytics
+
+Post-MVP capabilities include:
+
+- create and manage `ACADEMIC_STAFF` accounts
+- create and manage `STUDENT` authentication accounts
 
 A College Admin must not access another college's tenant data.
 
 ---
 
-# 28. ACADEMIC_STAFF
+# 28. ACADEMIC_STAFF (Post-MVP)
 
-`ACADEMIC_STAFF` operates within the assigned college.
+`ACADEMIC_STAFF` is a **Post-MVP role** and is **not active in the MVP**.
 
-Capabilities depend on the feature permission model.
+When enabled in Post-MVP phases, `ACADEMIC_STAFF` will operate within the assigned college.
 
-Potential MVP capabilities include:
+Capabilities will depend on the feature permission model.
+
+Planned Post-MVP capabilities include:
 
 - student management where permitted
 - result import workflows
@@ -663,15 +693,17 @@ Potential MVP capabilities include:
 - processing workflows
 - backlog workflows
 - academic analytics where permitted
-- student provisioning where explicitly allowed
+- student account provisioning where explicitly allowed
 
 The exact permission matrix must follow the authentication specification.
 
 ---
 
-# 29. STUDENT
+# 29. STUDENT (Post-MVP Authentication)
 
-A student is restricted to self-service access.
+`STUDENT` authentication and self-service portal access are **Post-MVP** and are **not active in the MVP**. (Student academic records remain in MVP and are managed by `COLLEGE_ADMIN`.)
+
+When enabled in Post-MVP phases, a student will be restricted to self-service access.
 
 Examples:
 
@@ -785,7 +817,7 @@ Every resource identifier must be evaluated in its authorization context.
 
 ---
 
-# 34. College Registration Intake API
+# 34. College Registration Intake API & Rate Limiting (`ADR-12`)
 
 Conceptual public onboarding endpoint:
 
@@ -793,7 +825,11 @@ Conceptual public onboarding endpoint:
 POST /api/v1/college-registrations
 ```
 
-This endpoint is publicly accessible and accepts applications from prospective institutions.
+This endpoint is publicly accessible (requires CSRF `X-XSRF-TOKEN`) and accepts institution profile + proposed `COLLEGE_ADMIN` credentials. **Verification documents are NOT uploaded on this public endpoint** — documents are uploaded post-login through the authenticated restricted dashboard.
+
+### Abuse Prevention (`ADR-12`):
+- **IP Rate Limiting:** `5 registration attempts per IP per 1 hour` (configurable via properties), implemented behind a `RateLimiter` interface (in-memory token bucket in MVP; swappable to shared store on horizontal scaling). Resolve client IP strictly through Spring's trusted proxy strategy (`server.forward-headers-strategy`). Exceeding the limit returns HTTP **`429 Too Many Requests`** with `Retry-After` header and error code `RATE_LIMIT_EXCEEDED`.
+- **Production CAPTCHA:** Configurable feature flag (`app.security.captcha.enabled=false` in dev, configurable in prod) behind a `CaptchaVerifier` abstraction.
 
 Example conceptual request payload:
 
@@ -809,153 +845,132 @@ Example conceptual request payload:
     "state": "Maharashtra",
     "postalCode": "400016"
   },
-  "contactPerson": {
+  "proposedAdmin": {
     "firstName": "Dr. Rajesh",
     "lastName": "Sharma",
     "email": "principal@sxie.edu.in",
     "phone": "+919876543210",
-    "designation": "Principal / Director"
-  }
+    "designation": "Principal / Director",
+    "password": "ApplicantChosenLongPassword!"
+  },
+  "captchaToken": "optional-when-enabled-in-prod"
 }
 ```
 
-The backend must:
-- validate required fields and email format
-- normalize the proposed administrator email (lowercase, trim)
-- verify email uniqueness across both `users` and pending `college_registrations`
-- persist the application with status `PENDING`
-- record an intake audit event (`COLLEGE_REGISTRATION_SUBMITTED`)
-- return `201 Created` with a safe public tracking reference
-
-The backend must **never** create a tenant record in `colleges` or a user account in `users` during public registration intake.
-
----
-
-# 35. Target Role Validation
-
-In the MVP, active user accounts enter the system **strictly through approved college onboarding**:
-
-```text
-Approved Registration
-       ↓
-Account Activation Token
-       ↓
-Target Role: COLLEGE_ADMIN (Bound to approved college_id)
-```
-
-Direct administrative user creation via `POST /api/v1/users` is not used in the MVP.
-
-In Post-MVP phases, controlled delegation will support:
-
-```text
-COLLEGE_ADMIN → ACADEMIC_STAFF    Allowed (Post-MVP)
-COLLEGE_ADMIN → STUDENT           Allowed (Post-MVP)
-ACADEMIC_STAFF → STUDENT          Allowed where permitted (Post-MVP)
-STUDENT → ANY                     Denied
-PUBLIC VISITOR → ANY USER         Denied
-```
-
-The backend must reject any request attempting to create or activate a role not authorized for the current workflow.
+The backend must atomically:
+- enforce IP rate limit (`429`) and verify CAPTCHA when enabled
+- validate required fields, email format, and approved password policy (`12–128` chars, reject common/compromised passwords)
+- normalize the proposed administrator email (`trim().toLowerCase()`) and verify `active_email` uniqueness (`409 Conflict` on duplicate)
+- normalize `collegeCode` and verify `active_college_code` uniqueness (`409 Conflict` on duplicate)
+- ignore/reject any client-supplied `role`, `collegeId`, `approvalStatus`, or `status` fields
+- hash password using `BCryptPasswordEncoder(12)`
+- create restricted `colleges` context (`approval_status = PENDING`, `status = PENDING_VERIFICATION`, `resubmission_count = 0`, `action_required_count = 0`, `permanently_rejected = false`)
+- create `college_registrations` v1 (`version_number = 1`, `status = PENDING`, `submitted_for_review_at = NULL` — not yet in `SUPER_ADMIN` review queue) and set `colleges.current_registration_id`
+- create `users` (`role = COLLEGE_ADMIN`, `status = ACTIVE`, `email_verified_at = NULL`, `email_released = false`, bound strictly to `college_id`)
+- create single-use DB-hashed email verification token (`48-hour` expiry) and enqueue verification email in `outbox_emails`
+- record `COLLEGE_REGISTRATION_SUBMITTED` audit event and return `201 Created` directing the administrator to log in immediately to the restricted dashboard
 
 ---
 
-# 36. Tenant Assignment During Provisioning
+# 35. Target Role Validation & One-Time `SUPER_ADMIN` Bootstrap (`ADR-17`)
 
-For all college-scoped accounts:
+In the MVP, active `COLLEGE_ADMIN` accounts enter the system **strictly through public college registration** (`users.status = ACTIVE` immediately; management unlocked upon `SUPER_ADMIN` approval). Direct administrative user creation via `POST /api/v1/users` is **not** used in the MVP.
 
-```text
-COLLEGE_ADMIN
-ACADEMIC_STAFF (Post-MVP)
-STUDENT (Post-MVP)
-```
-
-the user must be permanently and securely bound to the verified `college_id`.
-
-- In the MVP, the `college_id` is derived strictly from the `colleges` record created when `SUPER_ADMIN` approved the registration application.
-- The administrator activation request cannot supply or modify `college_id`.
-- The backend derives the tenant association from the validated, unexpired activation token.
-- A user account can never belong to multiple colleges or change its tenant association via request parameters.
+### First-Time `SUPER_ADMIN` Bootstrap (`ADR-17`):
+- Provisioned exclusively via an idempotent, guarded Spring `ApplicationRunner` (`SuperAdminBootstrapRunner`) that runs **only when** `app.bootstrap.super-admin.enabled=true` **AND** zero `SUPER_ADMIN` accounts exist in `users`.
+- Reads `SUPER_ADMIN_EMAIL`, `SUPER_ADMIN_PASSWORD`, `SUPER_ADMIN_FIRST_NAME`, and `SUPER_ADMIN_LAST_NAME` from environment variables (fails startup fast if missing or violating the 12–128 char / common-password policy), hashes with BCrypt(12), creates `SUPER_ADMIN` (`college_id = NULL`, `status = ACTIVE`, `email_verified_at = NOW()`), and records `SUPER_ADMIN_BOOTSTRAPPED`.
+- **Zero public `SUPER_ADMIN` registration endpoint exists.** In production, set `app.bootstrap.super-admin.enabled=false` and remove bootstrap secrets immediately after initial setup.
 
 ---
 
-# 37. Super Admin Registration Review & Approval Workflow
+# 36. Tenant Assignment, Generated-Column Constraints & Versioned Schema (`ADR-06`, `ADR-07`, `ADR-09`)
 
-`SUPER_ADMIN` oversees the onboarding pipeline through dedicated platform management endpoints:
+### 36.1 Finalized Single Active `COLLEGE_ADMIN` Constraint (`ADR-06`)
+MVP enforces **exactly one active `COLLEGE_ADMIN` per college** atomically at the MySQL 8.0.36 InnoDB layer while preserving a non-unique `users.college_id` FK (1-to-many) for Post-MVP multi-admin extensibility:
 
-```text
-GET  /api/v1/college-registrations          (List pending/reviewed applications)
-GET  /api/v1/college-registrations/{id}     (Inspect application details)
-POST /api/v1/college-registrations/{id}/approve
-POST /api/v1/college-registrations/{id}/reject
+```sql
+active_college_admin_college_id BIGINT GENERATED ALWAYS AS (
+    CASE WHEN role = 'COLLEGE_ADMIN' AND status = 'ACTIVE' THEN college_id ELSE NULL END
+) VIRTUAL,
+CONSTRAINT uk_users_single_active_college_admin UNIQUE (active_college_admin_college_id)
 ```
 
-Conceptual approval flow:
+- `VIRTUAL` avoids clustered-row storage duplication while InnoDB enforces atomic B-tree uniqueness across all instances (allowing multiple `NULL` rows for inactive/replaced admins and `SUPER_ADMIN`).
+- Enabling Post-MVP multiple active `COLLEGE_ADMIN` accounts requires only dropping this index and generated column in a single Flyway migration.
+- Duplicate-key violations map to HTTP `409 Conflict`.
 
-```text
-SUPER_ADMIN
-    │
-    ▼ Reviews application in /admin/registrations
-Approves application (POST .../{id}/approve)
-    │
-    ▼ Transactional Execution:
-1. Application status transitions PENDING → APPROVED
-2. New tenant record created in colleges table (unique college_id assigned)
-3. Cryptographically random, time-limited activation token generated
-4. Email notification with activation link dispatched to proposed administrator
-5. Audit event COLLEGE_REGISTRATION_APPROVED recorded
-```
+### 36.2 Releasable Email & College Code Constraints (`ADR-09`, `ADR-13`)
+- **`users.active_email` (`VIRTUAL` + `UNIQUE`):** `CASE WHEN email_released = FALSE THEN email ELSE NULL END`. `email_released` is set `TRUE` **only** upon permanent rejection (`ADR-09`) or 7-day abandoned-unverified cleanup (`ADR-13`) — **never** for `ACTIVE`, `SUSPENDED`, or replaced/inactive approved-college accounts.
+- **`colleges.active_college_code` (`VIRTUAL` + `UNIQUE`):** `CASE WHEN permanently_rejected = FALSE AND archived_at IS NULL THEN code ELSE NULL END`. Releases squatted codes on permanent rejection or 7-day abandoned cleanup while keeping all historical rows intact.
 
-Conceptual rejection flow:
-
-```text
-SUPER_ADMIN
-    │
-    ▼ Rejects application (POST .../{id}/reject) with mandatory reason
-1. Application status transitions PENDING → REJECTED
-2. Rejection reason recorded in registration record
-3. Audit event COLLEGE_REGISTRATION_REJECTED recorded
-4. Zero tenant or user records created; institution has no access
-```
-
-`SUPER_ADMIN` does not manually create user accounts, set passwords, or manage credentials for individual colleges.
+### 36.3 Versioned Registration & Immutable Document Schema (`ADR-07`, `ADR-08`, `ADR-11`)
+- **`colleges`:** `id`, `code`, `active_college_code` (`VIRTUAL` + `UNIQUE`), `approval_status`, `status`, `current_registration_id` (FK to active revision), `resubmission_count` (`INT DEFAULT 0`), `action_required_count` (`INT DEFAULT 0`), `permanently_rejected` (`BOOLEAN DEFAULT FALSE`), `archived_at` (`TIMESTAMP NULL`), `version` (`BIGINT` JPA `@Version`).
+- **`college_registrations`:** `id`, `college_id` (`NOT NULL` FK), `version_number` (`INT NOT NULL`), `status` (`PENDING`, `ACTION_REQUIRED`, `APPROVED`, `REJECTED`), institution snapshot fields, `submitted_for_review_at` (`TIMESTAMP NULL` — pre-queue gate), `reviewer_user_id`, `review_notes`, `rejection_reason`, `is_permanent_rejection`, `reviewed_at`, `created_at`.
+  - **Constraint:** `UNIQUE (college_id, version_number)` prevents duplicate revision numbers under concurrent resubmissions.
+- **`college_registration_documents`:** `id`, `college_id` (FK for tenant-scoped queries), `registration_id` (FK to immutable revision), `document_category` (`UNIVERSITY_AFFILIATION_CERTIFICATE`, `AUTHORIZED_SIGNATORY_ID`, `INSTITUTION_REGISTRATION_PROOF`, `ADDITIONAL_SUPPORTING_DOCUMENT`), `replaces_document_id` (nullable FK for lineage), `original_filename`, `storage_key` (random UUID), `mime_type`, `file_size_bytes`, `sha256_checksum`, `uploaded_by_user_id`, `uploaded_at`.
 
 ---
 
-# 38. College Administrator Account Activation API
+# 37. Super Admin Review (`expectedVersion`), Permanent Rejection & Transactional Outbox (`ADR-07`, `ADR-09`, `ADR-15`, `ADR-18`)
 
-Conceptual activation endpoint:
+`SUPER_ADMIN` review endpoints (queue displays **only** verified, submitted applications where `submitted_for_review_at IS NOT NULL`):
 
 ```text
-POST /api/v1/auth/activate-account
+GET  /api/v1/college-registrations                       (Paginated verified queue; filter by status)
+GET  /api/v1/college-registrations/{id}                  (Application revisions, history & document metadata)
+GET  /api/v1/college-registrations/{id}/documents/{docId}(Safely streamed document: Content-Disposition: attachment, nosniff)
+POST /api/v1/college-registrations/{id}/approve          (Body: { "expectedVersion": N })
+POST /api/v1/college-registrations/{id}/request-action   (Body: { "expectedVersion": N, "notes": "..." })
+POST /api/v1/college-registrations/{id}/reject           (Body: { "expectedVersion": N, "reason": "...", "permanent": false })
 ```
 
-The designated administrator receives an invitation link with a secure token:
-`https://app.acadlytic.com/activate-account?token=xyz...`
+### Optimistic Review Concurrency (`expectedVersion`):
+Inside every review transaction, backend locks the parent `colleges` row (`SELECT ... FOR UPDATE`), loads `current_registration_id`, and verifies `current.id == targetId`, `current.version_number == expectedVersion`, `current.submitted_for_review_at != NULL`, and `current.status == PENDING`. Any mismatch (superseded revision or concurrent decision) returns **`409 Conflict` (`REGISTRATION_VERSION_CONFLICT`)**.
 
-Example request payload:
+### Approval Transaction & Transactional Outbox (`ADR-15`, `ADR-18`):
+1. **Atomic DB Transaction:** Verify `expectedVersion` &rarr; transition application `PENDING → APPROVED` (reviewer + timestamp) &rarr; update `colleges` to `approval_status = APPROVED`, `status = ACTIVE` (preserving existing `ACTIVE` `COLLEGE_ADMIN` `user_id` & `college_id`; zero second account/dashboard created) &rarr; insert `COLLEGE_REGISTRATION_APPROVED` audit event &rarr; insert email job into `outbox_emails` &rarr; commit.
+2. **Transactional Outbox Worker (Outside DB Transactions):**
+   - Table `outbox_emails`: `id`, `event_type`, `recipient_email`, `subject`, `template_key`, `payload_json`, `status` (`PENDING`, `PROCESSING`, `SENT`, `FAILED_PERMANENT`), `attempt_count`, `max_attempts` (`5`), `next_attempt_at`, `last_error`, `created_at`, `sent_at`.
+   - Spring `@Scheduled` poller every **10 seconds** claims batches via MySQL 8 **`SELECT ... FOR UPDATE SKIP LOCKED`**, commits `status = PROCESSING`, and invokes `EmailSender` **outside any DB transaction**.
+   - Failures retry with exponential backoff (`1m → 5m → 15m → 60m → 180m`) up to **5 attempts** before `FAILED_PERMANENT` alert; stale `PROCESSING` rows (> 5 min) are automatically recovered.
+   - Upon `SENT` (or `FAILED_PERMANENT`), raw token values inside `payload_json` are **scrubbed/redacted**.
+   - **Email Provider Abstraction (`ADR-15`):** `EmailSender` port uses `JavaMailSender` with **Mailpit** (`localhost:1025`) in `dev` and environment-configured **SMTP/TLS** in `prod` (exact commercial vendor `DEFERRED` to Phase 14 — `ADR-15b`).
 
-```json
-{
-  "token": "4f9b2c8a1e...",
-  "password": "SecurePassword123!"
-}
+### Permanent Rejection (`ADR-09`):
+Triggered when `SUPER_ADMIN` sends `"permanent": true` OR rejects revision #4 (`resubmission_count == 3`):
+- Sets `colleges.approval_status = REJECTED`, `permanently_rejected = true`, `colleges.status = INACTIVE`.
+- Sets `users.status = INACTIVE`, `users.email_released = true` (automatically releasing `active_college_code`, `active_email`, and `active_college_admin_college_id` via `VIRTUAL` generated columns).
+- Immediately **revokes ALL active sessions** of that `COLLEGE_ADMIN` via Spring Session JDBC.
+- **Permanently retains** all `colleges`, `college_registrations`, `college_registration_documents`, and audit rows.
+
+---
+
+# 38. Restricted Onboarding Dashboard, Document Storage, Cleanup & Feature Unlocking (`ADR-08`, `ADR-11`, `ADR-13`, `ADR-16`)
+
+### Restricted Onboarding Endpoints:
+```text
+POST /api/v1/auth/verify-email                               (48h single-use DB-hashed token -> sets email_verified_at)
+POST /api/v1/auth/resend-verification                        (Rate-limited resend of 48h verification token)
+GET  /api/v1/college-registrations/my-application            (Status, version history, feedback, remaining resubmissions)
+GET  /api/v1/college-registrations/my-application/documents  (List own documents across versions)
+GET  /api/v1/college-registrations/my-application/documents/{docId} (Tenant-scoped stream with safe headers)
+POST /api/v1/college-registrations/my-application/documents  (Upload immutable doc — ONLY during pre-submission, ACTION_REQUIRED, or non-permanent REJECTED; blocked while frozen PENDING)
+POST /api/v1/college-registrations/my-application/submit     (Pre-submission -> frozen PENDING; requires email_verified_at + required doc categories)
+POST /api/v1/college-registrations/my-application/resubmit   (ACTION_REQUIRED cap 10 or non-permanent REJECTED max 3 -> immutable v+1 in frozen PENDING)
 ```
 
-The backend must:
-1. Validate token existence, expiration, and single-use status.
-2. Verify that the associated registration application is in `APPROVED` status.
-3. Verify that the approved college tenant exists and is in `ACTIVE` status.
-4. Validate that the password meets institutional complexity rules.
-5. Hash the password with a strong hashing algorithm (BCrypt/Argon2).
-6. Atomically insert the new user into the `users` table:
-   - `email`: Normalized administrator email from registration
-   - `password_hash`: Secure hash
-   - `role`: `COLLEGE_ADMIN`
-   - `college_id`: Approved tenant `college_id`
-   - `status`: `ACTIVE`
-7. Mark the activation token as used/invalidated.
-8. Record the `COLLEGE_ADMIN_ACTIVATED` audit event.
-9. Return a success response directing the administrator to login.
+### Document Validation & Storage Abstraction (`ADR-11`, `ADR-16`):
+- **Limits & Categories:** Max **`10 MB`** per file, max **`5` documents per revision**, PDF/JPEG/PNG only (validated by both MIME type and binary magic-byte file signature). Required before submission: `UNIVERSITY_AFFILIATION_CERTIFICATE` and `AUTHORIZED_SIGNATORY_ID`. Optional: `INSTITUTION_REGISTRATION_PROOF`, `ADDITIONAL_SUPPORTING_DOCUMENT`.
+- **Immutability:** Every upload inserts a new immutable row (replacements link optional `replaces_document_id`); prior revisions' documents are never modified or deleted. Automated AV/malware scanning is `DEFERRED` to Post-MVP (`ADR-11b`).
+- **Storage (`DocumentStorageService`):** Random UUID `storage_key`s (internal paths/bucket URLs never exposed). Dev uses `LocalFileSystemDocumentStorage` outside the webroot (`${APP_STORAGE_LOCAL_DIR}`); Prod uses **private S3-compatible object storage** (exact bucket provider `DEFERRED` to Phase 14 — `ADR-16b`; backed-up local persistent volume acceptable for single-node pilot). All downloads stream through tenant-authorized backend endpoints with `Content-Disposition: attachment` and `X-Content-Type-Options: nosniff`.
+
+### Automated 7-Day Abandoned Registration Cleanup (`ADR-13`):
+- Daily `@Scheduled` job soft-archives registrations where `approval_status = 'PENDING' AND status = 'PENDING_VERIFICATION' AND archived_at IS NULL AND submitted_for_review_at IS NULL AND users.email_verified_at IS NULL AND created_at < NOW() - INTERVAL 7 DAY`.
+- Sets `colleges.archived_at = NOW()`, `colleges.status = INACTIVE`, `users.status = INACTIVE`, `users.email_released = true`, revokes active sessions, invalidates unused verification tokens, deletes unsubmitted draft files, and logs `ABANDONED_REGISTRATION_ARCHIVED`. Never touches verified, submitted, approved, or reviewed records.
+
+### Feature Unlocking & Suspended College Blocking (`ADR-10`):
+- Upon approval, live checks on every academic management endpoint immediately permit access (`managementUnlocked: true` via `GET /api/v1/auth/me`); no second account or dashboard is created.
+- If an approved college is later `SUSPENDED` or `INACTIVE`, **all active sessions are revoked immediately** and login attempts return `403 COLLEGE_SUSPENDED` / `COLLEGE_INACTIVE`.
 
 ---
 
@@ -976,8 +991,6 @@ Stored in students table
 In Post-MVP phases:
 - Existing student records will be linked to authentication credentials via a dedicated student provisioning workflow.
 - Authentication identity (`users`) and academic identity (`students`) will remain distinct, referenced via foreign keys.
-Student Profile
-```
 
 This separation is important because authentication identity and academic identity are different concepts.
 
@@ -1009,292 +1022,166 @@ The exact relationship must be defined in the Student Management implementation.
 
 ---
 
-# 41. Account Activation
+# 41. Email Verification & Future Admin Replacement Tokens
 
-Provisioned accounts may require activation or password setup.
-
-Possible flow:
-
-```text
-Account Created
-      ↓
-Pending Activation
-      ↓
-Password Setup
-      ↓
-Active
-```
-
-The exact activation mechanism is an unresolved implementation decision.
+- **MVP Email Verification (`ADR-08`):** Newly registered `COLLEGE_ADMIN` accounts receive a single-use, **DB-hashed token with `48-hour` expiry** dispatched via `outbox_emails`. Verification (`POST /api/v1/auth/verify-email`) sets `users.email_verified_at` and is required before submitting the application into the `SUPER_ADMIN` review queue.
+- **Post-Approval Activation Not Needed:** Because `COLLEGE_ADMIN` already sets credentials at registration (`users.status = ACTIVE`), approval does not issue a second account-activation token. Token-based password setup applies only to future admin replacement or Post-MVP staff/student provisioning.
 
 ---
 
-# 42. Password Setup
+# 42. Email Change & Re-Verification (`ADR-14`)
 
-If accounts are provisioned without an initial password, the system should provide a secure password setup mechanism.
-
-The mechanism must use:
-
-- time-limited setup credentials/token where applicable
-- secure transport
-- one-time or invalidated setup links
-- expiration
-- audit/security events
-
-The exact implementation remains to be finalized.
+- `POST /api/v1/auth/change-email`: Requires current password verification + checks `active_email` uniqueness (`409 Conflict` if taken) + stores normalized address in `users.pending_email` (old `users.email` remains valid for login until confirmed) + invalidates prior unused email-change tokens + queues a single-use DB-hashed `48-hour` token to the new email and a security alert to the old email via `outbox_emails`.
+- `POST /api/v1/auth/verify-email-change`: Atomically validates token, re-checks `active_email`, swaps `users.email = pending_email`, clears `pending_email`, sets `email_verified_at = NOW()`, marks token used, **revokes all other active sessions + rotates current session ID**, and records `EMAIL_CHANGED`.
+- Unverified registrants (`email_verified_at IS NULL`) may correct a registration email typo (requiring current password), invalidating previous verification tokens and dispatching a fresh 48-hour token.
 
 ---
 
 # 43. Password Change
 
-Authenticated users should be able to change their password.
-
-Conceptual endpoint:
+Authenticated users change their password via:
 
 ```text
-PUT /api/v1/me/password
+POST /api/v1/auth/change-password
 ```
 
-Request may include:
-
-```text
-{
-  "currentPassword": "...",
-  "newPassword": "..."
-}
-```
-
-The backend must:
-
-- authenticate the user
-- verify current password where required
-- validate the new password
-- securely hash the new password
-- invalidate relevant sessions/tokens if required
-- record a security event
+Requires valid CSRF (`X-XSRF-TOKEN`), `currentPassword`, and `newPassword`. The backend must verify `currentPassword`, enforce the approved password policy (`12–128` chars, reject common/compromised passwords), hash with `BCrypt(12)`, **revoke all other active sessions + rotate current session ID** (`ADR-05`), and record `PASSWORD_CHANGED`.
 
 ---
 
 # 44. Password Reset
 
-The MVP should support password reset if included in the authentication specification.
+Endpoints: `POST /api/v1/auth/forgot-password` and `POST /api/v1/auth/reset-password` (CSRF enforced).
 
-Conceptual flow:
-
-```text
-Forgot Password
-      ↓
-Submit Email
-      ↓
-Create Secure Reset Token
-      ↓
-Deliver Reset Mechanism
-      ↓
-Validate Token
-      ↓
-Set New Password
-      ↓
-Invalidate Token
-      ↓
-Complete
-```
-
-The system must not reveal whether an arbitrary email exists if that would create account enumeration risk.
+- Generates a cryptographically random, single-use, **DB-hashed token with `1-hour` expiry**, invalidates prior unused reset tokens, and dispatches via `outbox_emails`.
+- On `reset-password`, validates token + password policy, hashes with `BCrypt(12)`, marks token used, **revokes ALL active sessions** of the user (`ADR-05`), and records `PASSWORD_RESET_COMPLETED`.
+- Always returns a generic `200 OK` on `forgot-password` to prevent account enumeration.
 
 ---
 
 # 45. Forgot Password Response
 
-A secure forgot-password response should avoid confirming account existence.
-
-For example, the frontend can display a generic message indicating that the request was received.
-
-The exact wording is a UX decision.
+A secure forgot-password response avoids confirming account existence and returns a generic success message.
 
 ---
 
-# 46. Password Policy
+# 46. Password Policy (Finalized)
 
-The project must define a password policy.
-
-At minimum it should establish:
-
-- minimum length
-- maximum practical length
-- allowed characters
-- common-password handling where appropriate
-- password confirmation
-- password reuse policy if required
-
-Avoid overly restrictive rules that encourage users to choose weak predictable passwords.
-
-The exact policy remains an implementation decision.
+- **Minimum length:** `12` characters.
+- **Maximum length:** `128` characters.
+- **Common/Compromised Password Check:** Reject common and known-breached passwords (validated against a curated denylist).
+- **Hashing:** `BCryptPasswordEncoder(12)` (**work factor `12`**).
 
 ---
 
-# 47. Failed Login Protection
+# 47. Failed Login Protection (Finalized)
 
-The system should protect against repeated failed authentication attempts.
-
-Possible controls:
-
-- rate limiting
-- progressive delays
-- temporary account lock
-- IP-based controls where appropriate
-- security event logging
-
-The exact mechanism must be selected based on deployment and threat model.
+- **Lockout Policy:** **`5` consecutive failed login attempts** trigger a **`15-minute` temporary account lockout** (`locked_until = now() + 15m`), returning `429 Too Many Requests` (`AUTH_ACCOUNT_LOCKED`) and recording `ACCOUNT_LOCKED`.
+- Successful login resets `failed_login_attempts = 0` and clears `locked_until`.
 
 ---
 
 # 48. Failed Login Event
 
-A failed login attempt may generate a security event containing information such as:
-
-```text
-event_type
-timestamp
-identifier
-source/request context
-reason category
-```
-
-Do not store plaintext passwords.
-
-Do not log submitted passwords.
+A failed login attempt generates a security event (`event_type`, `timestamp`, normalized email identifier, client IP via trusted proxy config, reason category). Never log passwords, hashes, session IDs, reset tokens, or verification tokens.
 
 ---
 
-# 49. Account Status
+# 49. Account & College Status Checks at Login
 
-Account status must be checked during authentication.
-
-Conceptually:
-
-```text
-User Found
- ↓
-Password Correct?
- ↓
-Account Active?
- ↓
-Authorized to Login?
-```
-
-Inactive/suspended users must not authenticate successfully.
+Every login verifies:
+1. User exists (`active_email`) and not locked out.
+2. Role in (`SUPER_ADMIN`, `COLLEGE_ADMIN`).
+3. `users.status == ACTIVE` and BCrypt(12) password matches.
+4. For `COLLEGE_ADMIN`: if `colleges.permanently_rejected == true` &rarr; `403 REGISTRATION_PERMANENTLY_REJECTED`; if `colleges.status == SUSPENDED` or `INACTIVE` &rarr; `403 COLLEGE_SUSPENDED` / `COLLEGE_INACTIVE` (`ADR-10`).
 
 ---
 
-# 50. Suspended Accounts
+# 50. Suspended Accounts & Suspended Colleges (`ADR-10`)
 
-A suspended account should receive a controlled authentication failure.
-
-The system should not expose unnecessary administrative details.
-
-The frontend should display a safe, understandable message.
+- Suspending a user or suspending/deactivating an approved college immediately **revokes ALL active sessions** via Spring Session JDBC (`FindByIndexNameSessionRepository`).
+- Suspended/inactive colleges cannot log in (`403 COLLEGE_SUSPENDED` / `COLLEGE_INACTIVE` with safe support-contact message, clearly distinguished from `PENDING` registration).
 
 ---
 
-# 51. Session Expiration
+# 51. Session Expiration (`ADR-01`)
 
-The frontend must handle authentication expiration.
-
-Possible behavior:
-
-```text
-API Request
- ↓
-401 Unauthorized
- ↓
-Authentication State Cleared
- ↓
-Redirect to Login
-```
-
-The exact behavior depends on the selected authentication mechanism.
+Spring Session JDBC enforces **`30-minute` idle timeout** and **`12-hour` absolute lifetime**. Expired/revoked sessions return `401 Unauthorized`; the frontend clears auth state and redirects to `/auth/login`.
 
 ---
 
-# 52. Concurrent Sessions
+# 52. Concurrent Sessions (`ADR-01`, `ADR-05`)
 
-The project should define whether users may have:
-
-- multiple active sessions
-- one active session
-- controlled session limits
-
-This is an unresolved implementation decision.
-
-If session management supports revocation, security-sensitive events should be auditable.
+Multiple concurrent device sessions per user are **allowed** and indexed by `PRINCIPAL_NAME` in Spring Session JDBC so individual or all sessions can be revoked instantaneously per `ADR-05`.
 
 ---
 
 # 53. Security Headers
 
-The backend security layer should configure appropriate HTTP security headers.
-
-The exact configuration depends on:
-
-- deployment
-- frontend hosting
-- CSP strategy
-- authentication mechanism
-
-Headers should be reviewed during the security phase.
+Backend configures standard HTTP security headers (`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Strict-Transport-Security` in prod, safe `Content-Disposition: attachment` on document downloads).
 
 ---
 
-# 54. CORS
+# 54. CORS & Vite Development Proxy (`ADR-04`)
 
-Development may require:
+- **Local Development:** Prefer the **Vite development proxy** (`/api` &rarr; `http://localhost:8080`) so frontend and backend share the same origin (`http://localhost:5173`) for seamless `ACADLYTIC_SID` and `XSRF-TOKEN` cookies. Backend CORS also permits `http://localhost:5173` with `allow-credentials: true` and `X-XSRF-TOKEN` included in `allowed-headers`.
+- **Production:** Serve SPA and `/api/v1/*` behind the same origin (reverse proxy) to satisfy `__Host-ACADLYTIC_SID` requirements; restrict CORS strictly to trusted origins.
+
+---
+
+# 55. CSRF Protection (Finalized — `ADR-04`)
+
+Because authentication uses stateful HTTP-only cookies, Spring Security 6 SPA CSRF protection is **mandatory** on `POST /api/v1/auth/login`, `POST /api/v1/auth/logout`, `POST /api/v1/college-registrations`, and all state-changing requests (`CookieCsrfTokenRepository.withHttpOnlyFalse()`, `SpaCsrfTokenRequestHandler`, `GET /api/v1/auth/csrf`, `CsrfCookieFilter`, `403 CSRF_TOKEN_INVALID`).
+
+---
+
+# 56. Authentication & Onboarding API Structure (Separated by Access Level)
+
+Finalized MVP API structure explicitly separated into four access tiers:
 
 ```text
-Frontend
-http://localhost:5173
+# 1. Public Endpoints (Unauthenticated; CSRF enforced on all state-changing POST calls)
+GET  /api/v1/auth/csrf                          (204 No Content; initializes XSRF-TOKEN cookie)
+POST /api/v1/college-registrations              (IP rate-limited 5/hr + configurable prod CAPTCHA; no multipart docs)
+POST /api/v1/auth/login                         (Stateful HTTP-only session cookie issued)
+POST /api/v1/auth/forgot-password               (1h single-use DB-hashed token via outbox; generic 200)
+POST /api/v1/auth/reset-password                (Revokes ALL sessions)
+POST /api/v1/auth/verify-email                  (48h single-use DB-hashed token -> sets email_verified_at)
+POST /api/v1/auth/verify-email-change           (48h single-use DB-hashed token -> swaps pending_email)
 
-Backend
-http://localhost:8080
+# 2. Restricted Onboarding Dashboard Endpoints (Authenticated COLLEGE_ADMIN while not permanently rejected/suspended)
+POST /api/v1/auth/logout                        (Revokes current session only)
+GET  /api/v1/auth/me                            (Returns authoritative user + emailVerified + submittedForReview + collegeApprovalStatus + collegeStatus + managementUnlocked)
+POST /api/v1/auth/change-password               (Revokes all OTHER sessions + rotates current session ID)
+POST /api/v1/auth/change-email                  (Current password + pending_email + 48h token via outbox)
+POST /api/v1/auth/resend-verification           (Rate-limited resend of 48h verification token)
+GET  /api/v1/college-registrations/my-application
+GET  /api/v1/college-registrations/my-application/documents
+GET  /api/v1/college-registrations/my-application/documents/{docId}  (Tenant-scoped stream + safe download headers)
+POST /api/v1/college-registrations/my-application/documents          (Allowed ONLY during pre-submission, ACTION_REQUIRED, or non-permanent REJECTED; frozen while PENDING)
+POST /api/v1/college-registrations/my-application/submit             (Pre-submission -> frozen PENDING; requires emailVerified + required docs)
+POST /api/v1/college-registrations/my-application/resubmit           (ACTION_REQUIRED cap 10 or non-permanent REJECTED max 3 -> immutable v+1 in frozen PENDING)
+
+# 3. Protected Academic Management Endpoints (STRICTLY requires COLLEGE_ADMIN + APPROVED + ACTIVE; 403 otherwise)
+GET/PUT /api/v1/colleges/my-college
+/api/v1/academic/**
+/api/v1/students/**
+/api/v1/result-imports/**
+/api/v1/backlogs/**
+/api/v1/students/{id}/passport
+/api/v1/analytics/**
+
+# 4. SUPER_ADMIN Platform Endpoints (STRICTLY requires SUPER_ADMIN; review mutations require expectedVersion)
+GET  /api/v1/college-registrations                       (Verified queue: submitted_for_review_at IS NOT NULL)
+GET  /api/v1/college-registrations/{id}
+GET  /api/v1/college-registrations/{id}/documents/{docId}(Safely streamed document)
+POST /api/v1/college-registrations/{id}/approve          (expectedVersion required; 409 on stale)
+POST /api/v1/college-registrations/{id}/request-action   (expectedVersion + mandatory notes; safety cap 10)
+POST /api/v1/college-registrations/{id}/reject           (expectedVersion + mandatory reason + optional permanent flag)
+/api/v1/colleges/**
 ```
 
-CORS should explicitly permit the required development origin.
-
-Production CORS must be restricted to trusted origins.
-
-Never use unrestricted wildcard configuration in production where credentials/security require tighter control.
-
----
-
-# 55. CSRF Considerations
-
-CSRF protection requirements depend on the selected authentication mechanism.
-
-If authentication relies on browser cookies, CSRF protection must be explicitly evaluated and implemented appropriately.
-
-If a different mechanism is selected, its corresponding browser security model must be reviewed.
-
-This decision must not be left implicit.
-
----
-
-# 56. Authentication API Structure
-
-Conceptual API structure:
-
-```text
-POST /api/v1/auth/login
-POST /api/v1/auth/logout
-POST /api/v1/auth/forgot-password
-POST /api/v1/auth/reset-password
-
-GET  /api/v1/me
-PUT  /api/v1/me/profile
-PUT  /api/v1/me/password
-
-POST /api/v1/users
-```
-
-Additional endpoints may be introduced where required by account provisioning or administration.
+Direct user creation via `POST /api/v1/users` is **not** part of the MVP (deferred to Post-MVP delegated provisioning of `ACADEMIC_STAFF` and `STUDENT` accounts).
 
 ---
 
@@ -1325,31 +1212,30 @@ Controllers should not contain:
 
 The authentication service should coordinate:
 
-- credential validation
-- account status
-- authentication
-- session/token establishment
-- current-user context
-- security events
+- credential validation (BCrypt work factor 12)
+- brute-force lockout (`5` failures &rarr; `15` min)
+- user & college status validation (blocking suspended/inactive/permanently rejected colleges with `403`)
+- Spring Session JDBC establishment, session ID rotation, and single/bulk session revocation
+- current-user and authoritative college approval context (`/api/v1/auth/me`)
+- security and audit events
 
 The exact service structure should follow the backend foundation.
 
 ---
 
-# 59. User Provisioning Service
+# 59. Account Onboarding & Provisioning Service
 
-Account provisioning should be implemented as an application/domain operation.
+Account establishment and verification lifecycle transitions should be implemented as dedicated application/domain operations.
 
-Responsibilities include:
+MVP responsibilities include:
 
-- validate creator
-- validate target role
-- validate tenant
-- validate email
-- create user
-- create associated profile where required
-- establish activation state
-- record audit/security event
+- public college registration intake (rate-limited `5/IP/hr` + configurable prod CAPTCHA): validate institution data, password policy (`12–128`, reject common/compromised), `active_email` & `active_college_code` uniqueness; atomically create restricted `colleges` context (`PENDING`/`PENDING_VERIFICATION`), `v1` application (`submitted_for_review_at = NULL`), `ACTIVE` `COLLEGE_ADMIN` user (`email_verified_at = NULL`, guarded by `VIRTUAL` unique index), 48h hashed token, and `outbox_emails` job
+- restricted onboarding operations: email verification (`48h` token), authenticated immutable document uploads (`DocumentStorageService`, PDF/JPEG/PNG, &le;10 MB, &le;5/rev, MIME + magic-byte check), Submit for Review into frozen `PENDING`, and bounded versioned resubmission (`ACTION_REQUIRED` cap 10 / `REJECTED` max 3) preserving all prior versions, documents, and decisions
+- `SUPER_ADMIN` approval: lock `colleges` row, verify `expectedVersion` (`409` on stale), mark `APPROVED`, transition `colleges` to `APPROVED` & `ACTIVE` (unlocking existing `ACTIVE` `COLLEGE_ADMIN` dashboard), record audit + `outbox_emails` (dispatched outside DB tx via `SKIP LOCKED` poller)
+- `SUPER_ADMIN` action request, non-permanent rejection, and permanent rejection (deactivating college & user, revoking all sessions, releasing `active_college_code`/`active_email`/admin slot, retaining full audit history)
+- 7-day automated soft-archive cleanup of abandoned unverified + unsubmitted registrations (`ADR-13`)
+
+Post-MVP delegated provisioning (`ACADEMIC_STAFF`, `STUDENT`) will extend this service with creator authorization and student record linking.
 
 ---
 
@@ -1357,17 +1243,22 @@ Responsibilities include:
 
 Authorization should provide reusable checks where appropriate.
 
-Potential concepts:
+MVP checks:
 
 ```text
-canCreateUser()
-canManageUser()
+canReviewCollegeRegistration()
+canApproveCollegeRegistration()
+canAccessRestrictedOnboardingDashboard()
+requireApprovedAndActiveCollege()       // 403 COLLEGE_NOT_APPROVED if unapproved; 403 COLLEGE_SUSPENDED / INACTIVE if suspended/inactive
+canManageCollege()
 canViewStudent()
 canProcessResults()
 canAccessCollege()
 ```
 
-Avoid scattering role strings throughout controllers.
+Post-MVP checks (e.g., `canCreateUser()`, `canManageUser()`) will be added when `ACADEMIC_STAFF` and `STUDENT` account provisioning are introduced.
+
+Avoid scattering role strings or approval-status checks throughout controllers.
 
 ---
 
@@ -1493,12 +1384,12 @@ Conceptually:
 ```text
 useCurrentUser()
        ↓
-GET /api/v1/me
+GET /api/v1/auth/me
        ↓
 TanStack Query
 ```
 
-The application should use this state to determine authenticated UI.
+The application should use this state to determine authenticated UI and observe live approval-state transitions.
 
 ---
 
@@ -1593,19 +1484,21 @@ Important onboarding, authentication, and administrative events must be auditabl
 Core audit events:
 
 ```text
-COLLEGE_REGISTRATION_SUBMITTED   (Public application intake)
-COLLEGE_REGISTRATION_APPROVED    (SUPER_ADMIN approval; tenant created)
-COLLEGE_REGISTRATION_REJECTED    (SUPER_ADMIN rejection; reason logged)
-COLLEGE_ADMIN_ACTIVATED          (Administrator completes activation with token)
-LOGIN_SUCCESS                    (Successful authentication)
-LOGIN_FAILURE                    (Invalid credentials or blocked status)
-ACCOUNT_LOCKED                   (Brute-force lockout triggered)
-LOGOUT                           (Active session/token terminated)
-PASSWORD_CHANGED                 (Authenticated password change)
-PASSWORD_RESET_REQUESTED         (Password reset token issued)
-PASSWORD_RESET_COMPLETED         (Password reset token redeemed)
-ACCOUNT_SUSPENDED                (Account locked by administrator)
-ACCOUNT_REACTIVATED              (Account restored by administrator)
+COLLEGE_REGISTRATION_SUBMITTED       (Public registration + restricted context & proposed admin created)
+COLLEGE_REGISTRATION_DOC_UPLOADED    (Verification document uploaded/updated on restricted dashboard)
+COLLEGE_REGISTRATION_ACTION_REQUIRED (SUPER_ADMIN requests corrections/documents; mandatory notes)
+COLLEGE_REGISTRATION_RESUBMITTED     (College submits revised application version v+1 -> PENDING)
+COLLEGE_REGISTRATION_REJECTED        (SUPER_ADMIN rejection; mandatory reason logged)
+COLLEGE_REGISTRATION_APPROVED        (SUPER_ADMIN approval; tenant & existing COLLEGE_ADMIN activated)
+LOGIN_SUCCESS                        (Successful authentication)
+LOGIN_FAILURE                        (Invalid credentials or blocked status)
+ACCOUNT_LOCKED                       (Brute-force lockout triggered)
+LOGOUT                               (Active session/token terminated)
+PASSWORD_CHANGED                     (Authenticated password change)
+PASSWORD_RESET_REQUESTED             (Password reset token issued)
+PASSWORD_RESET_COMPLETED             (Password reset token redeemed)
+ACCOUNT_SUSPENDED                    (Account locked by administrator)
+ACCOUNT_REACTIVATED                  (Account restored by administrator)
 ```
 
 The final event taxonomy must be standardized across backend modules.
@@ -1630,9 +1523,9 @@ Examples:
 ```text
 SUPER_ADMIN
     ↓
-Approved College Application (SXIE)
+Approved College Application (SXIE, v2)
     ↓
-Generated college_id: 12
+Activated college_id: 12 & existing COLLEGE_ADMIN user_id: 45
     ↓
 Timestamp: 2026-10-15T10:30:00Z
     ↓
@@ -1642,13 +1535,13 @@ Result: SUCCESS
 and:
 
 ```text
-Proposed Administrator
+COLLEGE_ADMIN (user_id: 45, college_id: 12)
     ↓
-Activated COLLEGE_ADMIN Account
+Resubmitted Revised College Application (v1 ACTION_REQUIRED → v2 PENDING)
     ↓
-Target college_id: 12
+Preserved prior version v1, documents & reviewer feedback
     ↓
-Timestamp: 2026-10-15T11:00:00Z
+Timestamp: 2026-10-15T09:45:00Z
     ↓
 Result: SUCCESS
 ```
@@ -1666,15 +1559,18 @@ Security-sensitive activity:
 - failed login attempts
 - brute-force lockout triggered
 - password reset requested/completed
-- activation token anomaly or replay attempt
+- blocked management API access attempt by unapproved college (`403 COLLEGE_NOT_APPROVED`)
+- verification/reset token anomaly or replay attempt
 
 ### Audit Event
 
 Administrative and onboarding lifecycle activity:
 
-- college registration submitted
-- college registration approved/rejected
-- college administrator account activated
+- college registration submitted (`v1`)
+- verification document uploaded
+- college registration marked `ACTION_REQUIRED` or `REJECTED` (with mandatory notes/reason)
+- college application resubmitted (`v+1`)
+- college registration approved (tenant & existing `COLLEGE_ADMIN` activated)
 - college tenant status changed (activated/suspended)
 - role changed (Post-MVP)
 
@@ -1701,145 +1597,97 @@ Avoid logging unnecessary student academic information during authentication flo
 
 # 76. Onboarding & Account Validation Pipeline
 
-### 1. Application Submission Validation:
+### 1. Public College Registration Validation (Atomic DB Transaction):
 ```text
-Validate Form Fields
+Enforce CSRF + IP Rate Limit (5/IP/hr) + Configurable Prod CAPTCHA
        ↓
-Normalize Email (lowercase, trim)
+Validate Institution & Proposed Admin Fields (No Public Multipart Docs)
        ↓
-Verify Email Uniqueness (no duplicate active user or pending application)
+Validate Password Policy (12–128 chars; reject common/compromised passwords)
        ↓
-Verify College Code Uniqueness
+Normalize Email & Code; Verify active_email & active_college_code Uniqueness
        ↓
-Persist Application (status = PENDING)
+Reject/Strip Untrusted role, college_id, approval_status Fields
        ↓
-Audit Event (COLLEGE_REGISTRATION_SUBMITTED)
+Hash Password (BCrypt work factor 12)
+       ↓
+Create Restricted College Context (colleges: PENDING / PENDING_VERIFICATION)
+       ↓
+Persist Application v1 (college_registrations: PENDING, submitted_for_review_at = NULL)
+       ↓
+Create Proposed COLLEGE_ADMIN User (ACTIVE, email_verified_at = NULL; guarded by VIRTUAL unique index)
+       ↓
+Create 48h DB-Hashed Email Verification Token + Insert outbox_emails + Audit Event
 ```
 
-### 2. Approval Validation:
+### 2. Pre-Submission Submit & Resubmission Validation:
 ```text
-Authenticate Actor (must be SUPER_ADMIN)
+Authenticate COLLEGE_ADMIN (Spring Session JDBC) & Derive college_id Server-Side
        ↓
-Verify Application Exists & status == PENDING
-       ↓
-Create College Tenant in colleges table (assign college_id)
-       ↓
-Update Registration status = APPROVED
-       ↓
-Generate Cryptographically Secure Activation Token
-       ↓
-Dispatch Activation Invitation Email
-       ↓
-Audit Event (COLLEGE_REGISTRATION_APPROVED)
+- Initial Submit: Verify email_verified_at != NULL + Required Docs Present -> Set submitted_for_review_at = NOW() (Frozen PENDING)
+- Resubmit: Lock colleges row -> Verify status in (ACTION_REQUIRED [cap 10], Non-Permanent REJECTED [max 3])
+            -> Insert Immutable v+1 (PENDING, submitted_for_review_at = NOW()) -> Update current_registration_id
+            -> Audit Event (COLLEGE_REGISTRATION_QUEUED / COLLEGE_REGISTRATION_RESUBMITTED)
 ```
 
-### 3. Account Activation Validation:
+### 3. Approval Validation & Transactional Outbox Dispatch (`ADR-07`, `ADR-18`):
 ```text
-Validate Activation Token (exists, unexpired, unused)
+[Database Approval Transaction]:
+Authenticate SUPER_ADMIN + Lock colleges Row (SELECT ... FOR UPDATE)
        ↓
-Verify Associated Application status == APPROVED
+Verify current_registration_id == targetId AND version_number == expectedVersion (409 on stale)
        ↓
-Verify Associated College Tenant status == ACTIVE
+Verify submitted_for_review_at != NULL AND status == PENDING
        ↓
-Validate Password Policy Compliance
+Update Registration status = APPROVED (reviewer + timestamp)
        ↓
-Hash Password (BCrypt)
+Update colleges: approval_status = APPROVED, status = ACTIVE
+(Existing ACTIVE COLLEGE_ADMIN preserves exact user_id & college_id; zero second account created)
        ↓
-Create User (role = COLLEGE_ADMIN, college_id = approved college_id, status = ACTIVE)
+Insert Audit Event (COLLEGE_REGISTRATION_APPROVED) + Insert outbox_emails Row
        ↓
-Invalidate Activation Token
+Commit Transaction
+       │
+       ▼ [Outbox Poller — Every 10s, Outside DB Transactions]:
+Claim Batch via SELECT ... FOR UPDATE SKIP LOCKED -> Mark PROCESSING -> Commit
        ↓
-Audit Event (COLLEGE_ADMIN_ACTIVATED)
+Send Email via EmailSender (Mailpit Dev / Env SMTP+TLS Prod)
+       ↓
+Mark SENT & Scrub Raw Tokens (or Exponential Backoff up to 5 Attempts -> FAILED_PERMANENT)
 ```
 
 ---
 
 # 77. Duplicate Email Handling
 
-If an email already exists, account creation should return a controlled conflict response.
-
-Conceptually:
-
-```text
-409 Conflict
-```
-
-The exact error code should follow the API error contract.
-
-Do not create duplicate identities.
+If an email already exists in `active_email`, registration or email change returns `409 Conflict`. Do not create duplicate active identities.
 
 ---
 
-# 78. Account Provisioning Transaction
+# 78. Registration, Resubmission & Approval Transactions
 
-Where user creation requires multiple persistent records:
-
-```text
-Create User
-      +
-Create Student/Profile Relationship
-      +
-Create Required Account State
-      +
-Audit
-```
-
-these operations should be transactionally consistent where appropriate.
+- **Registration DB Transaction:** Create `colleges` + `college_registrations` v1 (`submitted_for_review_at = NULL`) + `users` (`ACTIVE`, `email_verified_at = NULL`) + 48h hashed verification token + `outbox_emails` row + `COLLEGE_REGISTRATION_SUBMITTED` audit event atomically.
+- **Resubmission DB Transaction:** Lock `colleges` row + verify bounded caps (`ACTION_REQUIRED` &le; 10; `REJECTED` &le; 3, not permanently rejected) + insert immutable `v+1` (`PENDING`, `submitted_for_review_at = NOW()`) + update `current_registration_id` & `colleges.approval_status = PENDING` + audit event without mutating prior versions, documents, or review decisions.
+- **Approval DB Transaction:** Lock `colleges` row + verify `expectedVersion` (`409` on stale) + mark `APPROVED` + update `colleges` (`APPROVED`, `ACTIVE`) + audit event + `outbox_emails` row atomically.
+- **Outbox Email Delivery (Outside DB Transactions):** Emails are never dispatched inside DB transactions; `outbox_emails` poller claims rows via `FOR UPDATE SKIP LOCKED` and invokes `EmailSender` outside DB transactions (`ADR-18`).
 
 ---
 
-# 79. Student Account Linking
+# 79. Student Account Linking (Post-MVP)
 
-If a student already exists academically, creating the authentication account should link to the existing student record rather than creating a duplicate academic identity.
-
-Conceptually:
-
-```text
-Existing Student
-      ↓
-Create User
-      ↓
-Link User → Student
-```
-
-The final database relationship is defined by Student Management.
+In Post-MVP phases, when `STUDENT` authentication is introduced, creating a student authentication account will link to the existing student academic record rather than creating a duplicate academic identity.
 
 ---
 
 # 80. Role Change
 
-Role changes are security-sensitive.
-
-If role changes are supported, the system must:
-
-- authorize the actor
-- validate target role
-- validate tenant
-- update role safely
-- invalidate/re-evaluate active authentication where required
-- audit the change
-
-Role changes should not be implemented casually as ordinary profile edits.
+Role changes are security-sensitive and (when introduced post-MVP) require explicit authorization, validation, session ID rotation/revocation, and audit logging.
 
 ---
 
 # 81. College Admin Replacement
 
-If a College Admin is replaced:
-
-```text
-Existing College Admin
-      ↓
-Deactivate / Remove Assignment
-      ↓
-Assign New College Admin
-      ↓
-Audit
-```
-
-Historical activity should remain traceable to the original actor.
-
-The exact replacement workflow belongs to College Management.
+Because MVP enforces **exactly one active `COLLEGE_ADMIN` per college** via the MySQL 8 `VIRTUAL` generated column + `UNIQUE` index (`ADR-06`), replacing a College Admin requires deactivating the existing administrator (`users.status = INACTIVE`, `email_released = false`), immediately revoking **all** active sessions of the outgoing admin (`ADR-05`), and onboarding the replacement `COLLEGE_ADMIN`. Because `users.college_id` remains non-unique (1-to-many), Post-MVP multi-admin support requires only dropping the generated column/index with zero schema redesign.
 
 ---
 
@@ -1855,275 +1703,131 @@ The account should become unable to authenticate.
 
 ---
 
-# 83. Authentication & Onboarding Test Strategy
+# 83. Authentication & Onboarding Test Strategy (`ADR-19`)
 
-Authentication and onboarding tests must cover:
+- **Integration, Migration & Concurrency Tests:** Execute against **Testcontainers MySQL `8.0.36`** (matching `docker-compose.yml` identically) — do **not** rely on H2 for MySQL-specific `VIRTUAL` generated columns, unique indexes, `FOR UPDATE SKIP LOCKED`, Flyway migrations, or Spring Session JDBC tests.
+- **Unit Tests:** Pure domain services, password policy checks, magic-byte file validators, and rate-limiter logic run with JUnit 5 + Mockito.
 
-### College Registration & Approval (Option A)
-
-- valid registration submission returns 201 with tracking reference
-- registration stored with `PENDING` status
-- duplicate email rejected with 409 Conflict
-- duplicate college code rejected with 409 Conflict
-- invalid email format or missing required fields rejected with 400 Bad Request
-- public registration attempting to assign role or college_id is sanitized/rejected
-- Super Admin can list pending registrations (paginated)
-- Super Admin can inspect registration application details
-- Super Admin can reject registration with reason -> status transitions to `REJECTED`
-- Super Admin can approve registration -> status transitions to `APPROVED`, college tenant created in `colleges`, activation token issued
-- non-Super-Admin attempting to approve/reject receives 403 Forbidden
-- unauthenticated request to review endpoints receives 401 Unauthorized
-
-### Account Activation
-
-- valid activation token allows setting password and creates active `COLLEGE_ADMIN`
-- created user is strictly bound to the approved `college_id`
-- expired activation token is rejected with 400/410
-- reused activation token is rejected
-- forged or non-existent activation token is rejected
-- weak password rejected against password policy
-
-### Login
-
-- valid credentials for active account authenticate successfully
-- invalid credentials rejected with generic error
-- inactive account rejected
-- suspended account rejected
-- account of pending or rejected college cannot log in
-- missing fields rejected
-- malformed email rejected
-
-### Logout
-
-- valid logout terminates active session / invalidates refresh token
-- expired session handled gracefully
-- repeated logout handled safely
-
-### Password Management
-
-- valid password change updates hash
-- invalid current password rejected
-- weak password rejected
-- forgot-password does not leak account existence
-- valid reset token allows setting new password
-- expired or reused reset token rejected
+Tests must cover:
+- **Stateful Sessions, Cookies & SPA CSRF:** `GET /api/v1/auth/csrf`, login/logout/registration CSRF enforcement (`403 CSRF_TOKEN_INVALID`), `30m` idle + `12h` absolute expiry, session ID rotation on login/password change/email change, Spring Session JDBC persistence & targeted vs. all-session revocation (`ADR-05`), `__Host-ACADLYTIC_SID` prod attributes (`Secure=true`, `Path=/`, no `Domain`).
+- **Registration, Rate Limiting & Pre-Queue Onboarding:** IP rate limit (`5/IP/hr` &rarr; `429` + `Retry-After`), BCrypt(12) + `12–128` char/common-password rejection, immediate restricted login (`users.status = ACTIVE`, `emailVerified = false`, `submittedForReview = false`), 48h hashed email verification, immutable document uploads (PDF/JPEG/PNG, &le;10 MB, &le;5/rev, MIME + magic-byte validation, tenant-scoped streaming + safe download headers), Submit for Review into frozen `PENDING` (edits/uploads rejected while `PENDING`), and 7-day abandoned-registration soft-archive cleanup (`ADR-13`).
+- **`SUPER_ADMIN` Review (`expectedVersion`), Bounded Resubmission & Permanent Rejection:** `409 Conflict` on stale `expectedVersion`, `ACTION_REQUIRED` (safety cap 10) & `REJECTED` (max 3 revisions) creating immutable `v+1` revisions preserving history, permanent rejection (`permanent: true` or 3rd revision rejected) setting `INACTIVE`, revoking all sessions, releasing `active_college_code`/`active_email`/admin slot while keeping history, and `approve` unlocking existing dashboard + queuing `outbox_emails` (`SKIP LOCKED` poller, 5-attempt backoff, token scrubbing).
+- **Single-Admin Constraint & Email Change:** Concurrent second active `COLLEGE_ADMIN` rejected by MySQL 8 `VIRTUAL` unique index (`409 Conflict`); email change keeps old email valid via `pending_email` until 48h token confirmed and revokes other sessions.
+- **Suspended Colleges & Lockout:** Suspended/inactive college login blocked (`403 COLLEGE_SUSPENDED`/`COLLEGE_INACTIVE`) + all sessions revoked; 5 failed logins &rarr; 15-minute lockout (`429`).
 
 ---
 
 # 84. Tenant Isolation Tests
 
-Tests must explicitly verify:
-
-```text
-College A
- ↓
-User A (COLLEGE_ADMIN A)
- ↓
-Student A
-```
-
-cannot access:
-
-```text
-College B
- ↓
-User B (COLLEGE_ADMIN B)
- ↓
-Student B
-```
-
-Test cases should include:
-
-- direct ID manipulation across college boundaries
-- query parameters and path parameters cross-tenant tampering
-- POST payload tenant manipulation
-- update and delete cross-tenant requests
-- list endpoints strictly scoped by authenticated `college_id`
-- pending or rejected registration attempting to query tenant endpoints receives 403 Forbidden
+Tests must explicitly verify across multiple tenants (College A vs. College B):
+- direct ID manipulation across college boundaries (both academic resources and onboarding documents/applications)
+- query/path/POST payload cross-tenant tampering
+- `PENDING`, `ACTION_REQUIRED`, and `REJECTED` colleges calling any academic management endpoint receive `403 COLLEGE_NOT_APPROVED`
+- `SUSPENDED` / `INACTIVE` approved colleges receive `403 COLLEGE_SUSPENDED` / `COLLEGE_INACTIVE` and have all sessions revoked
 
 ---
 
 # 85. Authorization Test Matrix
 
-The authorization matrix governs all onboarding, authentication, and tenant operations:
+| Operation | Super Admin | College Admin (Pre-Submission `PENDING`) | College Admin (Frozen `PENDING`) | College Admin (`ACTION_REQUIRED` / Non-Perm `REJECTED`) | College Admin (Perm `REJECTED` / `SUSPENDED`) | College Admin (`APPROVED` & `ACTIVE`) | Public Visitor |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| `GET /api/v1/auth/csrf` | **Yes** | **Yes** | **Yes** | **Yes** | **Yes** | **Yes** | **Yes** |
+| Submit College Registration (`5/IP/hr`) | No | No | No | No | No | No | **Yes** |
+| Login (`/auth/login`) | **Yes** | **Yes** | **Yes** | **Yes** | **No (`403`)** | **Yes** | No |
+| Current User (`/auth/me`) | **Yes** | **Yes** | **Yes** | **Yes** | **No** | **Yes** | No |
+| Verify Email / Upload Docs / Submit | No | **Own College** | **Frozen (`409`/`403`)** | **Upload & Resubmit** | **No** | Read-Only History | Verify Token |
+| Review / Approve / Request Action / Reject (`expectedVersion`) | **Yes** | No (`403`) | No (`403`) | No (`403`) | No | No (`403`) | No |
+| Academic Management APIs | Platform Scope | **No (`403`)** | **No (`403`)** | **No (`403`)** | **No (`403`)** | **Own College** | No |
+| Manage Other College Data | Platform Scope | **No (`403`)** | **No (`403`)** | **No (`403`)** | **No** | **No (`403`)** | No |
 
-| Operation | Super Admin | College Admin | Academic Staff | Student | Public Visitor |
-|---|:---:|:---:|:---:|:---:|:---:|
-| Submit College Registration | No | No | No | No | **Yes** |
-| List / View Registration Applications | **Yes** | No | No | No | No |
-| Approve / Reject Registration | **Yes** | No | No | No | No |
-| Activate College Admin Account | No | **Token Holder** | No | No | **Token Holder** |
-| Login (`/auth/login`) | **Yes** | **Yes** | Post-MVP | Post-MVP | No |
-| Current User (`/auth/me`) | **Yes** | **Yes** | Post-MVP | Post-MVP | No |
-| Manage Own College Profile | Platform Scope | **Own College** | No | No | No |
-| Manage Other College Data | Platform Scope | **No (403)** | No | No | No |
-| Provision Staff Accounts | No | Post-MVP | No | No | No |
-| Provision Student Accounts | No | Post-MVP | Scoped (Post-MVP)| No | No |
+*(Note: `ACADEMIC_STAFF`, `STUDENT` login, and `BRANCH_ADMIN`/branch management are strictly Post-MVP; no branch tables or branch functionality exist in the MVP.)*
 
 ---
 
 # 86. Frontend Authentication & Onboarding Tests
 
-The frontend test suite should cover:
-
-- public college registration form (`/register-college`): validation, submission, error handling
-- registration success confirmation page (`/registration-success`)
-- account activation form (`/activate-account`): token extraction, password validation, submission
-- login form: validation errors, successful submission, loading state
-- authentication store initialization and persistence
-- route guards: `/admin/*` requires `SUPER_ADMIN`, `/college/*` requires `COLLEGE_ADMIN`
-- unauthorized page displayed for role mismatch
-- logout clears authentication state and redirects to login
-- session expiration redirects to login with return path
+- Vite dev proxy same-origin cookie + Axios `XSRF-TOKEN` / `X-XSRF-TOKEN` integration (including CSRF retry/error handling on `403 CSRF_TOKEN_INVALID`)
+- Public registration form (`/register-college` — institution profile + 12–128 char password; optional prod CAPTCHA; no multipart doc upload)
+- Immediate login to Restricted Dashboard: email verification banner/resend, document upload (PDF/JPEG/PNG &le;10 MB, required categories), Submit for Review &rarr; frozen `PENDING` UI
+- `ACTION_REQUIRED` & `REJECTED` feedback banners, remaining resubmission counter, new immutable document upload, and resubmission workflow
+- Automatic transition to Full College Management Dashboard when `GET /api/v1/auth/me` returns `managementUnlocked: true`
+- Suspended college login error display (`COLLEGE_SUSPENDED`), logout clearing state, session expiry redirect, and `/admin/*` + `/college/*` route guards
 
 ---
 
 # 87. Security Test Cases
 
-At minimum verify:
-
 ```text
-□ Public registration cannot assign itself SUPER_ADMIN or any role
-□ Public registration cannot supply or override college_id
-□ Pending college cannot access protected college operations
-□ Rejected college cannot access protected college operations
-□ Unapproved college cannot have an active COLLEGE_ADMIN user
-□ Invalid credentials fail with generic error
-□ Suspended account cannot log in
-□ COLLEGE_ADMIN cannot access another college's tenant data (IDOR)
-□ Activation token expires after time window
-□ Activation token cannot be reused
-□ Password never appears in API response or logs
-□ Reset token expires and cannot be reused
+□ No JWT issued or accepted anywhere; stateful HTTP-only Spring Session JDBC cookies only
+□ Production __Host-ACADLYTIC_SID cookie sets Secure=true, Path=/, HttpOnly=true, SameSite=Lax, and NO Domain attribute
+□ Missing/invalid X-XSRF-TOKEN on login, logout, registration, or any mutation returns 403 CSRF_TOKEN_INVALID
+□ Public registration rate-limited at 5/IP/hr (429 + Retry-After); spoofed X-Forwarded-For ignored
+□ Public registration cannot supply role, college_id, approval_status, or upload unauthenticated files
+□ Unverified / unsubmitted registrations never appear in SUPER_ADMIN review queue and are soft-archived after 7 days
+□ Edits and document uploads blocked while application is in frozen PENDING review queue
+□ Stale expectedVersion on SUPER_ADMIN approve/request-action/reject returns 409 Conflict
+□ Non-permanent REJECTED allows max 3 revised applications; permanent rejection revokes ALL sessions and releases code/email/slot while retaining history
+□ Suspended college login blocked (403 COLLEGE_SUSPENDED) and ALL active sessions revoked immediately
+□ Concurrent second active COLLEGE_ADMIN blocked by MySQL 8 VIRTUAL unique index (409 Conflict)
+□ Document upload rejects non-PDF/JPEG/PNG magic bytes, files >10 MB, and >5 docs/revision; downloads enforce tenant check + Content-Disposition: attachment + nosniff
+□ Outbox emails dispatched outside DB transactions via SKIP LOCKED and scrubbed of raw tokens post-send
+□ Passwords (BCrypt 12, 12–128 chars, common/breached rejected), session IDs, reset tokens, and verification tokens never appear in API responses or logs
 ```
 
 ---
 
 # 88. Authentication & Onboarding Implementation Sequence
 
-Recommended module implementation sequence:
-
 ```text
-1. Configure Spring Security base filter chain and CORS/CSRF rules
-2. Create user and role persistence entities (`users`, `Role` enum)
-3. Create college registration persistence entity (`college_registrations`)
-4. Configure password hashing (BCryptPasswordEncoder)
-5. Implement public college registration intake API (POST /api/v1/college-registrations)
-6. Implement Super Admin registration review APIs (GET /api/v1/college-registrations, GET .../{id})
-7. Implement Super Admin approval and rejection APIs (POST .../{id}/approve, POST .../{id}/reject)
-8. Implement college tenant creation in `colleges` upon registration approval
-9. Implement secure activation token generation and email dispatch mechanism
-10. Implement administrator account activation API (POST /api/v1/auth/activate-account)
-11. Implement user login API (POST /api/v1/auth/login)
-12. Implement current-user profile API (GET /api/v1/auth/me)
-13. Implement logout API (POST /api/v1/auth/logout)
-14. Implement backend role-based authorization and tenant context scoping
-15. Implement account status validation (`ACTIVE`, `INACTIVE`, `SUSPENDED`)
-16. Implement password change and token-based password reset
-17. Implement failed-login tracking and brute-force lockout
-18. Implement audit logging for registrations, approvals, activations, and logins
-19. Implement frontend public registration form (/register-college) and success page
-20. Implement frontend Super Admin registration review hub (/admin/registrations)
-21. Implement frontend administrator activation page (/activate-account)
-22. Implement frontend login page, auth store (Zustand), and role route guards
-23. Execute comprehensive unit, integration, and security/IDOR tests
+1. Add dependencies (`spring-session-jdbc`, `spring-boot-starter-mail`, Testcontainers MySQL 8) and configure Mailpit in dev docker-compose
+2. Write Flyway migrations: Spring Session JDBC tables, `colleges` (with `active_college_code` VIRTUAL unique), `users` (with `active_college_admin_college_id` and `active_email` VIRTUAL uniques, `college_id` non-unique), `college_registrations` (`UNIQUE (college_id, version_number)`), `college_registration_documents`, token tables, `outbox_emails`, and `audit_events` (zero branch tables)
+3. Configure Spring Security 6: stateful Spring Session JDBC (`30m` idle / `12h` absolute), `__Host-ACADLYTIC_SID`/`ACADLYTIC_SID` cookies, SPA CSRF (`CookieCsrfTokenRepository`, `SpaCsrfTokenRequestHandler`, `CsrfCookieFilter`, `GET /api/v1/auth/csrf`), `BCryptPasswordEncoder(12)`, and CORS (`X-XSRF-TOKEN` allowed)
+4. Implement `SuperAdminBootstrapRunner` (one-time env-driven bootstrap; zero public endpoint)
+5. Implement `RateLimiter` (5/IP/hr, `429` + `Retry-After`) + configurable `CaptchaVerifier`, password policy (12–128 + common/breached denylist), and `POST /api/v1/college-registrations`
+6. Implement `POST /api/v1/auth/login` (5 fails -> 15m lockout; suspended college block), `POST /api/v1/auth/logout`, `GET /api/v1/auth/me`, session revocation service, password change/reset, email verification (48h), and email change (`pending_email` + 48h)
+7. Implement `EmailSender` (Mailpit dev / env SMTP+TLS prod) and `outbox_emails` 10s `@Scheduled` poller (`FOR UPDATE SKIP LOCKED`, 5-attempt exponential backoff, stale recovery, post-send token scrubbing)
+8. Implement `DocumentStorageService` (local outside webroot dev / private S3-compatible prod), magic-byte + MIME validator, and tenant-scoped restricted onboarding APIs (`/my-application/**`, `/documents`, `/submit`, `/resubmit`)
+9. Implement `SUPER_ADMIN` verified review queue and `expectedVersion`-guarded `approve`, `request-action`, `reject`, and permanent rejection APIs
+10. Implement live `requireApprovedAndActiveCollege()` guard (`403 COLLEGE_NOT_APPROVED` / `COLLEGE_SUSPENDED`) and daily 7-day abandoned-registration soft-archive job
+11. Implement frontend Vite dev proxy, Axios CSRF wiring, `/register-college`, `/verify-email`, `/auth/login`, Restricted College Dashboard, `/admin/registrations`, and role + approval-state route guards
+12. Execute JUnit 5/Mockito unit tests + Testcontainers MySQL 8.0.36 integration, migration, concurrency, outbox, and security/IDOR tests
 ```
 
 ---
 
 # 89. Authentication & Onboarding Acceptance Criteria
 
-The implementation is acceptable when:
-
-### Onboarding (Option A)
-- [ ] Prospective colleges can submit registration via `/register-college`.
-- [ ] Submitted applications are persisted with `PENDING` status.
-- [ ] Super Admin can view, inspect, approve, and reject registrations.
-- [ ] Rejection captures a mandatory audit reason and grants no tenant access.
-- [ ] Approval initializes a new college tenant and issues an activation token.
-- [ ] Designated administrator can activate their account and set their password.
-- [ ] Newly activated administrator is strictly bound to the approved `college_id`.
-- [ ] Pending or rejected colleges cannot access protected college operations.
-
-### Login & Authentication
-- [ ] Valid users can authenticate.
-- [ ] Invalid credentials are rejected with generic errors.
-- [ ] Inactive and suspended users cannot authenticate.
-- [ ] Authentication state is established securely.
-
-### Authorization & Multi-Tenancy
-- [ ] Protected APIs require authentication.
-- [ ] Role checks enforce `SUPER_ADMIN` and `COLLEGE_ADMIN` permissions.
-- [ ] Tenant checks enforce strict `college_id` scoping.
-- [ ] Cross-tenant access (IDOR) attempts return 403 Forbidden.
-
-### Password Security
-- [ ] Passwords are encrypted with BCrypt/Argon2.
-- [ ] Passwords never appear in responses or log files.
-- [ ] Password change works for authenticated users.
-- [ ] Password reset generates single-use, time-limited tokens.
-
-### Frontend
-- [ ] Public registration page works.
-- [ ] Super Admin registration review hub works.
-- [ ] Account activation page works.
-- [ ] Login page works.
-- [ ] Route guards protect `/admin/*` and `/college/*`.
-
-### Security & Audit
-- [ ] Failed login lockout is enforced.
-- [ ] Onboarding and authentication audit events are recorded.
-- [ ] Sensitive credentials and tokens are excluded from logs.
+- [ ] Stateful HTTP-only Spring Session JDBC sessions (`30m` idle / `12h` max, `__Host-ACADLYTIC_SID` in prod) + SPA CSRF work via Vite dev proxy with zero JWT.
+- [ ] One-time env-driven `SUPER_ADMIN` bootstrap succeeds without any public endpoint.
+- [ ] Public registration enforces `5/IP/hr` rate limiting, `12–128` char password policy + common/breached rejection, BCrypt(12), creates restricted college context + `ACTIVE` user (`email_verified_at = NULL`, `submitted_for_review_at = NULL`), and enqueues 48h verification email via `outbox_emails`.
+- [ ] College logs in immediately, verifies email, uploads required immutable documents (PDF/JPEG/PNG, &le;10 MB, &le;5/rev, MIME + magic-byte validated, stored outside webroot), and clicks Submit for Review into frozen `PENDING`.
+- [ ] Academic management APIs return `403 COLLEGE_NOT_APPROVED` while unapproved and `403 COLLEGE_SUSPENDED`/`COLLEGE_INACTIVE` (with login blocked + all sessions revoked) if suspended.
+- [ ] `SUPER_ADMIN` review actions enforce `expectedVersion` (`409` on stale), support `ACTION_REQUIRED` (cap 10), `REJECTED` (max 3 revisions), permanent rejection (deactivation + session revocation + reservation release + history retained), and `APPROVED` (unlocks existing dashboard; outbox email sent via `SKIP LOCKED`).
+- [ ] MySQL 8 `VIRTUAL` generated columns enforce 1 active `COLLEGE_ADMIN`/college, `active_email`, and `active_college_code` (verified on Testcontainers MySQL `8.0.36`).
+- [ ] 7-day abandoned-registration cleanup, email change (`pending_email`), password change/reset, 5-failure lockout, and session revocation rules pass all tests with zero secret/token logging.
 
 ---
 
 # 90. Definition of Done
 
-`authentication-implementation.md` is considered implemented when:
-
-1. Spring Security is configured with base security filters.
-2. User and College Registration persistence models are operational.
-3. Public college registration intake endpoint works with email uniqueness validation.
-4. Super Admin registration review, approval, and rejection endpoints are operational.
-5. Approval transaction creates `colleges` tenant record and activation token.
-6. Rejection records audit reason and denies all access.
-7. Account activation endpoint verifies token, sets password, and establishes `COLLEGE_ADMIN` user.
-8. Login, logout, and current-user (`/me`) endpoints are operational.
-9. Protected backend endpoints enforce role authorization and tenant isolation.
-10. Account status (`ACTIVE`, `INACTIVE`, `SUSPENDED`) is enforced.
-11. Password management (change and reset) is operational.
-12. Brute-force failed login lockout is enforced.
-13. Audit events for registration, approval, rejection, activation, and login are recorded.
-14. React public registration and activation pages are operational.
-15. React Super Admin review hub and College Admin dashboards are protected by route guards.
-16. Integration, security, and tenant isolation tests pass with zero critical defects.
-17. No sensitive credentials or tokens are exposed in API responses or logs.
+`authentication-implementation.md` is considered implemented when all acceptance criteria in Section 89 pass against **Testcontainers MySQL `8.0.36`** and frontend integration tests, zero JWT code exists, no branch tables exist in MVP, and no passwords, session IDs, reset tokens, or verification tokens are logged or exposed.
 
 ---
 
-# 91. Unresolved Implementation Decisions
+# 91. Finalized & Deferred Architecture Decisions Register
 
-The following decisions must be finalized during review:
+### Finalized Decisions (`APPROVED` — Locked for Phase 02–03 Implementation)
+- **Authentication & Sessions:** Stateful HTTP-only session cookies via **Spring Session JDBC with MySQL** (`ADR-02`, no JWT); `30-min` idle / `12-hour` absolute lifetime, multi-device allowed, session ID rotation on login & privilege changes (`ADR-01`); `ACADLYTIC_SID` (dev) / `__Host-ACADLYTIC_SID` (`Secure=true`, `Path=/`, no `Domain`) (prod) (`ADR-03`); Spring Security 6 SPA CSRF + Vite dev proxy (`ADR-04`); granular single vs. all-session revocation matrix (`ADR-05`).
+- **Database Constraints & Onboarding Lifecycle:** MySQL 8 `VIRTUAL` generated column `active_college_admin_college_id` + `UNIQUE` index (`ADR-06`, `users.college_id` non-unique); `UNIQUE (college_id, version_number)` + `current_registration_id` + `expectedVersion` (`409` on stale) + max `3` `REJECTED` revisions + safety cap `10` `ACTION_REQUIRED` (`ADR-07`); 4 statuses with `email_verified_at` + `submitted_for_review_at` pre-queue gate (`ADR-08`); permanent rejection deactivating college/user, revoking all sessions, releasing `active_college_code`/`active_email` (`email_released = true` strictly on permanent rejection or abandoned cleanup)/admin slot while retaining history (`ADR-09`); suspended colleges blocked from login + all sessions revoked (`ADR-10`).
+- **Security, Documents, Email & Testing:** BCrypt(12), `12–128` chars + reject common/compromised passwords, 1h reset token & 48h verification token (single-use DB-hashed), 5 failures &rarr; 15m lockout; max `5` docs/rev, `10 MB` each, PDF/JPEG/PNG, MIME + magic-byte check, required categories (`UNIVERSITY_AFFILIATION_CERTIFICATE`, `AUTHORIZED_SIGNATORY_ID`), immutable rows (`ADR-11`); `5/IP/hr` registration rate limit (`429` + `Retry-After`) + configurable prod CAPTCHA (`ADR-12`); 7-day automated soft-archive cleanup (`ADR-13`); verified email change via `pending_email` (`ADR-14`); `EmailSender` port + Mailpit (dev) + env SMTP/TLS (prod) (`ADR-15`); `DocumentStorageService` + local outside webroot (dev) + private S3-compatible storage streamed through backend (prod) (`ADR-16`); one-time env-driven `SuperAdminBootstrapRunner` (`ADR-17`); `outbox_emails` 10s `@Scheduled` poller with `FOR UPDATE SKIP LOCKED`, 5-attempt backoff, stale recovery, post-send token scrubbing (`ADR-18`); Testcontainers MySQL `8.0.36` + JUnit 5/Mockito (`ADR-19`).
 
-- session-based vs token-based authentication
-- access-token/refresh-token strategy if tokens are selected
-- secure cookie strategy if cookies are selected
-- CSRF protection strategy
-- session duration
-- refresh/session rotation
-- concurrent session policy
-- password policy
-- account activation mechanism
-- password reset delivery mechanism
-- email provider
-- rate limiting implementation
-- temporary account lock policy
-- exact role-permission matrix
-- security event storage model
-- audit event storage model
-- exact user/student relationship
-- exact account status enum
-- MFA requirement, if introduced later
+### Explicitly Deferred Decisions (`DEFERRED` — Non-Blocking for Phase 02–03)
+
+| ID | Decision | Owner | Reason | Resolve Before |
+|---|---|---|---|---|
+| **ADR-11b** | Automated Document Malware Scanning (AV) | Security / Backend Lead | Avoid ClamAV container/ops overhead in MVP while enforcing MIME + magic-byte allow-list, 10 MB cap, random UUID keys outside webroot, and safe download headers | Post-MVP Production Hardening (Phase 18.7) |
+| **ADR-15b** | Specific Commercial Production SMTP Vendor | Platform / DevOps Lead | `EmailSender` abstraction + env-configured SMTP/TLS + Mailpit (dev) completely decouple backend code from vendor selection | Phase 14 (MVP Release Gate & Pilot Deployment) |
+| **ADR-16b** | Specific Production S3-Compatible Cloud Bucket Provider | Platform / DevOps Lead | `DocumentStorageService` abstraction + local dev storage decouple cloud provider selection (backed-up local volume also supported for single-node pilot) | Phase 14 (MVP Release Gate & Pilot Deployment) |
 
 ---
 
@@ -2171,34 +1875,16 @@ result-processing-implementation.md
 backlog-implementation.md
 academic-passport-implementation.md
 analytics-implementation.md
-student-portal-implementation.md
+student-portal-implementation.md         (Post-MVP)
 ```
 
 ---
 
 # 93. Status
 
-**Draft / Under Review**
+**Approved / Implementation Ready**
 
-This document defines the concrete implementation foundation for Acadlytic authentication and account provisioning.
-
-It must progress through:
-
-```text
-Draft
- ↓
-Under Review
- ↓
-Approved
- ↓
-Implementation Ready
- ↓
-Implemented
- ↓
-Maintained
-```
-
-Authentication must not be treated as implementation-ready until the unresolved security decisions have been formally reviewed.
+All Phase 02–03 architectural and security decisions (`ADR-01` – `ADR-19`) have been formally reviewed and approved. Deployment-only vendor choices (`ADR-15b`, `ADR-16b`) and Post-MVP malware scanning (`ADR-11b`) are explicitly tracked as `DEFERRED` without blocking backend implementation.
 
 ---
 

@@ -2,9 +2,9 @@
 
 **Project:** Acadlytic  
 **Document:** API Architecture  
-**Version:** 1.0  
-**Status:** Draft / Architecture Ready  
-**Last Updated:** 2026-10-04
+**Version:** 1.1  
+**Status:** Approved / Aligned with Finalized MVP Architecture  
+**Last Updated:** 2026-11-18
 
 ---
 
@@ -49,12 +49,12 @@ Feature specifications remain the source for detailed feature behavior.
 
 # 2. API Architecture Overview
 
-Acadlytic follows a client-server architecture:
+Acadlytic follows a client-server modular monolith architecture:
 
 ```text
 React Frontend
       ↓
-HTTP / HTTPS
+HTTP / HTTPS (Stateful Session Cookie + SPA CSRF)
       ↓
 Spring Boot REST API
       ↓
@@ -64,20 +64,22 @@ Domain Modules
       ↓
 Repositories
       ↓
-PostgreSQL
+MySQL 8
 ```
 
-Supporting services may include:
+Supporting components and infrastructure:
 
 ```text
-React
+React SPA
   ↓
-Spring Boot API
-  ├── PostgreSQL
-  ├── Redis
-  ├── Object Storage
-  └── Background Jobs
+Spring Boot API (Modular Monolith)
+  ├── MySQL 8 (Authoritative Data, Spring Session JDBC, Transactional Email Outbox)
+  ├── Document / Object Storage (Local non-webroot in Dev / Private S3-compatible in Prod)
+  ├── SMTP / Email Delivery (Mailpit in Dev / SMTP+TLS in Prod via Outbox Worker)
+  └── Spring Scheduled / Background Jobs
 ```
+
+*Note: Redis and PostgreSQL are **not** used in MVP. Session persistence uses **Spring Session JDBC backed by MySQL 8** (`ADR-02`).*
 
 The API layer acts as the controlled boundary between the frontend and backend business logic.
 
@@ -89,9 +91,10 @@ The backend API will use:
 
 ```text
 Java 21
-Spring Boot
+Spring Boot 3
 Spring MVC / REST
-Spring Security
+Spring Security 6 (Stateful HTTP-only Sessions + SPA CSRF; no JWT)
+Spring Session JDBC (MySQL 8)
 Spring Data JPA
 Hibernate
 Bean Validation
@@ -263,15 +266,15 @@ The API should follow module ownership.
 Conceptually:
 
 ```text
-Authentication
+Authentication & College Onboarding
     ↓
 /auth
 
-College Management
+College Management & Approval
     ↓
 /colleges
 
-Student Management
+Student Management (MVP Admin Records)
     ↓
 /students
 
@@ -301,7 +304,7 @@ Analytics
     ↓
 /analytics
 
-Student Portal
+Student Portal (Post-MVP — Phase 16)
     ↓
 /me
 ```
@@ -310,20 +313,26 @@ Student Portal
 
 # 10. Authentication API
 
-Authentication is responsible for identity and account access.
+Authentication is responsible for identity, session lifecycle, CSRF bootstrap, public college registration, email verification/change, and password management using **stateful HTTP-only sessions via Spring Session JDBC (MySQL 8)** and **Spring Security 6 SPA CSRF protection** (**no JWT**).
 
-Core endpoints:
+Core MVP endpoints:
 
 ```http
+GET  /api/v1/auth/csrf
+POST /api/v1/auth/register-college
 POST /api/v1/auth/login
 POST /api/v1/auth/logout
 GET  /api/v1/auth/me
 POST /api/v1/auth/forgot-password
 POST /api/v1/auth/reset-password
-PUT  /api/v1/auth/password
+POST /api/v1/auth/change-password
+POST /api/v1/auth/verify-email
+POST /api/v1/auth/resend-verification
+POST /api/v1/auth/change-email
+POST /api/v1/auth/confirm-email-change
 ```
 
-The exact endpoint set must remain aligned with the Authentication feature specification.
+The exact endpoint set and contracts remain authoritative in `authentication.md` and `authentication-implementation.md`.
 
 ---
 
@@ -335,9 +344,10 @@ POST /api/v1/auth/login
 
 Purpose:
 
-- authenticate the user
-- establish authenticated session/token context
-- return authorized user information where appropriate
+- validate CSRF token and authenticate the user (`BCryptPasswordEncoder(12)`)
+- verify account status and college status (blocking `SUSPENDED` / `INACTIVE` colleges with `403 COLLEGE_SUSPENDED` / `COLLEGE_INACTIVE`)
+- create a stateful Spring Session JDBC session in MySQL 8 and issue the `HttpOnly` session cookie (`ACADLYTIC_SID` in dev / `__Host-ACADLYTIC_SID` in prod)
+- rotate session ID on authentication and return authorized user and college status context
 
 Conceptual request:
 
@@ -354,22 +364,28 @@ The API must not return the password.
 
 # 12. Login Response
 
-A successful response may contain:
+A successful response returns authoritative user and college onboarding/approval context:
 
 ```json
 {
   "user": {
     "id": "user-id",
-    "email": "user@example.com",
+    "email": "admin@college.edu",
     "role": "COLLEGE_ADMIN",
-    "collegeId": "college-id"
+    "collegeId": "college-id",
+    "status": "ACTIVE",
+    "emailVerified": true
+  },
+  "college": {
+    "id": "college-id",
+    "status": "ACTIVE",
+    "approvalStatus": "APPROVED",
+    "managementAccessEnabled": true
   }
 }
 ```
 
-The exact authentication/session representation depends on the selected security architecture.
-
-The API contract must not expose sensitive authentication information.
+Authentication state is carried strictly in the server-managed `HttpOnly` session cookie (never in response body tokens or `localStorage`).
 
 ---
 
@@ -381,9 +397,9 @@ POST /api/v1/auth/logout
 
 Purpose:
 
-- terminate the authenticated session
-- invalidate applicable authentication state
-- record security/audit information where required
+- validate CSRF token and terminate the current authenticated session in Spring Session JDBC
+- clear the session cookie
+- record security/audit information
 
 The endpoint should be safe to call even when the client has already lost local authentication state.
 
@@ -397,65 +413,64 @@ GET /api/v1/auth/me
 
 Purpose:
 
-Return the authenticated user's identity and authorization context.
+Return the authenticated user's live identity, role, email verification state, college approval status, and management-access authorization context from the server.
 
 Example:
 
 ```json
 {
   "id": "user-id",
-  "email": "user@example.com",
-  "role": "ACADEMIC_STAFF",
+  "email": "admin@college.edu",
+  "role": "COLLEGE_ADMIN",
   "collegeId": "college-id",
-  "status": "ACTIVE"
+  "status": "ACTIVE",
+  "emailVerified": true,
+  "collegeStatus": "ACTIVE",
+  "approvalStatus": "APPROVED",
+  "managementAccessEnabled": true
 }
 ```
 
 ---
 
-# 15. Account Creation API
+# 15. College Registration & Account Provisioning Model
 
-Account creation is part of the identity/account lifecycle.
-
-MVP does not provide public self-registration.
-
-Controlled provisioning is required.
-
-Conceptually:
+MVP allows **public college registration** (`POST /api/v1/auth/register-college`) while strictly prohibiting general public user self-registration.
 
 ```text
-SUPER_ADMIN
+Public College Registration
     ↓
-Create College Admin
-
-COLLEGE_ADMIN
+Proposed COLLEGE_ADMIN sets credentials & receives immediate restricted dashboard access
+(users.status = ACTIVE, colleges.approval_status = PENDING, colleges.status = PENDING_VERIFICATION)
     ↓
-Create Academic Staff
-Create Student
-
-ACADEMIC_STAFF
+Email verification + authenticated verification document upload + Submit for Review
     ↓
-Create Student where permitted
+SUPER_ADMIN reviews, approves, requests action on, or rejects application (expectedVersion required)
+    ↓
+APPROVED + ACTIVE college unlocks full management dashboard for the existing COLLEGE_ADMIN account
 ```
 
-Public visitors cannot create accounts.
+Key MVP boundaries:
+- `SUPER_ADMIN` is bootstrapped via a guarded, idempotent, env-driven `SuperAdminBootstrapRunner` (zero public bootstrap endpoint) and **never** manually creates `COLLEGE_ADMIN` credentials.
+- MVP enforces **exactly one active `COLLEGE_ADMIN` per college** via a MySQL 8 `VIRTUAL` generated column unique index (`active_college_admin_college_id`).
+- `ACADEMIC_STAFF` (Phase 15), `STUDENT` authentication/portal (Phase 16), and `BRANCH_ADMIN` (Phase 18.6) are **Post-MVP**.
 
 ---
 
-# 16. Account Provisioning Endpoints
+# 16. Account Provisioning Endpoints (Post-MVP Role Expansion)
 
-The final API may use role-scoped resources such as:
+In MVP, user creation occurs only through public college registration (`POST /api/v1/auth/register-college`) and the one-time `SUPER_ADMIN` bootstrap runner.
+
+In **Post-MVP** (Phases 15–16), delegated role provisioning may introduce role-scoped endpoints such as:
 
 ```http
-POST /api/v1/users
-GET  /api/v1/users
-GET  /api/v1/users/{userId}
+POST  /api/v1/users          (Post-MVP: ACADEMIC_STAFF / STUDENT accounts)
+GET   /api/v1/users          (Post-MVP)
+GET   /api/v1/users/{userId} (Post-MVP)
 PATCH /api/v1/users/{userId}/status
 ```
 
-or domain-specific provisioning endpoints.
-
-The final endpoint choice must preserve the ownership and authorization rules established in Authentication.
+These endpoints must preserve the ownership and authorization rules established in `authentication.md`.
 
 ---
 
@@ -473,7 +488,7 @@ Authorization answers:
 What are you allowed to do?
 ```
 
-Every protected API must enforce authorization on the backend.
+Every protected API must enforce authorization on the backend, including live server-side verification of user status, `colleges.status`, and `colleges.approval_status`.
 
 Frontend route protection is not sufficient.
 
@@ -481,13 +496,19 @@ Frontend route protection is not sufficient.
 
 # 18. Role-Based Authorization
 
-MVP roles:
+Active MVP roles:
 
 ```text
 SUPER_ADMIN
 COLLEGE_ADMIN
-ACADEMIC_STAFF
-STUDENT
+```
+
+Post-MVP roles (excluded from MVP authentication and authorization):
+
+```text
+ACADEMIC_STAFF  (Post-MVP — Phase 15)
+STUDENT         (Post-MVP — Phase 16; Student academic records remain in MVP)
+BRANCH_ADMIN    (Post-MVP — Phase 18.6; no branch tables or features in MVP)
 ```
 
 Authorization must be based on:
@@ -496,6 +517,8 @@ Authorization must be based on:
 Role
 +
 Tenant Context
++
+College Status & Approval Status
 +
 Resource Ownership
 +
@@ -507,9 +530,9 @@ Example:
 ```text
 COLLEGE_ADMIN
 +
-College A
+College A (APPROVED & ACTIVE)
 +
-Student from College A
+Student record from College A
 +
 READ
 =
@@ -566,67 +589,59 @@ The API must reject the request.
 
 ---
 
-# 21. `/me` API Pattern
+# 21. `/me` API Pattern (Post-MVP Student Portal)
 
-Student self-service APIs should prefer:
+In MVP, the authenticated user's live identity and authorization context are served at `GET /api/v1/auth/me`.
 
-```text
-/api/v1/me
-```
-
-rather than requiring the frontend to supply the student's ID.
-
-Examples:
+In **Post-MVP (Phase 16 — Student Portal)**, student self-service APIs will use `/api/v1/me/*` rather than requiring the frontend to supply the student's ID:
 
 ```http
-GET /api/v1/me
-GET /api/v1/me/dashboard
-GET /api/v1/me/results
-GET /api/v1/me/backlogs
-GET /api/v1/me/academic-passport
-GET /api/v1/me/analytics
+GET /api/v1/me/dashboard          (Post-MVP)
+GET /api/v1/me/results            (Post-MVP)
+GET /api/v1/me/backlogs           (Post-MVP)
+GET /api/v1/me/academic-passport  (Post-MVP)
+GET /api/v1/me/analytics          (Post-MVP)
 ```
 
-This reduces unnecessary exposure of identity identifiers and simplifies authorization.
+This reduces unnecessary exposure of identity identifiers and simplifies authorization once `STUDENT` authentication is introduced in Phase 16.
 
 ---
 
-# 22. College Management APIs
+# 22. College Registration & Management APIs
 
-Core APIs:
+Core APIs span two MVP phases:
+
+- **Phase 03 (College Onboarding & Verification):** Public registration (`POST /api/v1/auth/register-college`), authenticated restricted-dashboard verification document upload/download, Submit for Review, correction/resubmission, and `SUPER_ADMIN` review/approval endpoints (requiring `expectedVersion` for optimistic concurrency).
+- **Phase 04 (College Management):**
 
 ```http
-POST  /api/v1/colleges
 GET   /api/v1/colleges
 GET   /api/v1/colleges/{collegeId}
 PUT   /api/v1/colleges/{collegeId}
 PATCH /api/v1/colleges/{collegeId}/status
 ```
 
-Authorization follows the College Management specification.
+Authorization follows `authentication.md` and the College Management specification.
 
 ---
 
-# 23. College Creation
+# 23. College Onboarding & Creation Authorization
 
-```http
-POST /api/v1/colleges
-```
-
-MVP:
+In MVP, colleges onboard via public registration (`POST /api/v1/auth/register-college`) followed by `SUPER_ADMIN` verification and approval. Direct platform-level college administration is restricted to `SUPER_ADMIN`:
 
 ```text
-SUPER_ADMIN → Allowed
-COLLEGE_ADMIN → Not allowed
-ACADEMIC_STAFF → Not allowed
-STUDENT → Not allowed
-Public → Not allowed
+Public Visitor → Allowed for POST /api/v1/auth/register-college (rate-limited: 5/IP/hr)
+SUPER_ADMIN    → Allowed for registration review/approval and platform college management
+COLLEGE_ADMIN  → Allowed only for own college's restricted onboarding & permitted profile updates
+ACADEMIC_STAFF → Post-MVP (Not active in MVP)
+STUDENT        → Post-MVP (Not active in MVP)
+BRANCH_ADMIN   → Post-MVP (Not active in MVP)
 ```
 
 The backend must validate:
 
 - college name
-- college code
+- active college code uniqueness (`active_college_code` generated column)
 - university
 - contact information
 - required fields
@@ -693,10 +708,13 @@ PATCH /api/v1/colleges/{collegeId}/status
 Possible statuses:
 
 ```text
+PENDING_VERIFICATION
 ACTIVE
 INACTIVE
 SUSPENDED
 ```
+
+Approval status (`colleges.approval_status`) tracks onboarding review separately across exact four values: `PENDING`, `ACTION_REQUIRED`, `APPROVED`, and `REJECTED` (plus `permanently_rejected` flag). Suspending or deactivating a college immediately revokes all active sessions for its users and blocks login (`403 COLLEGE_SUSPENDED` / `COLLEGE_INACTIVE`).
 
 Status transitions must follow business rules.
 
@@ -997,7 +1015,7 @@ Processed results may be accessed through:
 GET /api/v1/results
 GET /api/v1/results/{resultId}
 GET /api/v1/students/{studentId}/results
-GET /api/v1/me/results
+GET /api/v1/me/results            # Post-MVP (Phase 16 — Student Portal)
 ```
 
 The API must distinguish between:
@@ -1046,7 +1064,7 @@ Core endpoints:
 GET /api/v1/backlogs
 GET /api/v1/backlogs/{backlogId}
 GET /api/v1/students/{studentId}/backlogs
-GET /api/v1/me/backlogs
+GET /api/v1/me/backlogs           # Post-MVP (Phase 16 — Student Portal)
 ```
 
 Backlog creation/clearing should normally occur through the result-processing/business workflow rather than arbitrary client-side CRUD.
@@ -1075,7 +1093,7 @@ Core APIs:
 GET /api/v1/students/{studentId}/academic-passport
 GET /api/v1/students/{studentId}/academic-passport/summary
 GET /api/v1/students/{studentId}/academic-passport/semesters/{semesterId}
-GET /api/v1/me/academic-passport
+GET /api/v1/me/academic-passport  # Post-MVP (Phase 16 — Student Portal)
 ```
 
 The Academic Passport API is read-oriented.
@@ -1114,7 +1132,7 @@ GET /api/v1/analytics/courses/{courseId}
 GET /api/v1/analytics/semesters/{semesterId}
 GET /api/v1/analytics/subjects/{subjectId}
 GET /api/v1/analytics/backlogs
-GET /api/v1/me/analytics
+GET /api/v1/me/analytics          # Post-MVP (Phase 16 — Student Portal)
 ```
 
 Analytics APIs are read-only.
@@ -1128,19 +1146,19 @@ Analytics visibility depends on role and tenant.
 Example:
 
 ```text
-SUPER_ADMIN
+SUPER_ADMIN (Active MVP)
     ↓
 Platform-level analytics where permitted
 
-COLLEGE_ADMIN
+COLLEGE_ADMIN (Active MVP — APPROVED & ACTIVE college)
     ↓
 Own college analytics
 
-ACADEMIC_STAFF
+ACADEMIC_STAFF (Post-MVP — Phase 15)
     ↓
 Authorized academic analytics
 
-STUDENT
+STUDENT (Post-MVP — Phase 16)
     ↓
 Own analytics
 ```
@@ -1179,21 +1197,21 @@ Every metric must have a documented definition.
 
 ---
 
-# 52. Student Portal APIs
+# 52. Student Portal APIs (Post-MVP — Phase 16)
 
-The Student Portal should use `/me` endpoints where possible.
+Student authentication and the Student Portal are **Post-MVP** (Phase 16). When implemented, the Student Portal will use `/me` endpoints where possible while sharing the core `/api/v1/auth/*` endpoints:
 
 ```http
-GET /api/v1/me
-GET /api/v1/me/dashboard
-GET /api/v1/me/results
-GET /api/v1/me/backlogs
-GET /api/v1/me/academic-passport
-GET /api/v1/me/analytics
-GET /api/v1/me/profile
-PUT /api/v1/me/profile
-PUT /api/v1/me/password
-POST /api/v1/auth/logout
+GET  /api/v1/auth/me               # Shared active-session identity endpoint (MVP & Post-MVP)
+POST /api/v1/auth/change-password  # Shared password change endpoint (MVP & Post-MVP)
+POST /api/v1/auth/logout           # Shared logout endpoint (MVP & Post-MVP)
+GET  /api/v1/me/dashboard          # Post-MVP
+GET  /api/v1/me/results            # Post-MVP
+GET  /api/v1/me/backlogs           # Post-MVP
+GET  /api/v1/me/academic-passport  # Post-MVP
+GET  /api/v1/me/analytics          # Post-MVP
+GET  /api/v1/me/profile            # Post-MVP
+PUT  /api/v1/me/profile            # Post-MVP
 ```
 
 ---
@@ -1875,13 +1893,13 @@ for authenticated production APIs unless the security architecture explicitly pe
 
 # 87. CSRF
 
-CSRF protection requirements depend on the selected authentication/session mechanism.
+Acadlytic uses stateful HTTP-only session cookies via **Spring Session JDBC (MySQL 8)** and mandates **Spring Security 6 SPA CSRF protection** (`ADR-04`):
 
-If browser cookies are used for authentication, CSRF protection must be explicitly addressed.
-
-If a token-based mechanism is used, the architecture must still evaluate browser-specific threats.
-
-This decision must be finalized with the Authentication security architecture.
+- `CookieCsrfTokenRepository.withHttpOnlyFalse()` emits the `XSRF-TOKEN` cookie.
+- `SpaCsrfTokenRequestHandler` and `CsrfCookieFilter` validate and expose CSRF tokens safely.
+- `GET /api/v1/auth/csrf` bootstraps the CSRF token for the React SPA.
+- All state-changing API requests (`POST`, `PUT`, `PATCH`, `DELETE`), including login, logout, and public college registration, must include `X-XSRF-TOKEN` (`403 CSRF_TOKEN_INVALID` on failure).
+- Development prefers the Vite proxy for same-origin requests with Axios `withCredentials: true`.
 
 ---
 
@@ -2244,7 +2262,8 @@ This must be tested explicitly.
 
 # 104. Student Authorization Testing
 
-For student APIs:
+- **MVP (Tenant-Scoped Admin Access):** Verify that `COLLEGE_ADMIN` of College A can access College A student records and is denied access to College B student records, and that unapproved/suspended colleges cannot access student management APIs.
+- **Post-MVP (Phase 16 — Student Self-Service Portal):** Once `STUDENT` authentication is enabled:
 
 ```text
 Student A
@@ -2310,21 +2329,21 @@ Do not cache mutable academic information without a clear invalidation strategy.
 
 # 107. Cache and Source of Truth
 
-Caching never changes ownership.
+Caching never changes ownership. In **MVP**, **MySQL 8** is both the authoritative transactional database and the Spring Session JDBC session store (**Redis is not used in MVP**).
 
-Example:
+If optional caching (such as Redis) is introduced Post-MVP:
 
 ```text
-PostgreSQL
+MySQL 8
     ↓
-Source of Truth
+Source of Truth (and MVP Spring Session JDBC Store)
 
-Redis
+Optional Cache (Future / Post-MVP)
     ↓
-Cache
+Read-Through / Derived Cache Only
 ```
 
-If Redis contains a stale value, PostgreSQL remains authoritative.
+If any cache contains a stale value, **MySQL 8** remains authoritative.
 
 ---
 
@@ -2452,7 +2471,7 @@ Domain Logic
       ↓
 Repository
       ↓
-PostgreSQL
+MySQL 8 (Data + Spring Session JDBC)
       ↓
 Response DTO
       ↓
@@ -2599,9 +2618,9 @@ analytics.md
         ↓
 Analytics APIs
 
-student-portal.md
+student-portal.md              (Post-MVP — Phase 16)
         ↓
-Student APIs
+Student Self-Service APIs      (Post-MVP)
 ```
 
 This document standardizes the API architecture across them.
@@ -2678,79 +2697,47 @@ No single layer should be treated as the only security boundary.
 
 ---
 
-# 118. Unresolved API Decisions
+# 118. Finalized & Deferred API Decisions
 
-The following decisions should be finalized during backend/security architecture:
+Core API architecture decisions (`ADR-01` – `ADR-19`) have been finalized in `authentication.md` and `authentication-implementation.md`:
 
-## 118.1 Authentication Mechanism
+## 118.1 Authentication & Session Mechanism (Finalized — ADR-01 to ADR-05)
 
-Choose between the appropriate session/token architecture.
-
-Consider:
-
-- browser security
-- refresh behavior
-- CSRF
-- token storage
-- logout
-- expiration
-- multi-device sessions
+- **Stateful HTTP-only session cookies** persisted in **MySQL 8** via **Spring Session JDBC** (**no JWT**).
+- 30-minute idle timeout, 12-hour absolute lifetime, session ID renewal on login/privilege changes, multi-device sessions allowed.
+- Dev cookie `ACADLYTIC_SID`; Prod cookie `__Host-ACADLYTIC_SID` (`Secure=true`, `HttpOnly=true`, `SameSite=Lax`, `Path=/`, no `Domain`).
+- **Spring Security 6 SPA CSRF** (`GET /api/v1/auth/csrf`, `XSRF-TOKEN` / `X-XSRF-TOKEN`) enforced on login, logout, registration, and all state-changing APIs.
 
 ---
 
-## 118.2 Account Activation
+## 118.2 College Onboarding & Account Provisioning (Finalized — ADR-06 to ADR-09, ADR-14, ADR-17)
 
-Determine whether provisioned users:
-
-```text
-receive temporary credentials
-```
-
-or:
-
-```text
-receive an activation link
-```
-
-or use another controlled activation flow.
+- Public college registration (`POST /api/v1/auth/register-college`) grants immediate restricted dashboard access (`users.status = ACTIVE`, `colleges.approval_status = PENDING`, `colleges.status = PENDING_VERIFICATION`).
+- Email verification (48h DB-hashed single-use token via transactional outbox) + authenticated document upload + Submit for Review gate entry into the `SUPER_ADMIN` review queue.
+- `SUPER_ADMIN` is bootstrapped via `SuperAdminBootstrapRunner` (env-driven, disabled post-setup) and never manually creates `COLLEGE_ADMIN` credentials.
+- Post-MVP `ACADEMIC_STAFF` and `STUDENT` account activation flows belong to Phases 15–16.
 
 ---
 
-## 118.3 File Storage
+## 118.3 File Storage (Finalized Interface — ADR-16; Provider Deferred — ADR-16b)
 
-Finalize whether imported files use:
-
-```text
-local development storage
-```
-
-and:
-
-```text
-S3 / Cloudflare R2 / equivalent
-```
-
-in production.
+- Abstracted behind `DocumentStorageService`: local non-webroot filesystem in `dev`, private S3-compatible object storage streamed through backend-authorized endpoints in `prod` (backed-up persistent volume acceptable for single-node pilot).
+- **Deferred (`ADR-16b`):** Exact S3-compatible cloud provider selection (Owner: Platform/DevOps Lead; resolve before Phase 14 MVP Release Gate).
+- **Deferred (`ADR-11b`):** Automated document malware/AV scanning (Owner: Security/Backend Lead; resolve before Post-MVP Phase 18.7).
 
 ---
 
-## 118.4 Background Job Technology
+## 118.4 Background Job & Email Outbox Technology (Finalized — ADR-13, ADR-15, ADR-18)
 
-MVP may use Spring-based background processing.
-
-If workload grows, dedicated job infrastructure may be introduced.
+- MVP uses Spring `@Scheduled` workers backed by MySQL 8:
+  - Transactional email outbox (`outbox_emails`, 10s poller using `SELECT ... FOR UPDATE SKIP LOCKED`, 5-attempt exponential backoff, Mailpit in `dev`, SMTP/TLS in `prod`; exact commercial SMTP vendor `ADR-15b` deferred to Phase 14 MVP Release Gate).
+  - Daily 7-day abandoned unverified/unsubmitted registration cleanup job (`ADR-13`).
 
 ---
 
-## 118.5 API Gateway
+## 118.5 Reverse Proxy / API Gateway (Finalized)
 
-MVP may operate behind:
-
-```text
-Nginx / reverse proxy
-```
-
-A dedicated API gateway is not required unless future scale/security requirements justify it.
+MVP operates behind a same-origin reverse proxy (e.g., Nginx) in production so `__Host-ACADLYTIC_SID` and SPA CSRF work cleanly without cross-site cookie complexity. Development prefers the Vite dev proxy. A dedicated API gateway is not required in MVP.
 
 ---
 
@@ -2828,7 +2815,8 @@ The intended API architecture is:
                                       ↓
                                  Repositories
                                       ↓
-                                  PostgreSQL
+                                   MySQL 8
+                        (Data + Spring Session JDBC)
 ```
 
 The central API principle is:
@@ -2850,8 +2838,8 @@ The API must remain a **business-oriented contract**, not a direct representatio
 # 121. Document Status
 
 **Document:** `api-architecture.md`  
-**Version:** 1.0  
-**Status:** Draft / Architecture Ready
+**Version:** 1.1  
+**Status:** Approved / Aligned with Finalized MVP Architecture
 
 Next architecture documents:
 

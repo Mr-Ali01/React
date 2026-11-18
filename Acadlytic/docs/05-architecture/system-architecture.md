@@ -2,8 +2,8 @@
 
 **Project:** Acadlytic  
 **Document:** System Architecture  
-**Version:** 1.0  
-**Status:** Draft / Implementation Ready  
+**Version:** 1.1  
+**Status:** Approved / Aligned with Finalized MVP Architecture  
 
 ---
 
@@ -44,15 +44,17 @@ Acadlytic is a multi-tenant academic intelligence platform designed for universi
 
 The system centralizes student academic information and provides:
 
-- student management
+- SaaS college onboarding, document verification, and `SUPER_ADMIN` approval
+- student records management (MVP admin records)
 - academic structure management
 - university result import
 - result validation
 - result processing
 - backlog tracking
-- Academic Passport
+- Academic Passport (administrative read model in MVP)
 - academic analytics
-- student self-service portal
+- delegated academic staff portal *(Post-MVP — Phase 15)*
+- student self-service portal *(Post-MVP — Phase 16)*
 
 The core system follows this flow:
 
@@ -71,8 +73,8 @@ University Result / College Data
                     ↓
                 Analytics
                     ↓
-              Student Portal
-              College Dashboard
+      College Dashboard (MVP)
+      Student Portal (Post-MVP — Phase 16)
 ```
 
 ---
@@ -152,31 +154,35 @@ The architecture must still maintain module boundaries so that specific modules 
 
 # 6. System Context
 
-At the highest level:
+At the highest level (Active MVP actors: `SUPER_ADMIN` and `COLLEGE_ADMIN`; `ACADEMIC_STAFF`, `STUDENT` authentication, and `BRANCH_ADMIN` are Post-MVP):
 
 ```text
-                    ┌──────────────────────┐
-                    │ University / Sources │
-                    └──────────┬───────────┘
-                               │
-                        Result Data
-                               │
-                               ▼
-┌───────────────┐      ┌─────────────────────┐
-│ College Admin │─────▶│                     │
-└───────────────┘      │                     │
-                       │      Acadlytic      │
-┌───────────────┐      │                     │
-│Academic Staff │─────▶│     Platform        │
-└───────────────┘      │                     │
-                       │                     │
-┌───────────────┐      │                     │
-│    Student    │─────▶│                     │
-└───────────────┘      └──────────┬──────────┘
-                                  │
-                                  ▼
-                              MySQL
+                         ┌──────────────────────┐
+                         │ University / Sources │
+                         └──────────┬───────────┘
+                                    │
+                             Result Data
+                                    │
+                                    ▼
+┌──────────────────────┐ ┌─────────────────────┐
+│ Super Admin (MVP)    │▶│                     │
+└──────────────────────┘ │                     │
+┌──────────────────────┐ │      Acadlytic      │
+│ College Admin (MVP)  │▶│                     │
+└──────────────────────┘ │     Platform        │
+┌──────────────────────┐ │                     │
+│Academic Staff        │▶│  (Modular Monolith) │
+│(Post-MVP — Phase 15) │ │                     │
+└──────────────────────┘ │                     │
+┌──────────────────────┐ │                     │
+│Student Portal        │▶│                     │
+│(Post-MVP — Phase 16) │ └──────────┬──────────┘
+└──────────────────────┘            │
+                                    ▼
+                    MySQL 8 (Data + Spring Session JDBC)
 ```
+
+*Note: Student academic records are managed in MVP by `COLLEGE_ADMIN`. `ACADEMIC_STAFF` (Phase 15), `STUDENT` authentication / Student Portal (Phase 16), and `BRANCH_ADMIN` / branch management (Phase 18.6; no branch tables or features in MVP) are explicitly Post-MVP.*
 
 ---
 
@@ -185,21 +191,21 @@ At the highest level:
 Acadlytic consists of:
 
 ```text
-1. Public Website
-2. Authentication & Authorization
-3. College Management
-4. Student Management
+1. Public Website & Public College Registration
+2. Authentication & Authorization (Stateful Sessions via Spring Session JDBC + SPA CSRF)
+3. College Registration Approval & College Management
+4. Student Records Management (MVP Admin Records)
 5. Academic Structure
 6. Result Import
 7. Result Validation
 8. Result Processing
 9. Backlog Tracking
-10. Academic Passport
+10. Academic Passport (Admin Read View in MVP)
 11. Analytics
-12. Student Portal
+12. Student Portal (Post-MVP — Phase 16)
 13. Integration Layer
-14. Background Jobs
-15. Database
+14. Background Jobs & Transactional Email Outbox
+15. Database (MySQL 8)
 16. Audit and Security Infrastructure
 ```
 
@@ -435,7 +441,7 @@ Result Processing
 Backlog Tracking
 Academic Passport
 Analytics
-Student Portal
+Student Portal (Post-MVP — Phase 16)
 ```
 
 Each module has a defined responsibility.
@@ -446,14 +452,13 @@ Each module has a defined responsibility.
 
 Authentication is responsible for:
 
-- login
-- logout
-- current user
-- password management
-- account status
-- session/token handling
-- account provisioning
-- authentication security
+- stateful HTTP-only session lifecycle persisted in **MySQL 8** via **Spring Session JDBC** (**no JWT**)
+- Spring Security 6 SPA CSRF protection (`GET /api/v1/auth/csrf`, `XSRF-TOKEN` / `X-XSRF-TOKEN`)
+- login, logout, current user (`GET /api/v1/auth/me`), and session revocation
+- public college registration (`POST /api/v1/auth/register-college`), email verification, and email change
+- password management (`BCryptPasswordEncoder(12)`), password reset, and lockout protection
+- one-time env-driven `SUPER_ADMIN` bootstrap (`SuperAdminBootstrapRunner`)
+- authentication security and audit logging
 
 Authentication answers:
 
@@ -611,11 +616,13 @@ Analytics must not modify authoritative academic records.
 
 ---
 
-# 27. Student Portal
+# 27. Student Portal (Post-MVP — Phase 16)
 
-Student Portal is primarily a presentation and access layer.
+> **Post-MVP Scope:** Student authentication and the Student Portal are **Post-MVP (Phase 16)**. In MVP, student academic records, Academic Passports, and analytics are managed and viewed exclusively by authorized `COLLEGE_ADMIN` users within their approved college.
 
-It allows students to:
+When introduced in Phase 16, the Student Portal acts as a read-oriented self-service presentation and access layer.
+
+It allows authenticated `STUDENT` users to:
 
 - view dashboard
 - view academic records
@@ -866,16 +873,16 @@ Spring Security
  ↓
 Validate Credentials
  ↓
-Create Authenticated Context
+Create Spring Session JDBC Session in MySQL 8 & Issue HttpOnly Cookie
  ↓
-Return Authentication Result
+Return User & College Authorization Status (No JWT)
  ↓
-Frontend Stores Required Auth State
+Frontend Hydrates UI State via GET /api/v1/auth/me
  ↓
-Protected Routes
+Protected Routes (Restricted Onboarding or Full Management Dashboard)
 ```
 
-The exact token/session strategy is defined in the authentication architecture and security decisions.
+The finalized stateful session, cookie (`ACADLYTIC_SID` dev / `__Host-ACADLYTIC_SID` prod), and SPA CSRF strategy is defined in `authentication.md` and `authentication-implementation.md` (`ADR-01` – `ADR-05`).
 
 ---
 
@@ -939,18 +946,19 @@ React
 
 # 40. Read Request Flow
 
-Example: Student views Academic Passport.
+Example (MVP): Approved `COLLEGE_ADMIN` views a student's Academic Passport (`GET /api/v1/students/{studentId}/academic-passport`).  
+*(In Post-MVP Phase 16, an authenticated `STUDENT` will view their own Academic Passport via `GET /api/v1/me/academic-passport`.)*
 
 ```text
-Student
+COLLEGE_ADMIN (MVP)  /  STUDENT (Post-MVP — Phase 16)
  ↓
 React
  ↓
-GET /api/v1/me/academic-passport
+GET /api/v1/students/{studentId}/academic-passport  (Post-MVP Student: GET /api/v1/me/academic-passport)
  ↓
-Authentication
+Spring Session JDBC Authentication (MySQL 8)
  ↓
-Student Authorization
+Role, Tenant & Approval Authorization
  ↓
 Academic Passport Service
  ↓
@@ -968,7 +976,7 @@ React
 The complete result import process is:
 
 ```text
-College Staff
+College Admin (MVP) / Academic Staff (Post-MVP — Phase 15)
       ↓
 Upload Excel/CSV
       ↓
@@ -1523,7 +1531,7 @@ Background workers can be scaled independently if required.
 
 # 66. Horizontal Scaling
 
-The backend should ideally remain stateless where practical.
+Application nodes must not hold sticky in-memory session state.
 
 This allows:
 
@@ -1532,9 +1540,12 @@ Request
  ├── Instance A
  ├── Instance B
  └── Instance C
+       │
+       ▼
+MySQL 8 (Spring Session JDBC + Authoritative Data)
 ```
 
-Shared state should be stored in appropriate infrastructure rather than local server memory.
+Shared authenticated session state is persisted externally in **MySQL 8** via **Spring Session JDBC** (`ADR-02`) rather than local JVM memory, allowing horizontal scaling without Redis or JWT.
 
 ---
 
@@ -1822,78 +1833,89 @@ It must not expose private student academic information.
 
 # 82. Role-Based System Access
 
-Primary roles:
+Active MVP roles:
 
 ```text
 SUPER_ADMIN
 COLLEGE_ADMIN
-ACADEMIC_STAFF
-STUDENT
+```
+
+Post-MVP roles (explicitly excluded from MVP authentication and authorization):
+
+```text
+ACADEMIC_STAFF  (Post-MVP — Phase 15)
+STUDENT         (Post-MVP — Phase 16; Student academic records remain in MVP)
+BRANCH_ADMIN    (Post-MVP — Phase 18.6; no branch tables or features in MVP)
 ```
 
 Access model:
 
 ```text
-SUPER_ADMIN
+SUPER_ADMIN (Active MVP)
     ↓
-Platform Management
+Platform Management & College Registration Approval
 
-COLLEGE_ADMIN
+COLLEGE_ADMIN (Active MVP — 1 active admin per college in MVP)
     ↓
-College Management
+Restricted Onboarding Dashboard → Full College Management (once APPROVED & ACTIVE)
 
-ACADEMIC_STAFF
+ACADEMIC_STAFF (Post-MVP — Phase 15)
     ↓
-Academic Operations
+Delegated Academic Operations
 
-STUDENT
+STUDENT (Post-MVP — Phase 16)
     ↓
-Own Academic Information
+Own Academic Information (Student Self-Service Portal)
+
+BRANCH_ADMIN (Post-MVP — Phase 18.6)
+    ↓
+Multi-Campus / Branch Administration
 ```
 
-Exact permissions are defined by authorization rules.
+Exact permissions are defined by authorization rules in `authentication.md` and `security-rules.md`.
 
 ---
 
-# 83. Super Admin Boundary
+# 83. Super Admin Boundary (Active MVP Role)
 
 SUPER_ADMIN operates at platform level.
 
 Typical responsibilities:
 
-- manage colleges
-- manage platform configuration
-- manage tenant-level administration
-- manage supported universities
+- review, approve, request action on, or reject college registration applications (`expectedVersion` concurrency protection)
+- manage college tenant lifecycle status (`ACTIVE`, `SUSPENDED`, `INACTIVE`)
+- manage platform configuration and supported universities
 - manage platform operations
 
-Super Admin access must still be audited.
+`SUPER_ADMIN` is bootstrapped via `SuperAdminBootstrapRunner` and does **not** manually create `COLLEGE_ADMIN` credentials. Super Admin access must still be audited.
 
 ---
 
-# 84. College Admin Boundary
+# 84. College Admin Boundary (Active MVP Role)
 
-COLLEGE_ADMIN operates within a college tenant.
+COLLEGE_ADMIN operates within a college tenant (MVP enforces **exactly one active `COLLEGE_ADMIN` per college** via MySQL 8 `VIRTUAL` generated column `active_college_admin_college_id`).
 
 Typical responsibilities:
 
-- manage students
-- manage academic structure where permitted
-- import results
-- review validation
-- process results where permitted
-- view analytics
-- manage academic operations
+- complete email verification, upload verification documents, and submit registration for `SUPER_ADMIN` review via the immediate restricted onboarding dashboard
+- once `colleges.approval_status = APPROVED` and `colleges.status = ACTIVE`:
+  - manage students (academic records)
+  - manage academic structure where permitted
+  - import results
+  - review validation
+  - process results where permitted
+  - view Academic Passports and institutional analytics
+  - manage academic operations
 
-College Admin must not access another college's tenant data.
+College Admin must not access academic management APIs before approval or access another college's tenant data.
 
 ---
 
-# 85. Academic Staff Boundary
+# 85. Academic Staff Boundary (Post-MVP — Phase 15)
 
-ACADEMIC_STAFF performs permitted academic operations.
+> **Post-MVP Scope:** `ACADEMIC_STAFF` is **not active in MVP** and is deferred to Phase 15.
 
-Possible operations include:
+When implemented in Phase 15, `ACADEMIC_STAFF` will perform permitted delegated academic operations within their college:
 
 - student management
 - result imports
@@ -1902,13 +1924,15 @@ Possible operations include:
 - backlog review
 - academic reporting
 
-Exact permissions must be configurable or explicitly defined.
+Exact permissions must be configurable or explicitly defined in Phase 15.
 
 ---
 
-# 86. Student Boundary
+# 86. Student Boundary (Post-MVP — Phase 16)
 
-STUDENT can:
+> **Post-MVP Scope:** `STUDENT` authentication and the Student Self-Service Portal are **not active in MVP** and are deferred to Phase 16. Student academic records remain in MVP and are managed by `COLLEGE_ADMIN`.
+
+When implemented in Phase 16, authenticated `STUDENT` users will be able to:
 
 - view own academic information
 - view results
@@ -1932,7 +1956,7 @@ Processed Academic Records
           ↓
     Academic Passport
           ↓
-       Student
+College Admin (MVP) / Student Portal (Post-MVP — Phase 16)
 ```
 
 and:
@@ -2092,7 +2116,7 @@ The overall academic lifecycle is:
                          │
              ┌───────────┴───────────┐
              ▼                       ▼
-      College Dashboard        Student Portal
+  College Dashboard (MVP)   Student Portal (Post-MVP)
 ```
 
 ---
@@ -2332,9 +2356,10 @@ Lucide React
 ## Backend
 
 ```text
-Java
-Spring Boot
-Spring Security
+Java 21
+Spring Boot 3
+Spring Security 6 (Stateful HTTP-only Sessions + SPA CSRF; no JWT)
+Spring Session JDBC
 Spring Data JPA
 Hibernate
 Bean Validation
@@ -2344,7 +2369,7 @@ Maven
 ## Database
 
 ```text
-MySQL
+MySQL 8 (Authoritative Data, Spring Session JDBC, Transactional Email Outbox)
 ```
 
 ## Supporting Technologies
@@ -2354,7 +2379,9 @@ Docker
 Git
 GitHub
 Flyway
-Nginx
+Testcontainers (MySQL 8.0.36)
+Mailpit (Local Dev SMTP)
+Nginx (Production Same-Origin Reverse Proxy)
 ```
 
 The exact versions should be maintained separately in project configuration.
@@ -2570,22 +2597,18 @@ When an implementation decision is unclear:
 
 ---
 
-# 112. Unresolved Architectural Decisions
+# 112. Finalized & Deferred Architectural Decisions
 
-The following decisions may require later confirmation:
+Core MVP authentication, session, onboarding, storage-abstraction, email-outbox, and testing decisions (`ADR-01` – `ADR-19`) are **FINALIZED** in `authentication.md` and `authentication-implementation.md` (stateful HTTP-only sessions via Spring Session JDBC + MySQL 8, Spring Security 6 SPA CSRF, transactional email outbox with `SKIP LOCKED`, `DocumentStorageService` and `EmailSender` ports, Testcontainers MySQL `8.0.36`).
 
-- exact authentication/token strategy
-- exact background job implementation
-- object storage provider
-- email provider
-- production hosting provider
-- caching technology
-- monitoring platform
-- advanced analytics architecture
-- university-specific connector implementations
-- future event infrastructure
+The following items remain explicitly **DEFERRED** for later phases and must not be invented prematurely:
 
-These decisions should not be invented prematurely.
+- **ADR-11b (Post-MVP Phase 18.7):** Automated document malware/AV scanning
+- **ADR-15b (Phase 14 MVP Release Gate):** Exact commercial production SMTP vendor selection
+- **ADR-16b (Phase 14 MVP Release Gate):** Exact production S3-compatible object storage provider selection
+- production hosting provider and monitoring/alerting platform (Phase 14)
+- optional future caching technology (Redis is not used in MVP)
+- advanced analytics architecture, university-specific connector implementations, and future event infrastructure (Post-MVP Phase 18)
 
 ---
 
@@ -2621,15 +2644,16 @@ The final high-level architecture is:
 ```text
                               USERS
                                 │
-                ┌───────────────┼────────────────┐
-                │               │                │
-           Super Admin     College Staff       Student
-                │               │                │
-                └───────────────┼────────────────┘
+        ┌───────────────────────┼───────────────────────┐
+        │                       │                       │
+  Super Admin (MVP)     College Admin (MVP)    Academic Staff (Post-MVP)
+                                               & Student Portal (Post-MVP)
+        │                       │                       │
+        └───────────────────────┼───────────────────────┘
                                 ▼
                          React Frontend
                                 │
-                              HTTPS
+                  HTTPS (Session Cookie + SPA CSRF)
                                 │
                                 ▼
                      Spring Boot REST API
@@ -2637,7 +2661,7 @@ The final high-level architecture is:
                     ┌───────────┴───────────┐
                     │                       │
                Spring Security        Application Layer
-                    │                       │
+            (Spring Session JDBC)           │
                     │                ┌──────┴──────┐
                     │                │             │
                     │             Domain      Use Cases
@@ -2653,11 +2677,10 @@ The final high-level architecture is:
                     │                │
                     │       ┌────────┼─────────┐
                     │       │        │         │
-                    │     MySQL   Storage   Integrations
-                    │                         │
-                    │                    University APIs
-                    │                    Excel / CSV
-                    │                    Webhooks
+                    │    MySQL 8  Storage   Integrations
+                    │  (Data +    (Local /  (Email Outbox,
+                    │   Sessions)   S3)      University APIs,
+                    │                        Excel / CSV)
                     │
                     └──────────────────────────────┘
 
@@ -2696,7 +2719,7 @@ The architecture is intentionally designed so that Acadlytic can begin with **Ex
 
 **Document:** System Architecture  
 **Project:** Acadlytic  
-**Version:** 1.0  
-**Status:** Draft / Implementation Ready  
+**Version:** 1.1  
+**Status:** Approved / Aligned with Finalized MVP Architecture  
 
 This document serves as the top-level technical architecture reference for Acadlytic. Detailed implementation decisions must remain consistent with this architecture and the specialized architecture documents.

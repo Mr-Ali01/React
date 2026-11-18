@@ -1,15 +1,13 @@
 package com.acadlytic;
 
+import com.acadlytic.support.AbstractMySqlIntegrationTest;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.ActiveProfiles;
 
-@SpringBootTest
-@ActiveProfiles("test")
-class AcadlyticApplicationTests {
+class AcadlyticApplicationTests extends AbstractMySqlIntegrationTest {
 
     @Test
-    void contextLoads() {
-        // Verifies Spring ApplicationContext loads without error
+    void contextLoadsAgainstMySql8WithFlywayMigrations() {
+        // Verifies Spring Boot context, Hibernate ddl-auto=validate, Flyway V1-V3,
+        // and Spring Session JDBC initialize cleanly against MySQL 8.0.36.
     }
 }

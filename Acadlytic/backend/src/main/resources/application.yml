@@ -2,6 +2,7 @@ server:
   port: ${SERVER_PORT:8080}
   servlet:
     context-path: /
+  forward-headers-strategy: framework
 
 spring:
   application:
@@ -12,6 +13,12 @@ spring:
     time-zone: UTC
     date-format: yyyy-MM-dd'T'HH:mm:ss.SSS'Z'
     default-property-inclusion: non_null
+  session:
+    store-type: jdbc
+    timeout: 30m
+    jdbc:
+      initialize-schema: never
+      table-name: SPRING_SESSION
 
 # Springdoc OpenAPI Configuration
 springdoc:
@@ -27,9 +34,43 @@ app:
   name: Acadlytic Academic Intelligence Platform
   version: 0.0.1-SNAPSHOT
   api-prefix: /api/v1
+  scheduling:
+    enabled: true
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:3000}
     allowed-methods: GET,POST,PUT,PATCH,DELETE,OPTIONS
-    allowed-headers: Authorization,Content-Type,Accept,X-Requested-With
+    allowed-headers: Authorization,Content-Type,Accept,X-Requested-With,X-XSRF-TOKEN
     allow-credentials: true
     max-age: 3600
+  security:
+    session:
+      idle-timeout-seconds: 1800
+      absolute-lifetime-seconds: 43200
+    cookie:
+      name: ACADLYTIC_SID
+      secure: false
+      same-site: Lax
+      path: /
+    lockout:
+      max-failed-attempts: 5
+      duration-minutes: 15
+    tokens:
+      password-reset-expiry-minutes: 60
+      email-change-expiry-hours: 48
+      email-verification-expiry-hours: 48
+  bootstrap:
+    super-admin:
+      enabled: ${APP_BOOTSTRAP_SUPER_ADMIN_ENABLED:false}
+      email: ${SUPER_ADMIN_EMAIL:}
+      password: ${SUPER_ADMIN_PASSWORD:}
+      first-name: ${SUPER_ADMIN_FIRST_NAME:}
+      last-name: ${SUPER_ADMIN_LAST_NAME:}
+  mail:
+    from: ${APP_MAIL_FROM:no-reply@acadlytic.local}
+  frontend:
+    base-url: ${APP_FRONTEND_BASE_URL:http://localhost:5173}
+  outbox:
+    poll-delay-ms: 10000
+    batch-size: 20
+    max-attempts: 5
+    stale-processing-minutes: 5

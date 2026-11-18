@@ -9,11 +9,11 @@ Acadlytic transforms fragmented university examination result files into central
 ## 1. Architecture Overview
 
 Acadlytic is structured as a **Modular Monolith**:
-- **Backend:** Java 21, Spring Boot 3, Spring Web, Spring Security, Spring Data JPA, Hibernate, Bean Validation, Maven, and MySQL 8.
+- **Backend:** Java 21, Spring Boot 3, Spring Web, Spring Security, Spring Session JDBC (stateful HTTP-only sessions + SPA CSRF; no JWT), Spring Data JPA, Hibernate, Bean Validation, Maven, and MySQL 8.
 - **Frontend:** React 18+, TypeScript, Vite, Tailwind CSS, React Router, TanStack Query, Zustand, Axios, Recharts, and Lucide React.
-- **Database:** MySQL 8 (InnoDB, `utf8mb4`, UTC timestamps, Flyway migrations).
-- **Multi-Tenancy:** College-level tenant isolation (`college_id`).
-- **MVP Role Model:** Two active roles (`SUPER_ADMIN` and `COLLEGE_ADMIN`). `ACADEMIC_STAFF` and `STUDENT` are post-MVP capabilities.
+- **Database:** MySQL 8 (InnoDB, `utf8mb4`, UTC timestamps, Flyway migrations, Spring Session JDBC tables, transactional email outbox).
+- **Multi-Tenancy:** College-level tenant isolation (`college_id`) with public college registration, restricted pre-approval onboarding dashboard, and `SUPER_ADMIN` verification/approval.
+- **MVP Role Model:** Two active roles (`SUPER_ADMIN` and `COLLEGE_ADMIN`, with exactly one active `COLLEGE_ADMIN` per college in MVP). `ACADEMIC_STAFF`, `STUDENT` authentication/portal, and `BRANCH_ADMIN` (multi-campus/branch management) are Post-MVP capabilities; student academic records remain in MVP.
 
 ```text
 acadlytic/
@@ -29,7 +29,7 @@ acadlytic/
 │   │   │       ├── application-dev.yml
 │   │   │       ├── application-prod.yml
 │   │   │       └── db/migration/# Flyway SQL schema migrations
-│   │   └── test/                # Unit and integration tests
+│   │   └── test/                # Unit tests (JUnit 5/Mockito) & Testcontainers MySQL 8 integration tests
 │   └── pom.xml
 │
 ├── frontend/              # React + TypeScript + Vite SPA
@@ -49,8 +49,8 @@ acadlytic/
 │   ├── vite.config.ts
 │   └── tailwind.config.js
 │
-├── acadlytic-docs/        # Authoritative project specifications & documentation (00 to 16)
-├── docker-compose.yml     # Local MySQL 8 database service
+├── docs/                  # Authoritative project specifications & documentation (00 to 16)
+├── docker-compose.yml     # Local MySQL 8 database service (plus Mailpit dev SMTP in Phase 02)
 ├── .env.example           # Environment variable template
 ├── .gitignore
 └── README.md
@@ -138,35 +138,44 @@ The frontend will be available at `http://localhost:5173`.
 | `SPRING_DATASOURCE_USERNAME` | Database username | `acadlytic_user` |
 | `SPRING_DATASOURCE_PASSWORD` | Database password | `acadlytic_password` |
 | `CORS_ALLOWED_ORIGINS` | Permitted frontend origins | `http://localhost:5173,http://localhost:3000` |
-| `VITE_API_BASE_URL` | Frontend API client base URL | `http://localhost:8080/api/v1` |
+| `VITE_API_BASE_URL` | Frontend API client base URL (prefer same-origin `/api/v1` via Vite dev proxy for session & CSRF cookies) | `/api/v1` (or `http://localhost:8080/api/v1`) |
 
 ---
 
 ## 5. Development Strategy
 
-Acadlytic strictly implements a **backend-first, module-by-module** delivery sequence. Modules must not be built out of sequence:
-1. Foundation & Infrastructure *(Current Phase)*
-2. Authentication & Authorization (`SUPER_ADMIN` and `COLLEGE_ADMIN`)
-3. College & Tenant Management
-4. Academic Structure Configuration
-5. Student Records Management
-6. University Result Import
-7. Result Validation & Resolution
-8. Authoritative Result Processing & Attempts
-9. Backlog Lifecycle Tracking
-10. Academic Passport (Admin Read View)
-11. College Academic Analytics
-12. Integration & Hardening
-13. MVP Release Gate & Pilot Deployment
-14. Post-MVP Academic Staff Portal
-15. Post-MVP Student Portal & Self-Service
+Acadlytic strictly implements a **backend-first, module-by-module** delivery sequence aligned with `docs/08-task-breakdown/roadmap.md`. Modules must not be built out of sequence:
+
+### MVP Phases (Active Roles: `SUPER_ADMIN` and `COLLEGE_ADMIN`)
+1. **Phase 01:** Project & Application Foundation *(Completed)*
+2. **Phase 02:** Authentication & Authorization Foundation *(Next Phase)*
+3. **Phase 03:** College Registration, Restricted Dashboard & Approval Workflow
+4. **Phase 04:** College Management (Tenant Management & Profile)
+5. **Phase 05:** Academic Structure (Programs, Semesters, Subjects, Credits)
+6. **Phase 06:** Student Records Management (Records & Enrollment)
+7. **Phase 07:** Result Import (Excel & CSV Parsing & Ingestion)
+8. **Phase 08:** Result Validation & Error Resolution
+9. **Phase 09:** Result Processing (Authoritative Mutation & Attempt Histories)
+10. **Phase 10:** Backlog Lifecycle Tracking (`OPEN` / `RESOLVED` States)
+11. **Phase 11:** Academic Passport (Administrative Read Model)
+12. **Phase 12:** College Academic Analytics (Institutional Dashboards)
+13. **Phase 13:** End-to-End Integration & Release Hardening
+14. **Phase 14:** MVP Release Gate & Pilot Deployment
+
+### Post-MVP Phases (Role Expansion & Advanced Capabilities)
+15. **Phase 15:** Post-MVP `ACADEMIC_STAFF` Support & Delegated Portal
+16. **Phase 16:** Post-MVP `STUDENT` Authentication & Student Self-Service Portal
+17. **Phase 17:** Post-MVP Subscription-Based Self-Service Onboarding & SaaS Billing
+18. **Phase 18:** Future Platform Capabilities (University API Connectors, Regulation Engine, What-If Simulator, Predictive Risk, AI Query, `BRANCH_ADMIN` & Multi-Campus Management, Automated Document Malware Scanning)
 
 ---
 
 ## 6. Documentation Reference
 
-For all architectural principles, feature specifications, and rules, consult `acadlytic-docs/`:
-- `03-prd/mvp-scope.md` — MVP scope and boundary definitions
-- `05-architecture/` — Database, API, and system architecture specifications
-- `07-project-rules/` — Backend, frontend, database, security, and AI coding standards
-- `08-task-breakdown/` — Roadmap and detailed development task breakdown
+For all architectural principles, feature specifications, and rules, consult `docs/`:
+- `docs/03-prd/mvp-scope.md` — MVP scope, role boundaries, and onboarding rules
+- `docs/05-architecture/` — Database, API, backend, frontend, integration, data ownership, and system architecture specifications
+- `docs/07-project-rules/` — Backend, frontend, database, security, and AI coding standards
+- `docs/08-task-breakdown/` — Master roadmap (`roadmap.md`) and detailed development task breakdown
+- `docs/09-development/feature-specifications/` — Feature specifications (including `authentication.md`)
+- `docs/09-development/implementation-notes/` — Technical implementation blueprints (including `authentication-implementation.md`)
