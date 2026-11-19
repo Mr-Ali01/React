@@ -49,7 +49,7 @@ class OutboxWorkerIntegrationTest extends AbstractMySqlIntegrationTest {
                 "PASSWORD_RESET",
                 Map.of("firstName", "Ada", "token", "top-secret-reset-token-123"));
 
-        int processed = outboxEmailWorker.processBatch(Instant.now());
+        int processed = outboxEmailWorker.processBatch(Instant.now().plusSeconds(5));
         assertThat(processed).isEqualTo(1);
 
         ArgumentCaptor<EmailMessage> messageCaptor = ArgumentCaptor.forClass(EmailMessage.class);

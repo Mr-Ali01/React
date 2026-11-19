@@ -27,7 +27,7 @@ public class AuthToken {
     @Column(name = "token_type", nullable = false, length = 30)
     private AuthTokenType tokenType;
 
-    @Column(name = "token_hash", nullable = false, length = 64, unique = true)
+    @Column(name = "token_hash", nullable = false, length = 64, unique = true, columnDefinition = "CHAR(64)")
     private String tokenHash;
 
     @Column(name = "target_email", length = 255)

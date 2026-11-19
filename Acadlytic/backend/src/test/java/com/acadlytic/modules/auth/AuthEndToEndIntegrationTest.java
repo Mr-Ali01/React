@@ -386,9 +386,10 @@ class AuthEndToEndIntegrationTest extends AbstractMySqlIntegrationTest {
                 .andExpect(jsonPath("$.errorCode").value("COLLEGE_NOT_APPROVED"));
 
         // 3. Simulate SUPER_ADMIN approval -> existing session IMMEDIATELY observes managementUnlocked=true
+        collegeA = collegeRepository.findById(collegeA.getId()).orElseThrow();
         collegeA.setApprovalStatus(CollegeApprovalStatus.APPROVED);
         collegeA.setStatus(CollegeStatus.ACTIVE);
-        collegeRepository.saveAndFlush(collegeA);
+        collegeA = collegeRepository.saveAndFlush(collegeA);
 
         mockMvc.perform(get("/api/v1/auth/me").cookie(adminASession.sessionCookie()))
                 .andExpect(status().isOk())
@@ -409,8 +410,9 @@ class AuthEndToEndIntegrationTest extends AbstractMySqlIntegrationTest {
                 .andExpect(jsonPath("$.errorCode").value("ACCESS_DENIED"));
 
         // 5. Suspending College A immediately invalidates live session AND blocks fresh login (ADR-10)
+        collegeA = collegeRepository.findById(collegeA.getId()).orElseThrow();
         collegeA.setStatus(CollegeStatus.SUSPENDED);
-        collegeRepository.saveAndFlush(collegeA);
+        collegeA = collegeRepository.saveAndFlush(collegeA);
 
         mockMvc.perform(get("/api/v1/auth/me").cookie(adminASession.sessionCookie()))
                 .andExpect(status().isForbidden())
