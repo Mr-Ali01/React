@@ -2,11 +2,22 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { Activity, Layers, ShieldCheck, Database, CheckCircle2 } from 'lucide-react';
+import {
+  Activity,
+  Layers,
+  ShieldCheck,
+  Database,
+  CheckCircle2,
+  LogIn,
+  LayoutDashboard,
+} from 'lucide-react';
+import { useAuthStore } from '@/stores/authStore';
 
 export const HomePage: React.FC = () => {
+  const { user, isAuthenticated } = useAuthStore();
+
   return (
-    <div className="space-y-8">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
       {/* Hero Banner */}
       <div className="bg-gradient-to-r from-sky-900 to-indigo-950 rounded-2xl p-8 sm:p-12 text-white shadow-xl">
         <div className="max-w-3xl space-y-4">
@@ -20,19 +31,51 @@ export const HomePage: React.FC = () => {
             The multi-tenant academic intelligence and longitudinal records platform for university-affiliated colleges.
           </p>
           <div className="pt-4 flex flex-wrap gap-4">
+            {isAuthenticated && user ? (
+              <Link
+                to={user.role === 'SUPER_ADMIN' ? '/admin/dashboard' : '/college/dashboard'}
+              >
+                <Button
+                  size="lg"
+                  className="bg-sky-500 hover:bg-sky-600 focus:ring-sky-400 font-semibold gap-2 shadow-lg"
+                >
+                  <LayoutDashboard className="h-5 w-5" />
+                  Open {user.role === 'SUPER_ADMIN' ? 'Super Admin' : 'College'} Portal
+                </Button>
+              </Link>
+            ) : (
+              <Link to="/auth/login">
+                <Button
+                  size="lg"
+                  className="bg-sky-500 hover:bg-sky-600 focus:ring-sky-400 font-semibold gap-2 shadow-lg"
+                >
+                  <LogIn className="h-5 w-5" />
+                  Sign In to Portal
+                </Button>
+              </Link>
+            )}
+
             <Link to="/health">
-              <Button size="lg" className="bg-emerald-500 hover:bg-emerald-600 focus:ring-emerald-400 font-semibold gap-2">
+              <Button
+                size="lg"
+                className="bg-emerald-600 hover:bg-emerald-700 focus:ring-emerald-500 font-semibold gap-2"
+              >
                 <Activity className="h-5 w-5" />
-                Live API & Database Health Check
+                Live API &amp; Database Health
               </Button>
             </Link>
+
             <a
               href="http://localhost:8080/swagger-ui.html"
               target="_blank"
               rel="noopener noreferrer"
             >
-              <Button variant="outline" size="lg" className="border-sky-400/40 text-white hover:bg-white/10">
-                OpenAPI Documentation
+              <Button
+                variant="outline"
+                size="lg"
+                className="border-sky-400/40 text-white hover:bg-white/10"
+              >
+                OpenAPI Docs
               </Button>
             </a>
           </div>
@@ -94,7 +137,7 @@ export const HomePage: React.FC = () => {
           </div>
           <div className="flex items-center gap-2.5 text-sm text-slate-700">
             <CheckCircle2 className="h-4 w-4 text-emerald-600 flex-shrink-0" />
-            <span>Backend-First, Module-by-Module Delivery</span>
+            <span>Stateful Session Cookies + CSRF Protection</span>
           </div>
           <div className="flex items-center gap-2.5 text-sm text-slate-700">
             <CheckCircle2 className="h-4 w-4 text-emerald-600 flex-shrink-0" />
