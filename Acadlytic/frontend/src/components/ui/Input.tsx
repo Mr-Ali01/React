@@ -31,9 +31,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           id={inputId}
           disabled={disabled}
           aria-invalid={!!error}
-          aria-describedby={
-            error ? errorId : helperText ? helperId : undefined
-          }
+          aria-describedby={error ? errorId : helperText ? helperId : undefined}
           className={twMerge(
             clsx(
               'w-full px-3.5 py-2 text-sm text-slate-900 bg-white border rounded-lg transition-colors shadow-sm',
@@ -42,7 +40,8 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
               error
                 ? 'border-red-300 focus:border-red-500 focus:ring-red-200 text-red-900'
                 : 'border-slate-300 focus:border-sky-500 focus:ring-sky-200',
-              disabled && 'bg-slate-50 text-slate-500 cursor-not-allowed border-slate-200',
+              disabled &&
+                'bg-slate-50 text-slate-500 cursor-not-allowed border-slate-200',
               className
             )
           )}

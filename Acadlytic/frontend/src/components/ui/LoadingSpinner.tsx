@@ -23,7 +23,9 @@ export const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
     <div
       role="status"
       aria-live="polite"
-      className={twMerge(clsx('flex flex-col items-center justify-center gap-2 p-4', className))}
+      className={twMerge(
+        clsx('flex flex-col items-center justify-center gap-2 p-4', className)
+      )}
     >
       <div
         className={clsx(

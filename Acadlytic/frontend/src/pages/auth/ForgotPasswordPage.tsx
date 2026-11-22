@@ -1,32 +1,46 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
+import { ArrowLeft, MailCheck, Send } from 'lucide-react';
+
 import { authService } from '@/services/authService';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Alert } from '@/components/ui/Alert';
-import { ArrowLeft, MailCheck } from 'lucide-react';
+
+const forgotPasswordSchema = z.object({
+  email: z
+    .string()
+    .min(1, 'Email is required')
+    .email('Please enter a valid institutional email address'),
+});
+
+type ForgotPasswordFormValues = z.infer<typeof forgotPasswordSchema>;
 
 export const ForgotPasswordPage: React.FC = () => {
-  const [email, setEmail] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [submittedEmail, setSubmittedEmail] = useState('');
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email) return;
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<ForgotPasswordFormValues>({
+    resolver: zodResolver(forgotPasswordSchema),
+    defaultValues: { email: '' },
+    mode: 'onTouched',
+  });
 
-    setIsLoading(true);
-    setErrorMessage(null);
-
+  const onSubmit = async (values: ForgotPasswordFormValues) => {
     try {
-      await authService.forgotPassword({ email });
-      setIsSubmitted(true);
-    } catch (err: unknown) {
-      const error = err as Error;
-      setErrorMessage(error.message || 'Failed to submit password reset request.');
+      await authService.forgotPassword({ email: values.email });
+    } catch {
+      // Intentionally suppress error display to maintain strict account non-enumeration
     } finally {
-      setIsLoading(false);
+      setSubmittedEmail(values.email);
+      setIsSubmitted(true);
     }
   };
 
@@ -37,42 +51,54 @@ export const ForgotPasswordPage: React.FC = () => {
           Reset Password
         </h2>
         <p className="mt-1 text-sm text-slate-500">
-          Enter your registered email address and we will send you a password reset link.
+          Enter your registered institutional email to receive a password
+          recovery link.
         </p>
       </div>
 
       {isSubmitted ? (
-        <div className="text-center py-4 space-y-4">
+        <div className="text-center py-2 space-y-4">
           <div className="h-12 w-12 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto">
             <MailCheck className="h-6 w-6" />
           </div>
           <Alert variant="success" title="Check your email">
-            If an account exists with <span className="font-semibold">{email}</span>, a reset token has been dispatched.
+            If an eligible account exists for{' '}
+            <span className="font-semibold">{submittedEmail}</span>, a password
+            reset link has been sent. Please check your inbox within 1 hour.
           </Alert>
           <div className="pt-2">
             <Link to="/auth/login">
               <Button variant="outline" size="sm" className="gap-2">
                 <ArrowLeft className="h-4 w-4" />
-                Back to Sign In
+                Return to Sign In
               </Button>
             </Link>
           </div>
         </div>
       ) : (
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {errorMessage && <Alert variant="error">{errorMessage}</Alert>}
-
+        <form
+          onSubmit={handleSubmit(onSubmit)}
+          className="space-y-4"
+          noValidate
+        >
           <Input
             label="Institutional Email"
             type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
             placeholder="admin@college.edu"
-            required
             autoComplete="email"
+            error={errors.email?.message}
+            disabled={isSubmitting}
+            required
+            {...register('email')}
           />
 
-          <Button type="submit" className="w-full" isLoading={isLoading}>
+          <Button
+            type="submit"
+            className="w-full gap-2"
+            disabled={isSubmitting}
+            isLoading={isSubmitting}
+          >
+            <Send className="h-4 w-4" />
             Send Reset Instructions
           </Button>
 

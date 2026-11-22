@@ -83,7 +83,12 @@ export const authService = {
   /**
    * Confirms email change token and updates the primary email.
    */
-  verifyEmailChange: async (payload: VerifyEmailChangeRequest): Promise<void> => {
-    await apiClient.post<ApiResponse<void>>('/auth/verify-email-change', payload);
+  verifyEmailChange: async (
+    payload: VerifyEmailChangeRequest
+  ): Promise<void> => {
+    await apiClient.post<ApiResponse<void>>(
+      '/auth/verify-email-change',
+      payload
+    );
   },
 };

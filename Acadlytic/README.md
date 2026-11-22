@@ -1,5 +1,7 @@
 # Acadlytic
 
+[![CI](https://github.com/your-org/acadlytic/actions/workflows/ci.yml/badge.svg)](https://github.com/your-org/acadlytic/actions/workflows/ci.yml)
+
 **Academic Intelligence and Longitudinal Academic Records Platform for University-Affiliated Colleges**
 
 Acadlytic transforms fragmented university examination result files into centralized, validated student academic records, automated backlog lifecycles, longitudinal Academic Passports, and actionable institutional analytics within a multi-tenant collegiate architecture.

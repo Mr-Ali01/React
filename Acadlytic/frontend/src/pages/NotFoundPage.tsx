@@ -9,7 +9,8 @@ export const NotFoundPage: React.FC = () => {
       <h1 className="text-6xl font-extrabold text-slate-300">404</h1>
       <h2 className="text-2xl font-bold text-slate-800">Page Not Found</h2>
       <p className="text-sm text-slate-500 max-w-md mx-auto">
-        The requested URL was not found on this server. Return to the dashboard or system health check.
+        The requested URL was not found on this server. Return to the dashboard
+        or system health check.
       </p>
       <div className="pt-4">
         <Link to="/">

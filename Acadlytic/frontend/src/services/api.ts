@@ -1,5 +1,39 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { ApiResponse } from '@/types';
+import { useAuthStore } from '@/stores/authStore';
+
+/**
+ * Custom typed ApiError carrying backend response attributes
+ * such as errorCode, HTTP status, and field validation errors.
+ */
+export class ApiError extends Error {
+  errorCode?: string;
+  status?: number;
+  errors?: Record<string, string> | string;
+  data?: ApiResponse<unknown>;
+
+  constructor(
+    message: string,
+    options?: {
+      errorCode?: string;
+      status?: number;
+      errors?: Record<string, string> | string;
+      data?: ApiResponse<unknown>;
+    }
+  ) {
+    super(message);
+    this.name = 'ApiError';
+    this.errorCode = options?.errorCode;
+    this.status = options?.status;
+    this.errors = options?.errors;
+    this.data = options?.data;
+    Object.setPrototypeOf(this, ApiError.prototype);
+  }
+}
+
+export function isApiError(error: unknown): error is ApiError {
+  return error instanceof ApiError;
+}
 
 /**
  * Reads a cookie value by name from document.cookie.
@@ -9,10 +43,13 @@ export function getCookie(name: string): string | null {
   if (typeof document === 'undefined') {
     return null;
   }
-  const match = document.cookie.match(new RegExp('(^|;\\s*)(' + name + ')=([^;]*)'));
+  const match = document.cookie.match(
+    new RegExp('(^|;\\s*)(' + name + ')=([^;]*)')
+  );
   return match ? decodeURIComponent(match[3]) : null;
 }
 
+// Relative same-origin base URL via Vite proxy in development to avoid CORS & keep cookies same-site
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1';
 
 /**
@@ -20,7 +57,7 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1';
  * Configured with:
  * - withCredentials: true (persists ACADLYTIC_SID session cookie across requests per ADR-03)
  * - CSRF cookie/header synchronization (X-XSRF-TOKEN per ADR-04)
- * - Standardized error extraction matching backend ApiResponse<T>
+ * - Standardized error extraction mapping backend errors into ApiError
  */
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
@@ -31,6 +68,14 @@ export const apiClient = axios.create({
   },
   timeout: 15000,
 });
+
+/**
+ * Callback hook to purge query cache when unauthorized session expiration occurs.
+ */
+let sessionPurgeCallback: (() => void) | null = null;
+export function registerSessionPurgeHandler(handler: () => void) {
+  sessionPurgeCallback = handler;
+}
 
 /**
  * Fetch a fresh CSRF token from the backend.
@@ -51,7 +96,7 @@ export async function fetchCsrfToken(): Promise<string | null> {
 const MUTATING_METHODS = new Set(['post', 'put', 'patch', 'delete']);
 
 // Track active retry requests to prevent infinite loops
-interface CustomRequestConfig extends InternalAxiosRequestConfig {
+export interface CustomRequestConfig extends InternalAxiosRequestConfig {
   _csrfRetry?: boolean;
 }
 
@@ -59,14 +104,17 @@ interface CustomRequestConfig extends InternalAxiosRequestConfig {
  * Request interceptor:
  * Automatically reads the XSRF-TOKEN cookie and attaches it as the
  * X-XSRF-TOKEN header for all state-changing requests.
+ * Bootstraps the cookie before dispatching if missing, so the first login does NOT depend on a 403-retry.
  */
 apiClient.interceptors.request.use(
   async (config: CustomRequestConfig) => {
     const method = config.method?.toLowerCase() || 'get';
-    if (MUTATING_METHODS.has(method)) {
+    const isCsrfBootstrap = config.url?.includes('/auth/csrf');
+
+    if (MUTATING_METHODS.has(method) && !isCsrfBootstrap) {
       let xsrfToken = getCookie('XSRF-TOKEN');
 
-      // If no token exists yet in document.cookie, bootstrap it once
+      // Bootstrap token if missing before the request is dispatched
       if (!xsrfToken && !config._csrfRetry) {
         xsrfToken = await fetchCsrfToken();
       }
@@ -82,20 +130,27 @@ apiClient.interceptors.request.use(
 
 /**
  * Response interceptor:
- * - Handles 403 CSRF_TOKEN_INVALID with a single automatic token refresh and request retry
- * - Extracts standardized error messages from ApiResponse<T>
+ * - On 403 CSRF_TOKEN_INVALID: refetches token and retries request exactly once (no infinite loop).
+ * - On 401: handles session expiration vs login failure vs guest check.
+ * - Extracts structured errors into typed ApiError.
  */
 apiClient.interceptors.response.use(
   (response) => response,
   async (error: AxiosError<ApiResponse<unknown>>) => {
     const originalRequest = error.config as CustomRequestConfig | undefined;
+    const url = originalRequest?.url || '';
 
-    // Handle CSRF token invalidation (e.g. server restarted or cookie expired)
+    // 1. Handle CSRF token invalidation (single retry only; never retry /auth/csrf itself)
     const isCsrfError =
       error.response?.status === 403 &&
       error.response?.data?.errorCode === 'CSRF_TOKEN_INVALID';
 
-    if (isCsrfError && originalRequest && !originalRequest._csrfRetry) {
+    if (
+      isCsrfError &&
+      originalRequest &&
+      !originalRequest._csrfRetry &&
+      !url.includes('/auth/csrf')
+    ) {
       originalRequest._csrfRetry = true;
       const freshToken = await fetchCsrfToken();
       if (freshToken) {
@@ -104,21 +159,46 @@ apiClient.interceptors.response.use(
       }
     }
 
+    // 2. Handle 401 UNAUTHORIZED
+    if (error.response?.status === 401) {
+      const isAuthMe = url.includes('/auth/me');
+      const isAuthLogin = url.includes('/auth/login');
+
+      if (isAuthMe) {
+        // Initial / background session probe on guest:
+        // Quietly reset local state without error toasts or redirect loops.
+        useAuthStore.getState().clearAuth();
+      } else if (isAuthLogin) {
+        // Invalid credentials during login attempt:
+        // Reject so the login form displays inline error; do NOT trigger global redirect.
+      } else {
+        // Session expired on protected resource:
+        // Clear auth store, invoke session purge callback, and redirect to login if browser
+        useAuthStore.getState().clearAuth();
+        sessionPurgeCallback?.();
+        if (
+          typeof window !== 'undefined' &&
+          !window.location.pathname.startsWith('/auth/login')
+        ) {
+          window.location.assign('/auth/login');
+        }
+      }
+    }
+
+    // 3. Map into standardized typed ApiError
+    const responseData = error.response?.data;
     const errorMsg =
-      error.response?.data?.message ||
+      responseData?.message ||
       error.message ||
       'An unexpected network error occurred';
 
-    // Attach structured error information for caller components
-    const customError = new Error(errorMsg) as Error & {
-      errorCode?: string;
-      status?: number;
-      data?: ApiResponse<unknown>;
-    };
-    customError.errorCode = error.response?.data?.errorCode;
-    customError.status = error.response?.status;
-    customError.data = error.response?.data;
+    const apiError = new ApiError(errorMsg, {
+      errorCode: responseData?.errorCode,
+      status: error.response?.status,
+      errors: responseData?.errors,
+      data: responseData,
+    });
 
-    return Promise.reject(customError);
+    return Promise.reject(apiError);
   }
 );

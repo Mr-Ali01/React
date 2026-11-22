@@ -11,6 +11,7 @@ target/
 *.war
 *.jar
 *.ear
+*.tsbuildinfo
 
 # Logs
 logs/

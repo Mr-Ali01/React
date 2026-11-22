@@ -19,7 +19,10 @@ export const CollegeApprovalGuard: React.FC = () => {
   }
 
   // For college admins, if college is not approved, redirect to onboarding status
-  if (user.role === 'COLLEGE_ADMIN' && user.collegeApprovalStatus !== 'APPROVED') {
+  if (
+    user.role === 'COLLEGE_ADMIN' &&
+    user.collegeApprovalStatus !== 'APPROVED'
+  ) {
     return <Navigate to="/onboarding-status" replace />;
   }
 

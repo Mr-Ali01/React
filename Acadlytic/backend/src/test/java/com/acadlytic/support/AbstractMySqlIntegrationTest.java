@@ -62,6 +62,37 @@ public abstract class AbstractMySqlIntegrationTest {
     @MockBean
     protected EmailSender emailSender;
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private javax.sql.DataSource dataSource;
+
+    @org.junit.jupiter.api.BeforeEach
+    void enforceTestDatabaseSafety() throws java.sql.SQLException {
+        assertTestDatabaseSafety(dataSource);
+    }
+
+    public static void assertTestDatabaseSafety(javax.sql.DataSource ds) throws java.sql.SQLException {
+        try (java.sql.Connection conn = ds.getConnection()) {
+            String catalog = conn.getCatalog();
+            String url = conn.getMetaData().getURL();
+
+            if ("acadlytic".equalsIgnoreCase(catalog)) {
+                throw new IllegalStateException(
+                        "CRITICAL SAFETY VIOLATION: Integration tests attempted to execute against development database 'acadlytic'! "
+                                + "Tests must strictly run against 'acadlytic_test' or a Testcontainers instance. Resolved URL: " + url);
+            }
+
+            boolean isSafeTestSchema = "acadlytic_test".equalsIgnoreCase(catalog)
+                    || (catalog != null && catalog.toLowerCase().contains("test"))
+                    || (url != null && (url.contains("acadlytic_test") || url.contains("testcontainers")));
+
+            if (!isSafeTestSchema) {
+                throw new IllegalStateException(
+                        "SAFETY VIOLATION: Integration tests connected to unauthorized database schema '" + catalog
+                                + "'. Resolved URL: " + url + ". Integration tests are only permitted on 'acadlytic_test' or Testcontainers.");
+            }
+        }
+    }
+
     @DynamicPropertySource
     static void registerDatasourceProperties(DynamicPropertyRegistry registry) {
         if (DOCKER_AVAILABLE && MYSQL != null && MYSQL.isRunning()) {

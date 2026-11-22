@@ -41,12 +41,19 @@ export const PageContainer: React.FC<PageContainerProps> = ({
   return (
     <div
       className={twMerge(
-        clsx('w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6', maxWidthClasses[maxWidth], className)
+        clsx(
+          'w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6',
+          maxWidthClasses[maxWidth],
+          className
+        )
       )}
     >
       {/* Breadcrumbs */}
       {breadcrumbs && breadcrumbs.length > 0 && (
-        <nav aria-label="Breadcrumb" className="flex items-center space-x-2 text-xs text-slate-500">
+        <nav
+          aria-label="Breadcrumb"
+          className="flex items-center space-x-2 text-xs text-slate-500"
+        >
           {breadcrumbs.map((crumb, idx) => (
             <React.Fragment key={crumb.label}>
               {idx > 0 && <ChevronRight className="h-3 w-3 text-slate-400" />}
@@ -58,7 +65,9 @@ export const PageContainer: React.FC<PageContainerProps> = ({
                   {crumb.label}
                 </Link>
               ) : (
-                <span className="text-slate-700 font-semibold">{crumb.label}</span>
+                <span className="text-slate-700 font-semibold">
+                  {crumb.label}
+                </span>
               )}
             </React.Fragment>
           ))}

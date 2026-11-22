@@ -32,17 +32,23 @@ export const Alert: React.FC<AlertProps> = ({
     },
     success: {
       container: 'bg-emerald-50 border-emerald-200 text-emerald-800',
-      icon: <CheckCircle2 className="h-5 w-5 text-emerald-600 flex-shrink-0 mt-0.5" />,
+      icon: (
+        <CheckCircle2 className="h-5 w-5 text-emerald-600 flex-shrink-0 mt-0.5" />
+      ),
       titleColor: 'text-emerald-900',
     },
     warning: {
       container: 'bg-amber-50 border-amber-200 text-amber-800',
-      icon: <AlertTriangle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />,
+      icon: (
+        <AlertTriangle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+      ),
       titleColor: 'text-amber-900',
     },
     error: {
       container: 'bg-red-50 border-red-200 text-red-800',
-      icon: <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />,
+      icon: (
+        <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+      ),
       titleColor: 'text-red-900',
     },
   };
@@ -63,7 +69,9 @@ export const Alert: React.FC<AlertProps> = ({
       {current.icon}
       <div className="flex-1">
         {title && (
-          <h4 className={clsx('font-semibold text-sm mb-1', current.titleColor)}>
+          <h4
+            className={clsx('font-semibold text-sm mb-1', current.titleColor)}
+          >
             {title}
           </h4>
         )}

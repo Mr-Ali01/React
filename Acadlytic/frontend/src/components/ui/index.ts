@@ -7,3 +7,4 @@ export * from './Modal';
 export * from './Alert';
 export * from './LoadingSpinner';
 export * from './ErrorState';
+export * from './Table';

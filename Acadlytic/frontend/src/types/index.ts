@@ -26,17 +26,11 @@ export type ExtendedUserRole = UserRole | 'ACADEMIC_STAFF' | 'STUDENT';
 
 // College Approval Status matching backend CollegeApprovalStatus
 export type CollegeApprovalStatus =
-  | 'PENDING'
-  | 'ACTION_REQUIRED'
-  | 'APPROVED'
-  | 'REJECTED';
+  'PENDING' | 'ACTION_REQUIRED' | 'APPROVED' | 'REJECTED';
 
 // College Status matching backend CollegeStatus
 export type CollegeStatus =
-  | 'PENDING_VERIFICATION'
-  | 'ACTIVE'
-  | 'SUSPENDED'
-  | 'INACTIVE';
+  'PENDING_VERIFICATION' | 'ACTIVE' | 'SUSPENDED' | 'INACTIVE';
 
 // User Account Status matching backend UserStatus
 export type UserStatus = 'ACTIVE' | 'INACTIVE' | 'LOCKED' | 'SUSPENDED';

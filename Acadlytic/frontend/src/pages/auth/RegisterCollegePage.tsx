@@ -20,11 +20,14 @@ export const RegisterCollegePage: React.FC = () => {
       </div>
 
       <Alert variant="info" title="Foundation Ready">
-        The college onboarding flow integrates with Phase 03 multi-tenant college management backend services.
+        The college onboarding flow integrates with Phase 03 multi-tenant
+        college management backend services.
       </Alert>
 
       <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-xs space-y-2 text-slate-600">
-        <p className="font-semibold text-slate-800">Onboarding Process Steps:</p>
+        <p className="font-semibold text-slate-800">
+          Onboarding Process Steps:
+        </p>
         <ul className="list-disc list-inside space-y-1">
           <li>Institution details &amp; university affiliation registration</li>
           <li>College administrator credentials creation</li>

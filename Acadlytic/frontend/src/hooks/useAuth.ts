@@ -8,6 +8,7 @@ import { CurrentUser, LoginRequest } from '@/types';
 /**
  * Hook to fetch and synchronize current user authentication state.
  * Uses HTTP-only cookie-based session verification with TanStack Query and Zustand.
+ * Stale time is set to 1 minute with window focus refetching to detect session revocation or status change promptly.
  */
 export const useCurrentUser = () => {
   const { setUser, clearAuth, setLoading } = useAuthStore();
@@ -16,7 +17,8 @@ export const useCurrentUser = () => {
     queryKey: queryKeys.auth.currentUser(),
     queryFn: authService.getMe,
     retry: false,
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 60 * 1000, // 1 minute per ADR / requirements
+    refetchOnWindowFocus: true,
   });
 
   useEffect(() => {
@@ -26,14 +28,22 @@ export const useCurrentUser = () => {
     } else if (query.isError) {
       clearAuth();
     }
-  }, [query.data, query.isError, query.isLoading, setUser, clearAuth, setLoading]);
+  }, [
+    query.data,
+    query.isError,
+    query.isLoading,
+    setUser,
+    clearAuth,
+    setLoading,
+  ]);
 
   return query;
 };
 
 /**
  * Mutation hook for logging in.
- * Updates query cache and auth store on successful session establishment.
+ * Updates query cache and auth store on successful session establishment,
+ * then triggers an authoritative refetch of /auth/me.
  */
 export const useLogin = () => {
   const queryClient = useQueryClient();
@@ -41,9 +51,13 @@ export const useLogin = () => {
 
   return useMutation({
     mutationFn: (credentials: LoginRequest) => authService.login(credentials),
-    onSuccess: (user: CurrentUser) => {
+    onSuccess: async (user: CurrentUser) => {
       queryClient.setQueryData(queryKeys.auth.currentUser(), user);
       setUser(user);
+      // Ensure fresh authoritative state from GET /api/v1/auth/me
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.auth.currentUser(),
+      });
     },
   });
 };
@@ -60,7 +74,7 @@ export const useLogout = () => {
     mutationFn: () => authService.logout(),
     onSettled: () => {
       clearAuth();
-      queryClient.removeQueries({ queryKey: queryKeys.auth.all });
+      queryClient.clear();
     },
   });
 };

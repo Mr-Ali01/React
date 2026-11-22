@@ -1,7 +1,12 @@
 import React from 'react';
 import { PageContainer } from '@/components/layout/PageContainer';
 import { Card } from '@/components/ui/Card';
-import { Building2, CheckCircle2, ShieldCheck, GraduationCap } from 'lucide-react';
+import {
+  Building2,
+  CheckCircle2,
+  ShieldCheck,
+  GraduationCap,
+} from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 
 export const CollegeAdminDashboardPage: React.FC = () => {
@@ -26,7 +31,10 @@ export const CollegeAdminDashboardPage: React.FC = () => {
               </div>
               <p className="text-xs text-slate-500">
                 Institutional tenancy is active and isolated under college ID{' '}
-                <span className="font-mono font-medium text-slate-900">{user?.collegeId || 1}</span>.
+                <span className="font-mono font-medium text-slate-900">
+                  {user?.collegeId || 1}
+                </span>
+                .
               </p>
             </div>
           </Card>
@@ -38,7 +46,10 @@ export const CollegeAdminDashboardPage: React.FC = () => {
                 <span>{user?.email}</span>
               </div>
               <p className="text-xs text-slate-500">
-                Role: <span className="font-mono text-sky-600 font-semibold">{user?.role}</span>
+                Role:{' '}
+                <span className="font-mono text-sky-600 font-semibold">
+                  {user?.role}
+                </span>
               </p>
             </div>
           </Card>
@@ -58,7 +69,9 @@ export const CollegeAdminDashboardPage: React.FC = () => {
 
         <Card title="Next Phase Capabilities">
           <p className="text-sm text-slate-600 leading-relaxed mt-2">
-            This dashboard shell establishes the institutional context for College Admins. Subsequent phases will wire department provisioning, student records, and longitudinal academic intelligence analytics.
+            This dashboard shell establishes the institutional context for
+            College Admins. Subsequent phases will wire department provisioning,
+            student records, and longitudinal academic intelligence analytics.
           </p>
         </Card>
       </div>

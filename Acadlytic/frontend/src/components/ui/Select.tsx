@@ -17,7 +17,20 @@ export interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElemen
 }
 
 export const Select = forwardRef<HTMLSelectElement, SelectProps>(
-  ({ label, error, helperText, options, placeholder, className, id, disabled, ...props }, ref) => {
+  (
+    {
+      label,
+      error,
+      helperText,
+      options,
+      placeholder,
+      className,
+      id,
+      disabled,
+      ...props
+    },
+    ref
+  ) => {
     const generatedId = useId();
     const selectId = id || generatedId;
     const errorId = `${selectId}-error`;
@@ -50,7 +63,8 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
                 error
                   ? 'border-red-300 focus:border-red-500 focus:ring-red-200 text-red-900'
                   : 'border-slate-300 focus:border-sky-500 focus:ring-sky-200',
-                disabled && 'bg-slate-50 text-slate-500 cursor-not-allowed border-slate-200',
+                disabled &&
+                  'bg-slate-50 text-slate-500 cursor-not-allowed border-slate-200',
                 className
               )
             )}

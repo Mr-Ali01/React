@@ -20,10 +20,12 @@ export const UnauthorizedPage: React.FC = () => {
       {user && (
         <div className="py-2 px-3 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono text-slate-600 text-left space-y-1">
           <p>
-            <span className="font-semibold text-slate-800">Current Role:</span> {user.role}
+            <span className="font-semibold text-slate-800">Current Role:</span>{' '}
+            {user.role}
           </p>
           <p>
-            <span className="font-semibold text-slate-800">Account:</span> {user.email}
+            <span className="font-semibold text-slate-800">Account:</span>{' '}
+            {user.email}
           </p>
         </div>
       )}

@@ -19,19 +19,22 @@ export const OnboardingStatusPage: React.FC = () => {
       <div className="space-y-6">
         {status === 'PENDING' && (
           <Alert variant="warning" title="Application Under Review">
-            Your college onboarding application has been submitted and is currently awaiting review by the Acadlytic Super Admin team.
+            Your college onboarding application has been submitted and is
+            currently awaiting review by the Acadlytic Super Admin team.
           </Alert>
         )}
 
         {status === 'ACTION_REQUIRED' && (
           <Alert variant="error" title="Additional Information Required">
-            The Super Admin team has requested further documentation or clarification before your college can be approved.
+            The Super Admin team has requested further documentation or
+            clarification before your college can be approved.
           </Alert>
         )}
 
         {status === 'REJECTED' && (
           <Alert variant="error" title="Application Not Approved">
-            This onboarding registration could not be verified or approved. Please contact support.
+            This onboarding registration could not be verified or approved.
+            Please contact support.
           </Alert>
         )}
 
@@ -43,11 +46,17 @@ export const OnboardingStatusPage: React.FC = () => {
                 <span>{user?.collegeName || 'Affiliated Institution'}</span>
               </div>
               <p>
-                <span className="font-medium text-slate-700">College Code:</span>{' '}
-                <span className="font-mono text-slate-900">{user?.collegeCode || 'PENDING'}</span>
+                <span className="font-medium text-slate-700">
+                  College Code:
+                </span>{' '}
+                <span className="font-mono text-slate-900">
+                  {user?.collegeCode || 'PENDING'}
+                </span>
               </p>
               <p>
-                <span className="font-medium text-slate-700">Administrator:</span>{' '}
+                <span className="font-medium text-slate-700">
+                  Administrator:
+                </span>{' '}
                 {user?.firstName} {user?.lastName} ({user?.email})
               </p>
             </div>
@@ -57,10 +66,14 @@ export const OnboardingStatusPage: React.FC = () => {
             <div className="space-y-3 mt-2 text-sm text-slate-600">
               <div className="flex items-center gap-2">
                 <Clock className="h-5 w-5 text-amber-500" />
-                <span className="font-semibold text-slate-900">Stage: Verification</span>
+                <span className="font-semibold text-slate-900">
+                  Stage: Verification
+                </span>
               </div>
               <p className="text-xs text-slate-500 leading-relaxed">
-                Full college management, department provisioning, and longitudinal academic records will unlock automatically once Super Admin review is completed.
+                Full college management, department provisioning, and
+                longitudinal academic records will unlock automatically once
+                Super Admin review is completed.
               </p>
               <div className="pt-2">
                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200">

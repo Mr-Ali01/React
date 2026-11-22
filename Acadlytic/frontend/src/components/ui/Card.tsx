@@ -17,14 +17,21 @@ export const Card: React.FC<CardProps> = ({
   return (
     <div
       className={twMerge(
-        clsx('bg-white border border-slate-200 rounded-xl shadow-sm p-6', className)
+        clsx(
+          'bg-white border border-slate-200 rounded-xl shadow-sm p-6',
+          className
+        )
       )}
       {...props}
     >
       {(title || subtitle) && (
         <div className="mb-4">
-          {title && <h3 className="text-lg font-semibold text-slate-900">{title}</h3>}
-          {subtitle && <p className="text-sm text-slate-500 mt-0.5">{subtitle}</p>}
+          {title && (
+            <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
+          )}
+          {subtitle && (
+            <p className="text-sm text-slate-500 mt-0.5">{subtitle}</p>
+          )}
         </div>
       )}
       {children}

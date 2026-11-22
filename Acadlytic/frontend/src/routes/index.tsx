@@ -19,6 +19,7 @@ import { LoginPage } from '@/pages/auth/LoginPage';
 import { ForgotPasswordPage } from '@/pages/auth/ForgotPasswordPage';
 import { ResetPasswordPage } from '@/pages/auth/ResetPasswordPage';
 import { RegisterCollegePage } from '@/pages/auth/RegisterCollegePage';
+import { ChangePasswordPage } from '@/pages/auth/ChangePasswordPage';
 import { SuperAdminDashboardPage } from '@/pages/dashboard/SuperAdminDashboardPage';
 import { CollegeAdminDashboardPage } from '@/pages/dashboard/CollegeAdminDashboardPage';
 
@@ -80,6 +81,21 @@ export const router = createBrowserRouter([
       },
 
       // Protected Super Admin Portal Routes
+      {
+        path: 'settings',
+        element: <ProtectedRoute />,
+        children: [
+          {
+            element: <AppLayout />,
+            children: [
+              {
+                path: 'change-password',
+                element: <ChangePasswordPage />,
+              },
+            ],
+          },
+        ],
+      },
       {
         path: 'admin',
         element: <ProtectedRoute />,

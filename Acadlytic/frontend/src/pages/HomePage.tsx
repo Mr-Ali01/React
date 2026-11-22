@@ -28,19 +28,27 @@ export const HomePage: React.FC = () => {
             Acadlytic Platform Foundation
           </h1>
           <p className="text-slate-300 text-base sm:text-lg leading-relaxed">
-            The multi-tenant academic intelligence and longitudinal records platform for university-affiliated colleges.
+            The multi-tenant academic intelligence and longitudinal records
+            platform for university-affiliated colleges.
           </p>
           <div className="pt-4 flex flex-wrap gap-4">
             {isAuthenticated && user ? (
               <Link
-                to={user.role === 'SUPER_ADMIN' ? '/admin/dashboard' : '/college/dashboard'}
+                to={
+                  user.role === 'SUPER_ADMIN'
+                    ? '/admin/dashboard'
+                    : '/college/dashboard'
+                }
               >
                 <Button
                   size="lg"
                   className="bg-sky-500 hover:bg-sky-600 focus:ring-sky-400 font-semibold gap-2 shadow-lg"
                 >
                   <LayoutDashboard className="h-5 w-5" />
-                  Open {user.role === 'SUPER_ADMIN' ? 'Super Admin' : 'College'} Portal
+                  Open {user.role === 'SUPER_ADMIN'
+                    ? 'Super Admin'
+                    : 'College'}{' '}
+                  Portal
                 </Button>
               </Link>
             ) : (
@@ -88,12 +96,16 @@ export const HomePage: React.FC = () => {
           <div className="flex items-start gap-3 mt-2 text-sm text-slate-600">
             <Layers className="h-5 w-5 text-sky-600 flex-shrink-0 mt-0.5" />
             <p>
-              Spring Boot 3 + Java 21 REST API foundation with clean package modularity, OpenAPI documentation, and centralized exception handling.
+              Spring Boot 3 + Java 21 REST API foundation with clean package
+              modularity, OpenAPI documentation, and centralized exception
+              handling.
             </p>
           </div>
           <div className="mt-4 pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
             <span>Profile: dev / prod</span>
-            <span className="font-mono text-sky-600 font-medium">port: 8080</span>
+            <span className="font-mono text-sky-600 font-medium">
+              port: 8080
+            </span>
           </div>
         </Card>
 
@@ -101,12 +113,15 @@ export const HomePage: React.FC = () => {
           <div className="flex items-start gap-3 mt-2 text-sm text-slate-600">
             <ShieldCheck className="h-5 w-5 text-indigo-600 flex-shrink-0 mt-0.5" />
             <p>
-              React 18 + Vite + TypeScript + Tailwind CSS with TanStack Query server-state synchronization and layout routing.
+              React 18 + Vite + TypeScript + Tailwind CSS with TanStack Query
+              server-state synchronization and layout routing.
             </p>
           </div>
           <div className="mt-4 pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
             <span>Axios Interceptors</span>
-            <span className="font-mono text-indigo-600 font-medium">port: 5173</span>
+            <span className="font-mono text-indigo-600 font-medium">
+              port: 5173
+            </span>
           </div>
         </Card>
 
@@ -114,12 +129,15 @@ export const HomePage: React.FC = () => {
           <div className="flex items-start gap-3 mt-2 text-sm text-slate-600">
             <Database className="h-5 w-5 text-emerald-600 flex-shrink-0 mt-0.5" />
             <p>
-              InnoDB transactional storage engine, utf8mb4 unicode charset, UTC timestamps, and Flyway migration versioning.
+              InnoDB transactional storage engine, utf8mb4 unicode charset, UTC
+              timestamps, and Flyway migration versioning.
             </p>
           </div>
           <div className="mt-4 pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
             <span>Flyway Migrations</span>
-            <span className="font-mono text-emerald-600 font-medium">port: 3306</span>
+            <span className="font-mono text-emerald-600 font-medium">
+              port: 3306
+            </span>
           </div>
         </Card>
       </div>
@@ -141,7 +159,9 @@ export const HomePage: React.FC = () => {
           </div>
           <div className="flex items-center gap-2.5 text-sm text-slate-700">
             <CheckCircle2 className="h-4 w-4 text-emerald-600 flex-shrink-0" />
-            <span>Post-MVP Extensions Preserved (Staff &amp; Student Portal)</span>
+            <span>
+              Post-MVP Extensions Preserved (Staff &amp; Student Portal)
+            </span>
           </div>
         </div>
       </Card>
