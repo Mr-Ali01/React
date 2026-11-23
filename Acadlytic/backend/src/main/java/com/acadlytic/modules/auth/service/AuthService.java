@@ -9,6 +9,8 @@ import com.acadlytic.modules.auth.dto.ForgotPasswordRequest;
 import com.acadlytic.modules.auth.dto.LoginRequest;
 import com.acadlytic.modules.auth.dto.ResetPasswordRequest;
 import com.acadlytic.modules.auth.dto.VerifyEmailChangeRequest;
+import com.acadlytic.modules.auth.dto.VerifyEmailRequest;
+import com.acadlytic.modules.auth.dto.VerifyEmailResponse;
 import com.acadlytic.modules.auth.entity.AuditEventType;
 import com.acadlytic.modules.auth.entity.AuditOutcome;
 import com.acadlytic.modules.auth.entity.AuthToken;
@@ -37,6 +39,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
@@ -67,6 +70,7 @@ public class AuthService {
     private final CurrentUserMapper currentUserMapper;
     private final ClientIpResolver clientIpResolver;
     private final SecurityProperties securityProperties;
+    private final UserRateLimiter userRateLimiter;
 
     public AuthService(
             UserRepository userRepository,
@@ -83,7 +87,8 @@ public class AuthService {
             SecurityContextRepository securityContextRepository,
             CurrentUserMapper currentUserMapper,
             ClientIpResolver clientIpResolver,
-            SecurityProperties securityProperties) {
+            SecurityProperties securityProperties,
+            UserRateLimiter userRateLimiter) {
         this.userRepository = userRepository;
         this.collegeRepository = collegeRepository;
         this.passwordEncoder = passwordEncoder;
@@ -99,6 +104,7 @@ public class AuthService {
         this.currentUserMapper = currentUserMapper;
         this.clientIpResolver = clientIpResolver;
         this.securityProperties = securityProperties;
+        this.userRateLimiter = userRateLimiter;
     }
 
     public CurrentUserResponse login(
@@ -667,5 +673,118 @@ public class AuthService {
         context.setAuthentication(authToken);
         SecurityContextHolder.setContext(context);
         securityContextRepository.saveContext(context, request, response);
+    }
+
+    @Transactional(isolation = Isolation.READ_COMMITTED, rollbackFor = Exception.class)
+    public VerifyEmailResponse verifyEmail(VerifyEmailRequest request, HttpServletRequest httpRequest) {
+        String clientIp = clientIpResolver.resolve(httpRequest);
+
+        AuthToken token = authTokenService.lockAndValidateToken(request.token(), AuthTokenType.EMAIL_VERIFICATION);
+
+        User user = userRepository.findById(token.getUserId())
+                .orElseThrow(() -> new AppException(
+                        "INVALID_OR_EXPIRED_TOKEN",
+                        "The token is invalid or has expired.",
+                        HttpStatus.BAD_REQUEST));
+
+        if (token.getTargetEmail() == null || !token.getTargetEmail().equalsIgnoreCase(user.getEmail())) {
+            throw new AppException(
+                    "INVALID_OR_EXPIRED_TOKEN",
+                    "The token is invalid or has expired.",
+                    HttpStatus.BAD_REQUEST);
+        }
+
+        if (user.getStatus() != UserStatus.ACTIVE) {
+            throw new AppException(
+                    "AUTH_ACCOUNT_INACTIVE",
+                    "Your account is not active.",
+                    HttpStatus.FORBIDDEN);
+        }
+
+        if (user.getEmailVerifiedAt() != null) {
+            throw new AppException(
+                    "EMAIL_ALREADY_VERIFIED",
+                    "Your email address is already verified.",
+                    HttpStatus.BAD_REQUEST);
+        }
+
+        Instant now = Instant.now();
+        authTokenService.markTokenUsed(token);
+
+        user.setEmailVerifiedAt(now);
+        userRepository.save(user);
+
+        authTokenService.revokeActiveTokensForUser(user.getId(), AuthTokenType.EMAIL_VERIFICATION, now);
+
+        auditEventService.record(
+                AuditEventType.EMAIL_VERIFIED,
+                user.getId(),
+                user.getRole(),
+                user.getId(),
+                user.getCollegeId(),
+                AuditOutcome.SUCCESS,
+                clientIp,
+                Map.of("email", user.getEmail(), "verifiedAt", now.toString()));
+
+        return new VerifyEmailResponse(user.getEmail(), true, now);
+    }
+
+    @Transactional(isolation = Isolation.READ_COMMITTED, rollbackFor = Exception.class)
+    public void resendVerification(HttpServletRequest httpRequest) {
+        Long userId = securityContextService.requireCurrentUserId();
+        String clientIp = clientIpResolver.resolve(httpRequest);
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new AppException(
+                        "AUTH_UNAUTHENTICATED",
+                        "Authenticated account not found.",
+                        HttpStatus.UNAUTHORIZED));
+
+        if (user.getRole() != Role.COLLEGE_ADMIN) {
+            throw new AppException(
+                    "ACCESS_DENIED",
+                    "Only college administrators can request verification resend.",
+                    HttpStatus.FORBIDDEN);
+        }
+
+        if (user.getStatus() != UserStatus.ACTIVE) {
+            throw new AppException(
+                    "AUTH_ACCOUNT_INACTIVE",
+                    "Your account is not active.",
+                    HttpStatus.FORBIDDEN);
+        }
+
+        if (user.getEmailVerifiedAt() != null) {
+            throw new AppException(
+                    "EMAIL_ALREADY_VERIFIED",
+                    "Your email address is already verified.",
+                    HttpStatus.BAD_REQUEST);
+        }
+
+        // Dual-layer rate limiting: max 3/15m for user, independent 5/60m for IP
+        userRateLimiter.checkResendRateLimit(user.getId(), httpRequest);
+
+        Instant now = Instant.now();
+        authTokenService.revokeActiveTokensForUser(user.getId(), AuthTokenType.EMAIL_VERIFICATION, now);
+
+        Duration ttl = Duration.ofHours(securityProperties.getTokens().getEmailVerificationExpiryHours());
+        String rawToken = authTokenService.issueToken(user.getId(), AuthTokenType.EMAIL_VERIFICATION, user.getEmail(), ttl);
+
+        outboxEmailService.enqueue(
+                "EMAIL_VERIFICATION",
+                user.getEmail(),
+                "Verify your email address - Acadlytic",
+                "EMAIL_VERIFICATION",
+                Map.of("firstName", user.getFirstName(), "token", rawToken));
+
+        auditEventService.record(
+                AuditEventType.EMAIL_VERIFICATION_RESENT,
+                user.getId(),
+                user.getRole(),
+                user.getId(),
+                user.getCollegeId(),
+                AuditOutcome.SUCCESS,
+                clientIp,
+                Map.of("email", user.getEmail()));
     }
 }

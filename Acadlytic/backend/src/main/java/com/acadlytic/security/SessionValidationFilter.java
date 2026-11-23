@@ -64,8 +64,9 @@ public class SessionValidationFilter extends OncePerRequestFilter {
             return;
         }
 
-        // Allow explicit logout to proceed cleanly to session invalidation
-        if ("/api/v1/auth/logout".equals(request.getRequestURI())) {
+        // Allow public CSRF bootstrap and explicit logout without session validation
+        String uri = request.getRequestURI();
+        if ("/api/v1/auth/logout".equals(uri) || "/api/v1/auth/csrf".equals(uri)) {
             filterChain.doFilter(request, response);
             return;
         }

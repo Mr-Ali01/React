@@ -113,7 +113,9 @@ public class SecurityConfig {
                                 "/api/v1/auth/login",
                                 "/api/v1/auth/forgot-password",
                                 "/api/v1/auth/reset-password",
-                                "/api/v1/auth/verify-email-change"
+                                "/api/v1/auth/verify-email",
+                                "/api/v1/auth/verify-email-change",
+                                "/api/v1/college-registrations"
                         ).permitAll()
                         // All other endpoints require authenticated MVP session
                         .anyRequest().authenticated()

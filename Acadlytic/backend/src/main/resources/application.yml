@@ -58,6 +58,13 @@ app:
       password-reset-expiry-minutes: 60
       email-change-expiry-hours: 48
       email-verification-expiry-hours: 48
+    rate-limit:
+      max-attempts: 5
+      window-seconds: 3600
+      trusted-proxies:
+        - 127.0.0.1
+        - "0:0:0:0:0:0:0:1"
+        - "::1"
   bootstrap:
     super-admin:
       enabled: ${APP_BOOTSTRAP_SUPER_ADMIN_ENABLED:false}

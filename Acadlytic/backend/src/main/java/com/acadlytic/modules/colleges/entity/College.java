@@ -44,6 +44,15 @@ public class College {
     @Column(name = "permanently_rejected", nullable = false)
     private boolean permanentlyRejected = false;
 
+    @Column(name = "current_registration_id")
+    private Long currentRegistrationId;
+
+    @Column(name = "resubmission_count", nullable = false)
+    private int resubmissionCount = 0;
+
+    @Column(name = "action_required_count", nullable = false)
+    private int actionRequiredCount = 0;
+
     @Column(name = "archived_at")
     private Instant archivedAt;
 
@@ -124,6 +133,30 @@ public class College {
 
     public void setPermanentlyRejected(boolean permanentlyRejected) {
         this.permanentlyRejected = permanentlyRejected;
+    }
+
+    public Long getCurrentRegistrationId() {
+        return currentRegistrationId;
+    }
+
+    public void setCurrentRegistrationId(Long currentRegistrationId) {
+        this.currentRegistrationId = currentRegistrationId;
+    }
+
+    public int getResubmissionCount() {
+        return resubmissionCount;
+    }
+
+    public void setResubmissionCount(int resubmissionCount) {
+        this.resubmissionCount = resubmissionCount;
+    }
+
+    public int getActionRequiredCount() {
+        return actionRequiredCount;
+    }
+
+    public void setActionRequiredCount(int actionRequiredCount) {
+        this.actionRequiredCount = actionRequiredCount;
     }
 
     public Instant getArchivedAt() {

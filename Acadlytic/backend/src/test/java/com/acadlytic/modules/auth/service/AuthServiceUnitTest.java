@@ -6,6 +6,9 @@ import com.acadlytic.modules.auth.dto.ChangePasswordRequest;
 import com.acadlytic.modules.auth.dto.ForgotPasswordRequest;
 import com.acadlytic.modules.auth.dto.LoginRequest;
 import com.acadlytic.modules.auth.dto.ResetPasswordRequest;
+import com.acadlytic.modules.auth.dto.VerifyEmailRequest;
+import com.acadlytic.modules.auth.dto.VerifyEmailResponse;
+import com.acadlytic.security.AcadlyticUserPrincipal;
 import com.acadlytic.modules.auth.entity.AuditEventType;
 import com.acadlytic.modules.auth.entity.AuthToken;
 import com.acadlytic.modules.auth.entity.AuthTokenType;
@@ -68,6 +71,8 @@ class AuthServiceUnitTest {
     private SecurityContextService securityContextService;
     @Mock
     private SecurityContextRepository securityContextRepository;
+    @Mock
+    private UserRateLimiter userRateLimiter;
 
     private PasswordEncoder passwordEncoder;
     private AuthService authService;
@@ -92,7 +97,8 @@ class AuthServiceUnitTest {
                 securityContextRepository,
                 new CurrentUserMapper(new DefaultCollegeRegistrationStatusProvider()),
                 new ClientIpResolver(),
-                properties
+                properties,
+                userRateLimiter
         );
     }
 
@@ -231,6 +237,183 @@ class AuthServiceUnitTest {
         assertThat(admin.getLockedUntil()).isNull();
         assertThat(passwordEncoder.matches("BrandNewSecurePass!2026", admin.getPasswordHash())).isTrue();
         verify(sessionRevocationService).revokeAllSessionsForUser(7L);
+    }
+
+    @Test
+    void verifyEmailSucceedsAtomicallyAndEmitsAuditEvent() {
+        User admin = buildUser(7L, "admin@college.edu", Role.COLLEGE_ADMIN, 10L, UserStatus.ACTIVE, "OldStrongPass!2026");
+        admin.setEmailVerifiedAt(null);
+
+        AuthToken token = new AuthToken();
+        token.setUserId(7L);
+        token.setTokenType(AuthTokenType.EMAIL_VERIFICATION);
+        token.setTargetEmail("admin@college.edu");
+
+        when(authTokenService.lockAndValidateToken("valid-token", AuthTokenType.EMAIL_VERIFICATION)).thenReturn(token);
+        when(userRepository.findById(7L)).thenReturn(Optional.of(admin));
+
+        VerifyEmailResponse resp = authService.verifyEmail(
+                new VerifyEmailRequest("valid-token"),
+                new MockHttpServletRequest());
+
+        assertThat(resp.emailVerified()).isTrue();
+        assertThat(resp.email()).isEqualTo("admin@college.edu");
+        assertThat(admin.getEmailVerifiedAt()).isNotNull();
+
+        verify(authTokenService).markTokenUsed(token);
+        verify(userRepository).save(admin);
+        verify(authTokenService).revokeActiveTokensForUser(eq(7L), eq(AuthTokenType.EMAIL_VERIFICATION), any());
+        verify(auditEventService).record(
+                eq(AuditEventType.EMAIL_VERIFIED),
+                eq(7L),
+                eq(Role.COLLEGE_ADMIN),
+                eq(7L),
+                eq(10L),
+                any(),
+                any(),
+                anyMap());
+    }
+
+    @Test
+    void verifyEmailRejectsTargetEmailMismatchWithoutConsumingToken() {
+        User admin = buildUser(7L, "admin@college.edu", Role.COLLEGE_ADMIN, 10L, UserStatus.ACTIVE, "OldStrongPass!2026");
+
+        AuthToken token = new AuthToken();
+        token.setUserId(7L);
+        token.setTokenType(AuthTokenType.EMAIL_VERIFICATION);
+        token.setTargetEmail("mismatch@college.edu");
+
+        when(authTokenService.lockAndValidateToken("token-mismatch", AuthTokenType.EMAIL_VERIFICATION)).thenReturn(token);
+        when(userRepository.findById(7L)).thenReturn(Optional.of(admin));
+
+        assertThatThrownBy(() -> authService.verifyEmail(
+                new VerifyEmailRequest("token-mismatch"),
+                new MockHttpServletRequest()))
+                .isInstanceOf(AppException.class)
+                .hasMessageContaining("The token is invalid or has expired.");
+
+        verify(authTokenService, never()).markTokenUsed(any());
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void verifyEmailRejectsInactiveUserWithoutConsumingToken() {
+        User admin = buildUser(7L, "admin@college.edu", Role.COLLEGE_ADMIN, 10L, UserStatus.INACTIVE, "OldStrongPass!2026");
+
+        AuthToken token = new AuthToken();
+        token.setUserId(7L);
+        token.setTokenType(AuthTokenType.EMAIL_VERIFICATION);
+        token.setTargetEmail("admin@college.edu");
+
+        when(authTokenService.lockAndValidateToken("valid-token", AuthTokenType.EMAIL_VERIFICATION)).thenReturn(token);
+        when(userRepository.findById(7L)).thenReturn(Optional.of(admin));
+
+        assertThatThrownBy(() -> authService.verifyEmail(
+                new VerifyEmailRequest("valid-token"),
+                new MockHttpServletRequest()))
+                .isInstanceOf(AppException.class)
+                .hasMessageContaining("Your account is not active.");
+
+        verify(authTokenService, never()).markTokenUsed(any());
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void verifyEmailRejectsAlreadyVerifiedUserWithoutConsumingToken() {
+        User admin = buildUser(7L, "admin@college.edu", Role.COLLEGE_ADMIN, 10L, UserStatus.ACTIVE, "OldStrongPass!2026");
+        admin.setEmailVerifiedAt(Instant.now());
+
+        AuthToken token = new AuthToken();
+        token.setUserId(7L);
+        token.setTokenType(AuthTokenType.EMAIL_VERIFICATION);
+        token.setTargetEmail("admin@college.edu");
+
+        when(authTokenService.lockAndValidateToken("valid-token", AuthTokenType.EMAIL_VERIFICATION)).thenReturn(token);
+        when(userRepository.findById(7L)).thenReturn(Optional.of(admin));
+
+        assertThatThrownBy(() -> authService.verifyEmail(
+                new VerifyEmailRequest("valid-token"),
+                new MockHttpServletRequest()))
+                .isInstanceOf(AppException.class)
+                .hasMessageContaining("Your email address is already verified.");
+
+        verify(authTokenService, never()).markTokenUsed(any());
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void resendVerificationSucceedsForUnverifiedCollegeAdmin() {
+        User admin = buildUser(7L, "admin@college.edu", Role.COLLEGE_ADMIN, 10L, UserStatus.ACTIVE, "OldStrongPass!2026");
+        admin.setEmailVerifiedAt(null);
+
+        when(securityContextService.requireCurrentUserId()).thenReturn(7L);
+        when(userRepository.findById(7L)).thenReturn(Optional.of(admin));
+        when(authTokenService.issueToken(eq(7L), eq(AuthTokenType.EMAIL_VERIFICATION), eq("admin@college.edu"), any()))
+                .thenReturn("new-raw-token");
+
+        authService.resendVerification(new MockHttpServletRequest());
+
+        verify(userRateLimiter).checkResendRateLimit(eq(7L), any(MockHttpServletRequest.class));
+        verify(authTokenService).revokeActiveTokensForUser(eq(7L), eq(AuthTokenType.EMAIL_VERIFICATION), any());
+        verify(outboxEmailService).enqueue(
+                eq("EMAIL_VERIFICATION"),
+                eq("admin@college.edu"),
+                eq("Verify your email address - Acadlytic"),
+                eq("EMAIL_VERIFICATION"),
+                anyMap());
+        verify(auditEventService).record(
+                eq(AuditEventType.EMAIL_VERIFICATION_RESENT),
+                eq(7L),
+                eq(Role.COLLEGE_ADMIN),
+                eq(7L),
+                eq(10L),
+                any(),
+                any(),
+                anyMap());
+    }
+
+    @Test
+    void resendVerificationRejectsAlreadyVerifiedAccount() {
+        User admin = buildUser(7L, "admin@college.edu", Role.COLLEGE_ADMIN, 10L, UserStatus.ACTIVE, "OldStrongPass!2026");
+        admin.setEmailVerifiedAt(Instant.now());
+
+        when(securityContextService.requireCurrentUserId()).thenReturn(7L);
+        when(userRepository.findById(7L)).thenReturn(Optional.of(admin));
+
+        assertThatThrownBy(() -> authService.resendVerification(new MockHttpServletRequest()))
+                .isInstanceOf(AppException.class)
+                .hasMessageContaining("Your email address is already verified.");
+
+        verify(authTokenService, never()).issueToken(any(), any(), any(), any());
+        verify(outboxEmailService, never()).enqueue(any(), any(), any(), any(), anyMap());
+    }
+
+    @Test
+    void resendVerificationRejectsNonCollegeAdmin() {
+        User superAdmin = buildUser(1L, "owner@acadlytic.com", Role.SUPER_ADMIN, null, UserStatus.ACTIVE, "Pass!2026");
+
+        when(securityContextService.requireCurrentUserId()).thenReturn(1L);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(superAdmin));
+
+        assertThatThrownBy(() -> authService.resendVerification(new MockHttpServletRequest()))
+                .isInstanceOf(AppException.class)
+                .hasMessageContaining("Only college administrators can request verification resend.");
+
+        verify(authTokenService, never()).issueToken(any(), any(), any(), any());
+    }
+
+    @Test
+    void resendVerificationRejectsInactiveAccount() {
+        User admin = buildUser(7L, "admin@college.edu", Role.COLLEGE_ADMIN, 10L, UserStatus.INACTIVE, "OldStrongPass!2026");
+
+        when(securityContextService.requireCurrentUserId()).thenReturn(7L);
+        when(userRepository.findById(7L)).thenReturn(Optional.of(admin));
+
+        assertThatThrownBy(() -> authService.resendVerification(new MockHttpServletRequest()))
+                .isInstanceOf(AppException.class)
+                .hasMessageContaining("Your account is not active.");
+
+        verify(authTokenService, never()).issueToken(any(), any(), any(), any());
     }
 
     private User buildUser(Long id, String email, Role role, Long collegeId, UserStatus status, String rawPassword) {

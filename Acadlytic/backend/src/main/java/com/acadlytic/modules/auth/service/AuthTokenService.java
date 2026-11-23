@@ -81,6 +81,44 @@ public class AuthTokenService {
         return authTokenRepository.save(token);
     }
 
+    @Transactional
+    public AuthToken lockAndValidateToken(String rawToken, AuthTokenType expectedType) {
+        if (rawToken == null || rawToken.isBlank()) {
+            throw new AppException(
+                    "INVALID_OR_EXPIRED_TOKEN",
+                    "The token is invalid or has expired.",
+                    HttpStatus.BAD_REQUEST);
+        }
+
+        String hash = sha256Hex(rawToken.trim());
+        AuthToken token = authTokenRepository.findByTokenHashAndTokenTypeForUpdate(hash, expectedType)
+                .orElseThrow(() -> new AppException(
+                        "INVALID_OR_EXPIRED_TOKEN",
+                        "The token is invalid or has expired.",
+                        HttpStatus.BAD_REQUEST));
+
+        Instant now = Instant.now();
+        if (!token.isRedeemable(now)) {
+            throw new AppException(
+                    "INVALID_OR_EXPIRED_TOKEN",
+                    "The token is invalid or has expired.",
+                    HttpStatus.BAD_REQUEST);
+        }
+
+        return token;
+    }
+
+    @Transactional
+    public AuthToken markTokenUsed(AuthToken token) {
+        token.setUsedAt(Instant.now());
+        return authTokenRepository.save(token);
+    }
+
+    @Transactional
+    public int revokeActiveTokensForUser(Long userId, AuthTokenType tokenType, Instant now) {
+        return authTokenRepository.revokeActiveTokensForUser(userId, tokenType, now);
+    }
+
     public String sha256Hex(String value) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");

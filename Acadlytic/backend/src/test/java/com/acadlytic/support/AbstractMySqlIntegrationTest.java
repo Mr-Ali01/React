@@ -33,27 +33,41 @@ public abstract class AbstractMySqlIntegrationTest {
     static {
         boolean available = false;
         MySQLContainer<?> container = null;
-        try {
-            if (DockerClientFactory.instance().isDockerAvailable()) {
-                container = new MySQLContainer<>("mysql:8.0.36")
-                        .withDatabaseName("acadlytic_test")
-                        .withUsername("acadlytic_test")
-                        .withPassword("acadlytic_test_pass")
-                        .withCommand(
-                                "--character-set-server=utf8mb4",
-                                "--collation-server=utf8mb4_unicode_ci",
-                                "--default-time-zone=+00:00"
-                        );
-                container.start();
-                available = true;
-                log.info("Testcontainers MySQL 8.0.36 started at {}", container.getJdbcUrl());
-            } else {
-                log.info("Docker daemon not available; using local MySQL 8.x on port 3306 (acadlytic_test)");
+        boolean explicitLocal = Boolean.parseBoolean(System.getProperty("acadlytic.test.local-mysql",
+                System.getenv().getOrDefault("ACADLYTIC_TEST_LOCAL_MYSQL", "false")));
+
+        if (explicitLocal) {
+            log.info("Explicit local MySQL test mode configured (-Dacadlytic.test.local-mysql=true); targeting local MySQL 8.x on port 3306 (acadlytic_test)");
+        } else {
+            try {
+                if (DockerClientFactory.instance().isDockerAvailable()) {
+                    container = new MySQLContainer<>("mysql:8.0.36")
+                            .withDatabaseName("acadlytic_test")
+                            .withUsername("acadlytic_test")
+                            .withPassword("acadlytic_test_pass")
+                            .withCommand(
+                                    "--character-set-server=utf8mb4",
+                                    "--collation-server=utf8mb4_unicode_ci",
+                                    "--default-time-zone=+00:00"
+                            );
+                    container.start();
+                    available = true;
+                    log.info("Testcontainers MySQL 8.0.36 started at {}", container.getJdbcUrl());
+                } else {
+                    throw new IllegalStateException(
+                            "Docker environment not available. Testcontainers requires Docker Desktop / Engine to be operational. "
+                                    + "Please verify that Docker Desktop is running and docker-java.properties configures api.version=1.44. "
+                                    + "To deliberately run against an explicitly configured local MySQL 8 instance on port 3306, set system property -Dacadlytic.test.local-mysql=true or environment variable ACADLYTIC_TEST_LOCAL_MYSQL=true.");
+                }
+            } catch (Throwable t) {
+                if (t instanceof IllegalStateException ise) {
+                    throw ise;
+                }
+                throw new IllegalStateException(
+                        "Failed to initialize Testcontainers MySQL 8.0.36: " + t.getMessage()
+                                + ". Please check Docker configuration and docker-java.properties (api.version=1.44). "
+                                + "To deliberately run against an explicitly configured local MySQL 8 instance on port 3306, set system property -Dacadlytic.test.local-mysql=true or environment variable ACADLYTIC_TEST_LOCAL_MYSQL=true.", t);
             }
-        } catch (Throwable t) {
-            log.warn("Docker daemon check/startup failed ({}); using local MySQL 8.x on port 3306 (acadlytic_test)", t.getMessage());
-            container = null;
-            available = false;
         }
         MYSQL = container;
         DOCKER_AVAILABLE = available;
@@ -67,6 +81,7 @@ public abstract class AbstractMySqlIntegrationTest {
 
     @org.junit.jupiter.api.BeforeEach
     void enforceTestDatabaseSafety() throws java.sql.SQLException {
+        org.springframework.security.core.context.SecurityContextHolder.clearContext();
         assertTestDatabaseSafety(dataSource);
     }
 

@@ -8,6 +8,8 @@ import com.acadlytic.modules.auth.dto.ForgotPasswordRequest;
 import com.acadlytic.modules.auth.dto.LoginRequest;
 import com.acadlytic.modules.auth.dto.ResetPasswordRequest;
 import com.acadlytic.modules.auth.dto.VerifyEmailChangeRequest;
+import com.acadlytic.modules.auth.dto.VerifyEmailRequest;
+import com.acadlytic.modules.auth.dto.VerifyEmailResponse;
 import com.acadlytic.modules.auth.service.AuthService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -116,5 +118,22 @@ public class AuthController {
             HttpServletResponse httpResponse) {
         authService.verifyEmailChange(request, httpRequest, httpResponse);
         return ResponseEntity.ok(ApiResponse.success("Email address updated successfully.", null));
+    }
+
+    @PostMapping("/verify-email")
+    @Operation(summary = "Verify email address", description = "Redeems a single-use 48-hour email verification token and marks the account email as verified")
+    public ResponseEntity<ApiResponse<VerifyEmailResponse>> verifyEmail(
+            @Valid @RequestBody VerifyEmailRequest request,
+            HttpServletRequest httpRequest) {
+        VerifyEmailResponse response = authService.verifyEmail(request, httpRequest);
+        return ResponseEntity.ok(ApiResponse.success("Email address verified successfully.", response));
+    }
+
+    @PostMapping("/resend-verification")
+    @Operation(summary = "Resend verification email", description = "Issues a fresh 48-hour verification token for the authenticated COLLEGE_ADMIN under user and IP rate limits")
+    public ResponseEntity<ApiResponse<Void>> resendVerification(
+            HttpServletRequest httpRequest) {
+        authService.resendVerification(httpRequest);
+        return ResponseEntity.ok(ApiResponse.success("A verification email has been sent to your registered email address.", null));
     }
 }
