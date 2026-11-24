@@ -56,6 +56,9 @@ public class CollegeRegistrationDocument {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
+    @Column(name = "file_purged_at")
+    private Instant filePurgedAt;
+
     @PrePersist
     protected void onCreate() {
         if (this.createdAt == null) {
@@ -149,5 +152,13 @@ public class CollegeRegistrationDocument {
 
     public void setCreatedAt(Instant createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public Instant getFilePurgedAt() {
+        return filePurgedAt;
+    }
+
+    public void setFilePurgedAt(Instant filePurgedAt) {
+        this.filePurgedAt = filePurgedAt;
     }
 }

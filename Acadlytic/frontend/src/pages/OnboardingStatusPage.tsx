@@ -4,6 +4,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { PageContainer } from '@/components/layout/PageContainer';
 import { Card } from '@/components/ui/Card';
 import { Alert } from '@/components/ui/Alert';
+import { ResendVerificationButton } from '@/components/verification/ResendVerificationButton';
 
 export const OnboardingStatusPage: React.FC = () => {
   const { user } = useAuthStore();
@@ -17,6 +18,23 @@ export const OnboardingStatusPage: React.FC = () => {
       maxWidth="5xl"
     >
       <div className="space-y-6">
+        {/* Unverified Email Warning Banner */}
+        {!user?.emailVerified && (
+          <Alert
+            variant="warning"
+            title="Action Required: Verify Your Email Address"
+          >
+            <div className="space-y-3">
+              <p>
+                A verification link was sent to your administrator email address ({user?.email}). You must verify your email address to unlock document upload and submit your application for Super Admin review.
+              </p>
+              <div className="pt-1">
+                <ResendVerificationButton />
+              </div>
+            </div>
+          </Alert>
+        )}
+
         {status === 'PENDING' && (
           <Alert variant="warning" title="Application Under Review">
             Your college onboarding application has been submitted and is

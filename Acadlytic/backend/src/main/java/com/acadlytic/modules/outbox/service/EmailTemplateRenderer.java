@@ -62,6 +62,52 @@ public class EmailTemplateRenderer {
                         + link + "\n\n"
                         + "Thank you,\nAcadlytic Team";
             }
+            case "COLLEGE_REGISTRATION_APPROVED" -> {
+                String collegeName = stringOrDefault(payload.get("legalName"), "your institution");
+                String collegeCode = stringOrDefault(payload.get("collegeCode"), "");
+                String loginLink = frontendBaseUrl + "/login";
+                yield "Hello " + name + ",\n\n"
+                        + "Congratulations! The registration application for " + collegeName + " (" + collegeCode + ") has been approved by the Acadlytic administration.\n\n"
+                        + "Your account and college administrative dashboard are now fully active. You may log in to start configuring your institution:\n"
+                        + loginLink + "\n\n"
+                        + "Thank you,\nAcadlytic Team";
+            }
+            case "COLLEGE_REGISTRATION_ACTION_REQUIRED" -> {
+                String collegeName = stringOrDefault(payload.get("legalName"), "your institution");
+                String notes = stringOrDefault(payload.get("reviewNotes"), "Please review the remarks on your dashboard.");
+                String dashboardLink = frontendBaseUrl + "/login";
+                yield "Hello " + name + ",\n\n"
+                        + "The registration application for " + collegeName + " requires updates before it can be approved.\n\n"
+                        + "Reviewer remarks:\n"
+                        + notes + "\n\n"
+                        + "Please log in to your dashboard to review the feedback and submit the updated information and documents:\n"
+                        + dashboardLink + "\n\n"
+                        + "Thank you,\nAcadlytic Team";
+            }
+            case "COLLEGE_REGISTRATION_REJECTED" -> {
+                String collegeName = stringOrDefault(payload.get("legalName"), "your institution");
+                String reason = stringOrDefault(payload.get("rejectionReason"), "Application did not meet verification criteria.");
+                String remaining = stringOrDefault(payload.get("remainingResubmissions"), "0");
+                String dashboardLink = frontendBaseUrl + "/login";
+                yield "Hello " + name + ",\n\n"
+                        + "We regret to inform you that the registration application for " + collegeName + " has been rejected.\n\n"
+                        + "Reason for rejection:\n"
+                        + reason + "\n\n"
+                        + "Remaining correction attempts: " + remaining + ".\n\n"
+                        + "You may log in to your onboarding dashboard to correct and resubmit your application:\n"
+                        + dashboardLink + "\n\n"
+                        + "Thank you,\nAcadlytic Team";
+            }
+            case "COLLEGE_REGISTRATION_PERMANENTLY_REJECTED" -> {
+                String collegeName = stringOrDefault(payload.get("legalName"), "your institution");
+                String reason = stringOrDefault(payload.get("rejectionReason"), "Maximum correction rounds exceeded.");
+                yield "Hello " + name + ",\n\n"
+                        + "The registration application for " + collegeName + " has been permanently rejected after exceeding the maximum allowed correction submissions.\n\n"
+                        + "Reason for permanent rejection:\n"
+                        + reason + "\n\n"
+                        + "This application has been closed and the administrative account has been deactivated.\n\n"
+                        + "Thank you,\nAcadlytic Team";
+            }
             default -> "Hello " + name + ",\n\nYou have a new notification from Acadlytic.";
         };
     }

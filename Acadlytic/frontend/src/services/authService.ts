@@ -8,6 +8,8 @@ import {
   ResetPasswordRequest,
   ChangeEmailRequest,
   VerifyEmailChangeRequest,
+  VerifyEmailRequest,
+  VerifyEmailResponse,
 } from '@/types';
 
 /**
@@ -90,5 +92,27 @@ export const authService = {
       '/auth/verify-email-change',
       payload
     );
+  },
+
+  /**
+   * Redeems a single-use 48-hour email verification token.
+   * Public endpoint; does NOT establish an authenticated session.
+   */
+  verifyEmail: async (
+    payload: VerifyEmailRequest
+  ): Promise<VerifyEmailResponse> => {
+    const response = await apiClient.post<ApiResponse<VerifyEmailResponse>>(
+      '/auth/verify-email',
+      payload
+    );
+    return response.data.data;
+  },
+
+  /**
+   * Requests a fresh 48-hour verification token for the authenticated COLLEGE_ADMIN.
+   * Enforces dual-layer rate limits (3 requests / 15 min per user, 5 / 60 min per IP).
+   */
+  resendVerification: async (): Promise<void> => {
+    await apiClient.post<ApiResponse<void>>('/auth/resend-verification');
   },
 };

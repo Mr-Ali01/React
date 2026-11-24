@@ -19,6 +19,7 @@ import { LoginPage } from '@/pages/auth/LoginPage';
 import { ForgotPasswordPage } from '@/pages/auth/ForgotPasswordPage';
 import { ResetPasswordPage } from '@/pages/auth/ResetPasswordPage';
 import { RegisterCollegePage } from '@/pages/auth/RegisterCollegePage';
+import { VerifyEmailPage } from '@/pages/auth/VerifyEmailPage';
 import { ChangePasswordPage } from '@/pages/auth/ChangePasswordPage';
 import { SuperAdminDashboardPage } from '@/pages/dashboard/SuperAdminDashboardPage';
 import { CollegeAdminDashboardPage } from '@/pages/dashboard/CollegeAdminDashboardPage';
@@ -47,6 +48,22 @@ export const router = createBrowserRouter([
           {
             path: 'onboarding-status',
             element: <OnboardingStatusPage />,
+          },
+        ],
+      },
+
+      // Email Verification Routes (Dual-Mounted, accessible to BOTH Guest and Authenticated users)
+      // Placed outside PublicOnlyRoute and ProtectedRoute, wrapped in AuthLayout
+      {
+        element: <AuthLayout />,
+        children: [
+          {
+            path: 'verify-email',
+            element: <VerifyEmailPage />,
+          },
+          {
+            path: 'auth/verify-email',
+            element: <VerifyEmailPage />,
           },
         ],
       },

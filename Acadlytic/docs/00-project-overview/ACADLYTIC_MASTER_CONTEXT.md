@@ -719,10 +719,10 @@ The project maintains an active, living record of architectural planning, phase 
 ## 13.1 Overall Project Status
 
 - **Current Development Phase:** Phase 03 — College Registration, Restricted Dashboard & Approval Workflow
-- **Current Module / Status:** Module 3.1A (APPROVED) & Module 3.2 (APPROVED). Backend registration foundation and email verification lifecycle complete and verified on Testcontainers MySQL 8.0.36 (97/97 tests passing). Module 3.3 (Backend) is the next inspection/planning target.
-- **Last Approved Module:** Phase 03, Module 3.2 — Email Verification & College Admin Verification Lifecycle (Explicitly APPROVED by user).
-- **Next Planned Phase / Module:** Phase 03, Module 3.3 — College Admin Restricted Dashboard & Profile Completion / Document Management (Backend). Frontend work (Module 3.1B onward) is deferred until all Phase 03 backend modules are complete.
-- **Overall MVP Progress Status:** Phase 01/02 Implemented (Verification Pending); Phase 03 In Progress (Modules 3.1A and 3.2 APPROVED; 97/97 backend tests passing; schema V4 active).
+- **Current Module / Status:** Phase 03 Backend Modules (3.1A, 3.2, 3.3, 3.4 & 3.5) and Frontend Module 3.1B are **APPROVED**. Complete Phase 03 backend verified on Testcontainers MySQL 8.0.36 (237/237 tests passing, schema V5). Phase 03 Frontend Module 3.1B verified via automated tests (26/26 focused tests, 41/41 full suite tests passing) and production build. Phase 03 remains `IN_PROGRESS` (Frontend Modules 3.2 onward remain pending).
+- **Last Approved Module:** Phase 03, Module 3.1B — Public College Registration Portal (Frontend) (Explicitly APPROVED by user on 2026-11-24).
+- **Next Planned Phase / Module:** Phase 03, Module 3.2 — Email Verification & Account Activation (Frontend).
+- **Overall MVP Progress Status:** Phase 01/02 Implemented (Verification Pending); Phase 03 Backend Complete & APPROVED (Modules 3.1A, 3.2, 3.3, 3.4, and 3.5 Approved; 237/237 backend tests passing; schema V5 active); Phase 03 Frontend Module 3.1B Complete & APPROVED (26/26 focused tests, 41/41 full suite tests passing; build clean); Phase 03 Frontend Modules 3.2 onward PENDING. Phase 03 remains `IN_PROGRESS` pending remaining frontend modules.
 
 ---
 
@@ -740,7 +740,7 @@ Status Definitions:
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Phase 01** | Project & Application Foundation | IMPLEMENTATION_COMPLETE | IMPLEMENTATION_COMPLETE | IMPLEMENTATION_COMPLETE | IMPLEMENTATION_COMPLETE | NOT_VERIFIED | VERIFICATION_PENDING |
 | **Phase 02** | Authentication & Authorization Foundation | IMPLEMENTATION_COMPLETE | IMPLEMENTATION_COMPLETE | IMPLEMENTATION_COMPLETE | IMPLEMENTATION_COMPLETE | VERIFICATION_PENDING | VERIFICATION_PENDING |
-| **Phase 03** | College Registration, Restricted Dashboard & Approval Workflow | IN_PROGRESS (3.1A & 3.2 Approved) | NOT_STARTED (Deferred to post-backend) | IMPLEMENTATION_COMPLETE (V4) | IMPLEMENTATION_COMPLETE (97 Tests Passed, Testcontainers MySQL) | NOT_VERIFIED | IN_PROGRESS |
+| **Phase 03** | College Registration, Restricted Dashboard & Approval Workflow | APPROVED (3.1A, 3.2, 3.3, 3.4 & 3.5 Approved) | IN_PROGRESS (3.1B Approved; 3.2+ Pending) | IMPLEMENTATION_COMPLETE (V5) | IMPLEMENTATION_COMPLETE (237 Backend Tests Passed, Testcontainers MySQL; 41 Frontend Tests Passed, Vitest) | NOT_VERIFIED | IN_PROGRESS (Backend Approved; Module 3.1B Approved; Frontend 3.2+ Pending) |
 | **Phase 04** | College Management (Tenant Management & Profile) | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED |
 | **Phase 05** | Academic Structure (Programs, Semesters, Subjects, Credits) | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED |
 | **Phase 06** | Student Records Management (Records & Enrollment) | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED |
@@ -765,8 +765,8 @@ Status Definitions:
 
 > [!IMPORTANT]
 > **Phase 03 Status Distinction:**  
-> **Backend Modules 3.1A & 3.2 APPROVED; remaining Phase 03 modules IN_PROGRESS / NOT_STARTED.**  
-> Modules 3.1A (Backend Registration Foundation) and 3.2 (Email Verification & College Admin Verification Lifecycle) have been completed, verified on Testcontainers MySQL 8.0.36 (97/97 tests), and explicitly approved by the user. Module 3.3 (Restricted Dashboard, Document Management & Review Submission - Backend) is the next target. In accordance with the approved strategy, all Phase 03 frontend work (Module 3.1B onward) is deferred until Phase 03 backend modules are complete. Phase 03 remains `IN_PROGRESS`.
+> **All Phase 03 Backend Modules (3.1A, 3.2, 3.3, 3.4 & 3.5) and Frontend Module 3.1B APPROVED; Remaining Phase 03 Frontend Modules (3.2 onward) PENDING.**  
+> All five backend modules of Phase 03—Module 3.1A (Backend Registration Foundation), Module 3.2 (Email Verification & College Admin Verification Lifecycle), Module 3.3 (Restricted Dashboard, Document Management & Review Submission), Module 3.4 (Super Admin Approval Queue & Review Workflow), and Module 3.5 (Approval Lifecycle, College Activation & Revisions)—have been completed, verified on Testcontainers MySQL 8.0.36 (237/237 tests passing, Flyway schema V5), and explicitly approved by the user. Module 3.1B (Public College Registration Portal — Frontend) has been implemented, hardened (`isApiError` validation and strict `parseRetryAfter`), verified via 26/26 automated tests and production build, and explicitly approved by the user. Phase 03 remains `IN_PROGRESS` until the remaining frontend modules (3.2, 3.3, 3.4, 3.5) are implemented, verified, and approved.
 
 ---
 
@@ -796,7 +796,44 @@ Status Definitions:
     - Security: `POST /api/v1/auth/verify-email` permitted in `SecurityConfig`.
 - **`com.acadlytic.modules.colleges`**:
   - *Phase 02 Baseline:* Tenant foundation entity (`College`), lifecycle enums (`CollegeApprovalStatus`, `CollegeStatus`), Spring Data repository (`CollegeRepository`), and auth extension seams (`CollegeRegistrationStatusProvider`, `DefaultCollegeRegistrationStatusProvider`).
-  - *Phase 03 Module 3.1A Implementation:* Full versioned registration revision entity (`CollegeRegistration`), document entity (`CollegeRegistrationDocument`), category enum (`DocumentCategory`), repositories (`CollegeRegistrationRepository`, `CollegeRegistrationDocumentRepository`), DTOs (`RegisterCollegeRequest`, `CollegeRegistrationResponse`), thread-safe sliding window IP rate limiter (`IpRateLimiter`), registration intake service (`CollegeRegistrationService`), and public registration controller (`CollegeRegistrationController` at `POST /api/v1/college-registrations`). Modules 3.1B–3.5 remain pending.
+  - *Phase 03 Module 3.1A Implementation:* Full versioned registration revision entity (`CollegeRegistration`), document entity (`CollegeRegistrationDocument`), category enum (`DocumentCategory`), repositories (`CollegeRegistrationRepository`, `CollegeRegistrationDocumentRepository`), DTOs (`RegisterCollegeRequest`, `CollegeRegistrationResponse`), thread-safe sliding window IP rate limiter (`IpRateLimiter`), registration intake service (`CollegeRegistrationService`), and public registration controller (`CollegeRegistrationController` at `POST /api/v1/college-registrations`).
+  - *Phase 03 Module 3.3 Implementation (College Admin Restricted Dashboard, Document Management & Review Submission):*
+    - Endpoints: `GET /api/v1/college-registrations/my-application` (dashboard state provider), `POST /api/v1/college-registrations/my-application/correction-draft` (immutable revision v+1 creation), `PUT /api/v1/college-registrations/my-application` (draft profile editing & college name sync), `POST /api/v1/college-registrations/my-application/documents` (document upload & auto/explicit replacement), `GET /api/v1/college-registrations/my-application/documents` (active document listing), `GET /api/v1/college-registrations/my-application/documents/{documentId}` (tenant-isolated document download with safe headers), `DELETE /api/v1/college-registrations/my-application/documents/{documentId}` (active document removal & predecessor restoration), `POST /api/v1/college-registrations/my-application/submit` (atomic submission gate & revision freeze).
+    - Services & Components: `CollegeOnboardingService` (orchestrates application retrieval, decoupled review feedback, pessimistic locking on parent `College`, draft creation, document replacement lineage, and review submission), `LocalFileSystemDocumentStorageService` (outside-webroot storage, path validation, file duplication), `DocumentValidator` (magic bytes, MIME type, file size verification for PDF, JPEG, PNG), `DocumentStorageCompensationHandler` (Spring `TransactionSynchronization` rollback purge).
+    - Repositories & Locks: `CollegeRepository.findByIdWithLock` (pessimistic write lock with 3000ms timeout), `CollegeRegistrationDocumentRepository.findByIdAndCollegeId`.
+    - Configuration: `DocumentProperties` (`acadlytic.documents.*` with fail-fast startup probe validation).
+    - DTOs: `MyApplicationResponse`, `CurrentRevisionResponse`, `CollegeSummaryResponse`, `CollegeProfileResponse`, `ReviewFeedbackResponse`, `ResubmissionAllowanceResponse`, `OnboardingChecklistResponse`, `DocumentResponse`, `UpdateApplicationRequest`, `SubmitApplicationResponse`, `DocumentDownload`.
+    - Audit Events: `COLLEGE_REGISTRATION_DOC_UPLOADED`, `COLLEGE_REGISTRATION_DOC_REMOVED`, `COLLEGE_REGISTRATION_CORRECTION_DRAFT_CREATED`, `COLLEGE_REGISTRATION_SUBMITTED_FOR_REVIEW`, `COLLEGE_REGISTRATION_RESUBMITTED`.
+  - *Phase 03 Module 3.4 Implementation (Super Admin Approval Queue & Review Workflow):*
+    - Endpoints:
+      - `GET /api/v1/super-admin/colleges/reviews`: Super Admin review queue with 5-operation bounded query retrieval, eligible pending filter, in-memory active document calculation, search & sort whitelisting.
+      - `GET /api/v1/super-admin/colleges/reviews/{collegeId}`: Application review detail inspection with tenant overview, admin profile, authoritative submitted revision, active verification documents, full revision timeline history, concurrency version token.
+      - `GET /api/v1/super-admin/colleges/reviews/{collegeId}/documents/{documentId}`: Secure streaming document inspection & download with 4-step multi-point ownership validation and safe download security headers (`Content-Disposition: attachment`, `X-Content-Type-Options: nosniff`, `Cache-Control: private, no-cache, no-store`).
+      - `POST /api/v1/super-admin/colleges/reviews/{collegeId}/decision`: Transactional review decision execution for `APPROVE`, `REQUEST_ACTION`, and non-permanent `REJECT` with dual pessimistic row lock and optimistic version concurrency checks, audit trail recording.
+    - Services & Components: `CollegeReviewService` (orchestrates bounded queue retrieval, application detail assembly, multi-point document download verification, and dual-locked decision execution).
+    - Common DTOs: `PageResponse<T>` (`com.acadlytic.common.dto`).
+    - Module DTOs & Enums: `ReviewQueueItemResponse`, `CollegeReviewDetailResponse`, `CollegeReviewSummaryResponse`, `ReviewAdminUserResponse`, `SubmittedRevisionResponse`, `ReviewHistoryItemResponse`, `ReviewDecisionRequest`, `ReviewDecisionResponse`, `ReviewDecisionAction`.
+    - Repositories & Locks:
+      - `CollegeRegistrationRepository.findPendingReviewQueue` (theta-join query and count query).
+      - `UserRepository.findByCollegeIdInAndRoleAndStatus` (batch active college admin lookup).
+      - `AuditEventRepository.findByCollegeId` (historical review audit logs).
+      - `CollegeRegistrationDocumentRepository.findByRegistrationIdIn` (batch document lookup).
+      - Pessimistic write lock (`findByIdWithLock`) on `College` with 3000ms timeout coupled with optimistic `@Version` checks (`expectedVersion`).
+    - Audit Events: `COLLEGE_REGISTRATION_APPROVED`, `COLLEGE_REGISTRATION_ACTION_REQUIRED`, `COLLEGE_REGISTRATION_REJECTED`.
+  - *Phase 03 Module 3.5 Implementation (Approval Lifecycle, College Activation & Revisions):*
+    - Services & Components:
+      - `CollegeLifecycleService`: Orchestrates operational college activation (`colleges.status = ACTIVE`), outbox notifications (`COLLEGE_REGISTRATION_APPROVED`, `COLLEGE_REGISTRATION_ACTION_REQUIRED`, `COLLEGE_REGISTRATION_REJECTED`), permanent rejection lifecycle (`permanently_rejected = TRUE`, `status = INACTIVE`, `users.status = INACTIVE`, code/email release, active session revocation, outbox notification `COLLEGE_REGISTRATION_PERMANENTLY_REJECTED`), isolated transactional archival, and secondary residual draft document sweeper.
+      - `DocumentPurgeMarkerService`: Dedicated Spring-managed service ensuring proxy-effective `REQUIRES_NEW` transaction semantics for durable `file_purged_at` marker persistence on `college_registration_documents` rows while keeping physical file deletion strictly outside database transactions.
+      - `CollegeCleanupScheduler`: Scheduled daily tasks invoking 7-day abandoned registration cleanup, 7-day permanently rejected college archival, and residual draft document sweeper.
+      - Idempotent Keyset Sweeper: `sweepResidualAbandonedDraftDocuments()` iterates unpurged draft documents (`c.archived_at IS NOT NULL AND r.submitted_for_review_at IS NULL AND d.file_purged_at IS NULL`) without age cutoff using cursor `lastProcessedId` that resets to `0L` at the start of each execution, guaranteeing automated retry of failed physical deletions across runs.
+      - Permanent Document Metadata Preservation: Zero database document rows deleted; physical files purged while preserving registration-document linkages, checksums, and audit trails permanently.
+    - Repositories & Locks:
+      - `CollegeRepository.findAbandonedRegistrations` (evaluating all 12 abandonment conditions using verified typed `CollegeApprovalStatus.PENDING`, `CollegeStatus.PENDING_VERIFICATION`, `Role.COLLEGE_ADMIN`, and `UserStatus.ACTIVE`).
+      - `CollegeRepository.findPermanentlyRejectedForArchival` (identifying permanently rejected colleges after 7-day retention).
+      - `CollegeRegistrationDocumentRepository.findEligibleAbandonedDraftDocumentsKeyset` (keyset pagination over eligible draft documents with `filePurgedAt IS NULL`).
+      - Pessimistic write lock (`findByIdWithLock`) on `College` for archival operations.
+    - Configuration: `CleanupProperties` (`acadlytic.cleanup.*` specifying batch sizes, abandoned retention days, and permanent rejection retention days).
+    - Audit Events: `COLLEGE_ACTIVATED`, `COLLEGE_PERMANENTLY_REJECTED`, `COLLEGE_ADMIN_DEACTIVATED`, `ABANDONED_REGISTRATION_ARCHIVED`, `PERMANENTLY_REJECTED_COLLEGE_ARCHIVED`.
 - **`com.acadlytic.modules.outbox`**:
   - *Entities:* `OutboxEmail`, `OutboxStatus` (`PENDING`, `SENT`, `FAILED`).
   - *Repository:* `OutboxEmailRepository`.
@@ -812,6 +849,7 @@ Status Definitions:
 - `V2__spring_session_jdbc.sql`: Standard Spring Session JDBC tables (`SPRING_SESSION`, `SPRING_SESSION_ATTRIBUTES`).
 - `V3__auth_core_schema.sql`: Added `password_reset_tokens`, `outbox_emails`, college onboarding fields (`onboarding_status`, `rejection_reason`), user failed attempt counters, lockout timestamps, and audit event indexes.
 - `V4__college_registration_schema.sql`: Added `college_registrations` table (versioned application revisions, status checks, uniqueness on `(college_id, version_number)`), `college_registration_documents` table (verification documents, checksums, categories), and altered `colleges` adding `current_registration_id`, `resubmission_count`, `action_required_count`.
+- `V5__crd_file_purged_at.sql`: Added `file_purged_at TIMESTAMP NULL` column to `college_registration_documents` and index `idx_crd_file_purged_at (file_purged_at)` for durable tracking of physical file deletions without deleting document database rows.
 
 ### Security Implementation
 - Stateful session management via Spring Session JDBC (`ACADLYTIC_SID` HttpOnly, SameSite=Lax, Secure in prod).
@@ -850,48 +888,55 @@ Status Definitions:
 
 ## 13.4 Frontend Progress Tracker
 
-### Implemented Pages & UI Components (Phase 01 & Phase 02)
+### Implemented Pages & UI Components (Phase 01, Phase 02 & Phase 03 Module 3.1B)
 - **Pages:**
   - `LoginPage` (`src/pages/auth/LoginPage.tsx`): Email/password credentials entry, failed attempt lockout display, CSRF bootstrap, redirect to dashboard or original target URL.
   - `ForgotPasswordPage` (`src/pages/auth/ForgotPasswordPage.tsx`): Password reset request with generic non-enumerating confirmation message.
   - `ResetPasswordPage` (`src/pages/auth/ResetPasswordPage.tsx`): Raw token consumption from URL query params, automatic URL token clearing, password validation schema, submission.
   - `ChangePasswordPage` (`src/pages/auth/ChangePasswordPage.tsx`): Authenticated user password update.
   - `HomePage`, `HealthCheckPage`, `NotFoundPage`, `UnauthorizedPage`.
-  - `OnboardingStatusPage` (`src/pages/OnboardingStatusPage.tsx`): Static informational status view informing pending college admins of their review stage. *Existing foundational implementation; Phase 03 college registration and approval workflow remains NOT_STARTED.*
-  - `RegisterCollegePage` (`src/pages/auth/RegisterCollegePage.tsx`): Static informational placeholder for college onboarding. *Existing foundational implementation; Phase 03 college registration and approval workflow remains NOT_STARTED.*
+  - `OnboardingStatusPage` (`src/pages/OnboardingStatusPage.tsx`): Static informational status view informing pending college admins of their review stage. *Existing foundational implementation; Phase 03 college onboarding workflow remains PENDING.*
+  - `RegisterCollegePage` (`src/pages/auth/RegisterCollegePage.tsx`): Interactive self-service college registration intake wizard toggling between `RegistrationForm` and `RegistrationSuccessView`. *Phase 03 Module 3.1B APPROVED.*
   - `CollegeAdminDashboardPage`, `SuperAdminDashboardPage` (Minimal landing shells pending respective phases).
+- **Module 3.1B Registration Components (`src/components/registration/`):**
+  - `RegistrationForm`: 16-control structured intake form across 3 sections (Institution Details, Campus Address & Location, Primary Administrator Account) with responsive layout (`sm:max-w-3xl` in `AuthLayout`), field-level server error mapping, dynamic rate-limit countdown, and CSRF token retry handling.
+  - `RegistrationSuccessView`: Post-submission confirmation displaying registration metadata, 4-step onboarding roadmap, spam notice, unauthenticated session status, and 48-hour email verification requirement.
+  - `PasswordStrengthMeter`: Real-time structural validation (12–128 characters, email containment prohibition matching `PasswordPolicyValidator.java`) and advisory entropy guidance.
+  - `RegistrationSectionHeader`: Presentational section header with numbered step badges.
 - **Component Primitives (`src/components/ui/`):**
   - Accessible `Button`, `Card`, `Input`, `Select`, `Textarea`, `Modal`, `Alert`, `Table`, `LoadingSpinner`, `ErrorState`.
 - **Layouts & Navigation (`src/layouts/`, `src/components/navigation/`):**
-  - `RootLayout` (Global provider wrapper: QueryClientProvider, router outlet), `AuthLayout` (Centered auth card container), `AppLayout` (Authenticated shell with Header and Sidebar), `Header`, `Sidebar`, `PageContainer`.
+  - `RootLayout` (Global provider wrapper: QueryClientProvider, router outlet), `AuthLayout` (Dynamic centered auth card container: `sm:max-w-3xl` for registration, `sm:max-w-md` for standard auth), `AppLayout` (Authenticated shell with Header and Sidebar), `Header`, `Sidebar`, `PageContainer`.
 
 ### Routes & Protected Routing (`src/routes/`)
 - `ProtectedRoute`: Checks `isAuthenticated` and `CurrentUser`; redirects unauthenticated requests to `/auth/login` preserving return URL in location state.
 - `PublicOnlyRoute`: Prevents authenticated users from accessing login/forgot-password pages, redirecting to their respective role dashboard.
 - `RoleGuard`: Enforces role-based permissions (`SUPER_ADMIN` vs `COLLEGE_ADMIN`), routing unauthorized users to `/unauthorized`.
-- `CollegeApprovalGuard`: Architectural route guard routing unapproved college administrators to `/onboarding-status`. *Existing foundational implementation; Phase 03 college registration and approval workflow remains NOT_STARTED.*
+- `CollegeApprovalGuard`: Architectural route guard routing unapproved college administrators to `/onboarding-status`. *Existing foundational implementation; Phase 03 college onboarding workflow remains PENDING.*
 
 ### State Management & API Integration
 - **Client State (Zustand 5):** `useAuthStore` (tracks `user`, `isAuthenticated`, `isLoading`), `useAppStore` (tracks layout sidebar state). Strictly no Redux Toolkit.
-- **Server State (TanStack Query 5):** Centralized `queryKeys` factory, `useCurrentUser` (syncs `GET /api/v1/auth/me`), `useLogin`, `useLogout`, `useHealth`.
-- **HTTP Client (Axios):** `src/services/api.ts` configured with `withCredentials: true`, automatic extraction of `XSRF-TOKEN` cookie into `X-XSRF-TOKEN` header, and transparent single-retry on `403 CSRF_TOKEN_INVALID`. Strictly no JWT or localStorage auth tokens.
-- **Form Validation:** React Hook Form + Zod validation schemas enforcing identical password complexity rules as the backend.
+- **Server State (TanStack Query 5):** Centralized `queryKeys` factory (including `colleges.registration`), `useCurrentUser` (syncs `GET /api/v1/auth/me`), `useLogin`, `useLogout`, `useHealth`, `useCollegeRegistration` (mutation hook submitting 15-field payload via `toRegisterCollegeRequest`).
+- **HTTP Client (Axios):** `src/services/api.ts` configured with `withCredentials: true`, automatic extraction of `XSRF-TOKEN` cookie into `X-XSRF-TOKEN` header, and transparent single-retry on `403 CSRF_TOKEN_INVALID`. Strictly no JWT or localStorage auth tokens. Enhanced with:
+  - `ApiError`: Typed error carrying `errorCode`, `status`, field `errors`, `data`, and `retryAfter?: number`.
+  - `parseRetryAfter`: Centralized, strict parser enforcing `/^\d+$/` regex matching, strictly rejecting non-integer prefixes (`"30abc"`), zeroes, negatives, and non-numeric values.
+  - `isApiError`: Hardened type guard validating genuine `ApiError` instances and strict structural properties for cross-boundary objects, rejecting arbitrary objects containing only `errorCode`.
+- **Form Validation:** React Hook Form + Zod validation schemas (`registerCollegeSchema`) enforcing pre-validation trimming, college code normalization to uppercase, admin email normalization to lowercase, optional field nullification, and backend-identical password policy.
 
 ### Automated Tests & Quality Checks
-- **Vitest Unit & Component Tests: 15 Passed, 0 Failed.**
-  - `auth-me-unauthenticated.test.tsx` (1 test): PASSED
-  - `college-approval-guard.test.tsx` (2 tests): PASSED
-  - `csrf-interceptor.test.tsx` (2 tests): PASSED
-  - `login-errors.test.tsx` (3 tests): PASSED
-  - `login-success.test.tsx` (2 tests): PASSED
-  - `protected-route.test.tsx` (2 tests): PASSED
-  - `reset-password-validation.test.tsx` (2 tests): PASSED
-  - `role-guard.test.tsx` (1 test): PASSED
+- **Vitest Unit & Component Tests: 41 Passed, 0 Failed across 9 test files.**
+  - `src/test/register-college.test.tsx` (26 tests): PASSED (covers all 16 controls, Zod trimming/sanitization, password policy matching backend, exact 15-field payload, error mapping, rate-limit countdown and missing/malformed `Retry-After` handling, CSRF error, `isApiError` 5 prototype-boundary conditions, `parseRetryAfter` strict parsing).
+  - `src/test/role-guard.test.tsx` (2 tests): PASSED
+  - `src/test/college-approval-guard.test.tsx` (2 tests): PASSED
+  - `src/test/csrf-interceptor.test.tsx` (2 tests): PASSED
+  - `src/test/protected-route.test.tsx` (2 tests): PASSED
+  - `src/test/auth-me-unauthenticated.test.tsx` (1 test): PASSED
+  - `src/test/login-errors.test.tsx` (2 tests): PASSED
+  - `src/test/reset-password-validation.test.tsx` (3 tests): PASSED
+  - `src/test/login-success.test.tsx` (1 test): PASSED
 - **Static Analysis & Build:**
-  - TypeScript compilation (`tsc --noEmit`): PASSED (0 errors).
-  - ESLint (`npm run lint`): PASSED (0 errors, 0 warnings).
-  - Prettier formatting (`npm run format:check`): PASSED.
-  - Production build (`npm run build`): PASSED (1,717 modules transformed, optimized production bundle).
+  - TypeScript compilation (`tsc`): PASSED (0 errors under strict mode).
+  - Production build (`npm run build`): PASSED (1,738 modules transformed, clean production bundle in `frontend/dist/` in 6.39s).
 
 ### Outstanding Frontend Work
 - Perform manual interactive verification in browser against a live running backend.
@@ -903,13 +948,13 @@ Status Definitions:
 
 | Verification Item | Scope / Target | Status | Actual Evidence & Notes |
 | :--- | :--- | :--- | :--- |
-| **Backend Unit Tests** | `com.acadlytic` unit suite | **PASSED** | 39 unit tests passed cleanly across all modules (including `UserRateLimiterUnitTest`, `AuthServiceUnitTest`, and college registration unit tests). |
-| **Backend Integration Tests** | Testcontainers MySQL suite | **PASSED** | 58 integration tests passed across all modules on Testcontainers MySQL 8.0.36 (including 11 in `EmailVerificationIntegrationTest` and 5 in `CollegeRegistrationIntegrationTest`). 97/97 total tests passing. |
+| **Backend Unit Tests** | `com.acadlytic` unit suite | **PASSED** | 122 unit tests passed cleanly across all modules (including 15 in `CollegeLifecycleServiceUnitTest`, 3 in `CollegeCleanupSchedulerUnitTest`, 16 in `CollegeReviewControllerUnitTest`, 17 in `CollegeReviewServiceUnitTest`, 15 in `CollegeOnboardingServiceUnitTest`, 9 in `DocumentValidatorUnitTest`, 7 in `LocalFileSystemDocumentStorageServiceUnitTest`, 4 in `DocumentStorageCompensationUnitTest`, and auth/outbox unit tests). |
+| **Backend Integration Tests** | Testcontainers MySQL suite | **PASSED** | 115 integration tests passed across all modules on Testcontainers MySQL 8.0.36 (including 23 in `CollegeLifecycleIntegrationTest`, 21 in `CollegeReviewIntegrationTest`, 10 in `CollegeOnboardingIntegrationTest`, 11 in `EmailVerificationIntegrationTest`, 5 in `CollegeRegistrationIntegrationTest`, and baseline Phase 01/02 integration tests). **237/237 total backend tests passing, 0 failures, 0 errors, 0 skipped.** |
 | **Frontend Tests** | Vitest component & hook suite | **PASSED** | 15 tests passed across 8 test suites. |
 | **Backend Build** | `mvn compile` | **PASSED** | Compiles cleanly on Java 21 / Spring Boot 3.3.4. |
 | **Frontend Build** | `npm run build` | **PASSED** | Vite transforms 1,717 modules cleanly with 0 type errors. |
 | **Live API Verification** | `curl` / Postman auth flow | **PENDING** | Manual live login, session, and CSRF bootstrap check pending. |
-| **Database Verification** | MySQL 8 schema & migrations | **PENDING** | Flyway V1, V2, and V3 applied cleanly in tests; live host DB migration pending. |
+| **Database Verification** | MySQL 8 schema & migrations | **PENDING** | Flyway V1, V2, V3, V4, and V5 applied cleanly in tests on Testcontainers MySQL 8.0.36; live host DB migration pending. |
 | **Browser Verification** | Interactive UI & DevTools | **PENDING** | 10-step manual checklist in `docs/verification/phase-02-manual-checklist.md` awaiting execution. |
 | **Security Verification** | CSRF, Cookies, Storage, RBAC | **PASSED (Automated)** / **PENDING (Live)** | CSRF interceptor, role guards, and store hygiene verified in tests; live cookie flags pending browser check. |
 | **Email & Storage Verification** | Mailpit SMTP dispatch | **PENDING** | Outbox worker unit tests passed; live reset email receipt in Mailpit pending. |
@@ -950,7 +995,7 @@ Status Definitions:
 
 ## 13.7 Current Development Position & Next Planned Phase
 
-The current development position is in **Phase 03 — College Registration, Restricted Dashboard & Approval Workflow** with **Module 3.1A (APPROVED)** and **Module 3.2 (APPROVED)**.
+The current development position is in **Phase 03 — College Registration, Restricted Dashboard & Approval Workflow** with all Phase 03 backend modules **APPROVED**: **Module 3.1A (APPROVED)**, **Module 3.2 (APPROVED)**, **Module 3.3 (APPROVED)**, **Module 3.4 (APPROVED)**, and **Module 3.5 (APPROVED)** (237/237 backend tests on Testcontainers MySQL 8.0.36) and Frontend **Module 3.1B APPROVED** (26/26 focused tests, 41/41 full suite tests). Phase 03 remains `IN_PROGRESS` pending remaining frontend modules.
 
 ### Phase 03 Module Progress:
 - **Module 3.1A (Backend Registration Foundation):** `APPROVED`. Public registration intake endpoint (`POST /api/v1/college-registrations`), versioned registration revision (V4 schema), IP sliding-window rate limiter, transactional outbox dispatch, and `COLLEGE_REGISTRATION_CREATED` audit event. Explicitly approved by user.
@@ -970,13 +1015,162 @@ The current development position is in **Phase 03 — College Registration, Rest
   - **Frontend Changes:** None (deferred per backend-first strategy).
   - **Database Migrations:** None (existing schema V1–V4 utilized).
   - **Reference Report:** `docs/03-phase/phase-03-module-3.2-inspection-and-planning-report.md`.
-- **Modules 3.3 through 3.5 (Backend):** `NOT_STARTED` (Module 3.3: College Admin Restricted Dashboard & Profile Completion / Document Management & Review Submission; Module 3.4: Super Admin Approval Queue & Review Workflow; Module 3.5: Approval Lifecycle, College Activation & Revisions).
-- **Module 3.1B onward (Frontend):** `NOT_STARTED` (Deferred until all Phase 03 backend modules are complete).
+- **Module 3.3 (College Admin Restricted Dashboard, Document Management & Review Submission — Backend):** `APPROVED`.
+  - **Approval Status:** Explicitly approved by the user.
+  - **Implementation Scope:**
+    - Backend implementation only.
+    - 20 production files created (`CollegeOnboardingController`, `CollegeOnboardingService`, `DocumentProperties`, `DocumentStorageService`, `LocalFileSystemDocumentStorageService`, `DocumentValidator`, `DocumentStorageCompensationHandler`, `StoredFileMetadata`, 12 DTOs: `MyApplicationResponse`, `CurrentRevisionResponse`, `CollegeSummaryResponse`, `CollegeProfileResponse`, `ReviewFeedbackResponse`, `ResubmissionAllowanceResponse`, `OnboardingChecklistResponse`, `DocumentResponse`, `UpdateApplicationRequest`, `SubmitApplicationResponse`, `RevisionSummaryResponse`, `DocumentDownload`).
+    - 5 test files created (`CollegeOnboardingIntegrationTest`, `CollegeOnboardingServiceUnitTest`, `DocumentValidatorUnitTest`, `LocalFileSystemDocumentStorageServiceUnitTest`, `DocumentStorageCompensationUnitTest`).
+    - 6 existing files modified (`GlobalExceptionHandler`, `AuditEventType`, `CollegeRepository`, `CollegeRegistrationDocumentRepository`, `application.yml`, `.gitignore`).
+    - 31 total files affected.
+    - Zero database migrations (Flyway schema V4 unchanged).
+    - Zero frontend changes (deferred per backend-first strategy).
+    - No Module 3.4 or 3.5 implementation.
+    - Existing Module 3.1A and 3.2 approvals remain unchanged.
+  - **Automated Test Results (Testcontainers MySQL 8.0.36 / Docker Desktop 29.9.3 / Java 21 / Spring Boot 3.3.4):**
+    - Full backend suite (`mvn -f backend/pom.xml test`): 142 tests, 0 failures, 0 errors, 0 skipped — `BUILD SUCCESS` (Execution time: 02:11 min).
+    - Executed against real Testcontainers MySQL 8.0.36 on dynamic Docker port (`50677`); zero local MySQL fallback.
+    - Module 3.3 Unit Tests: 35 tests passed across 4 unit test classes (`CollegeOnboardingServiceUnitTest` 15, `DocumentValidatorUnitTest` 9, `LocalFileSystemDocumentStorageServiceUnitTest` 7, `DocumentStorageCompensationUnitTest` 4).
+    - Module 3.3 Integration Tests: 10 scenarios passed in `CollegeOnboardingIntegrationTest` (Happy path onboarding & freeze guarantee, pre-submission gates, multi-revision lineage $v_1 \to v_2 \to v_3$, review feedback decoupling, replacement document deletion & restoration, cross-revision replacement rejection, category mismatch rejection, college tenant name synchronization, safe download headers & tenant isolation, mixed lifecycle counter boundary).
+    - Existing regression tests passed: 97 baseline tests across Auth, Outbox, Module 3.1A, and Module 3.2.
+  - **Accepted Storage-Key Implementation Deviation:**
+    - Formally acknowledged and accepted implementation deviation from planning specification v2.2.
+    - Planning v2.2 specified that carried-forward document rows would reference the existing immutable `storage_key`.
+    - Actual implementation physically duplicates the file on disk and assigns a new unique UUID storage key via `documentStorageService.duplicate()`.
+    - Reason: The existing Flyway V4 migration defines `CONSTRAINT uq_crd_storage_key UNIQUE (storage_key)`. Multiple rows sharing the exact same storage key trigger a MySQL duplicate key violation (SQL Error 1062). Because schema migrations were strictly prohibited, physical duplication with distinct UUID storage keys satisfies the immutable database schema while preserving complete physical isolation across revisions.
+    - Historical revisions retain independent storage objects.
+    - Approved by the user with the deviation explicitly acknowledged. Original planning document and ADRs are preserved without rewriting.
+  - **Outstanding Verification Gaps:**
+    - Known verification limitations preserved for future verification planning (not implementation failures):
+      1. *Filesystem rollback integration coverage:* Spring transactional rollback cleanup via `TransactionSynchronization` is verified via unit tests (`DocumentStorageCompensationUnitTest`), but there is currently no end-to-end integration test asserting physical file deletion on disk following an actual database rollback.
+      2. *Three-level replacement chain integration test:* The two-level replacement chain ($A \to B$) is verified in integration testing; the three-level chain ($A \to B \to C$) has been verified algebraically via leaf-node set logic and foreign-key mechanics, but does not yet have a dedicated end-to-end integration test.
+  - **Resubmission Counter Boundary:**
+    - Confirmed behavior: Initial submission ($v_1$) does not increment `resubmission_count` (remains 0).
+    - Up to three correction submissions ($v_2, v_3, v_4$) following non-permanent `REJECTED` decisions are permitted.
+    - Counter increments only upon successful submission (`POST /submit`).
+    - After the third correction submission is subsequently rejected, opening a 4th correction draft is blocked with `400 BAD_REQUEST (MAX_RESUBMISSION_LIMIT_EXCEEDED)`.
+    - Module 3.5 must implement permanent rejection when the third resubmission is rejected.
+  - **Reference Reports:**
+    - `docs/03-phase/phase-03-module-3.3-implementation-report.md`
+    - `docs/03-phase/phase-03-module-3.3-final-verification-report.md`
+- **Module 3.4 (Super Admin Approval Queue & Review Workflow — Backend):** `APPROVED`.
+  - **Approval Status:** Explicitly approved by the user.
+  - **Implementation Scope:**
+    - Backend implementation only.
+    - 12 production files created (`PageResponse.java`, `CollegeReviewController.java`, `CollegeReviewService.java`, and 9 DTOs/enums: `ReviewQueueItemResponse`, `CollegeReviewDetailResponse`, `CollegeReviewSummaryResponse`, `ReviewAdminUserResponse`, `SubmittedRevisionResponse`, `ReviewHistoryItemResponse`, `ReviewDecisionRequest`, `ReviewDecisionResponse`, `ReviewDecisionAction`).
+    - 5 production files modified (`AuditEventType.java`, `CollegeRegistrationRepository.java`, `UserRepository.java`, `AuditEventRepository.java`, `CollegeRegistrationDocumentRepository.java`).
+    - 3 test files created during implementation (`CollegeReviewControllerUnitTest.java`, `CollegeReviewServiceUnitTest.java`, `CollegeReviewIntegrationTest.java`).
+    - Targeted verification subsequently modified only `CollegeReviewIntegrationTest.java` (adding bounded queue query count verification across page sizes and post-mutation rollback test) and created `docs/03-phase/phase-03-module-3.4-verification-report.md`.
+    - Total files inventory: 12 production files created, 5 production files modified, 3 test files created (1 subsequently modified during verification), 0 database migrations, 0 frontend files. Total codebase files affected: 20 (plus 2 documentation reports).
+    - Zero database migrations (Flyway schema V4 unchanged and 100% sufficient).
+    - Zero frontend implementation (deferred following approved backend-first strategy).
+    - Zero Module 3.5 implementation (strict boundary maintained).
+    - Existing Module 3.1A, 3.2, and 3.3 approvals remain unchanged.
+  - **Implemented Backend Capabilities:**
+    - Super Admin review queue endpoint (`GET /api/v1/super-admin/colleges/reviews`) with pending-only eligibility filtering (`c.current_registration_id = cr.id`, `cr.submitted_for_review_at IS NOT NULL`, `cr.status = 'PENDING'`, `c.approval_status = 'PENDING'`, `c.permanently_rejected = FALSE`, `c.archived_at IS NULL`).
+    - Bounded batched queue retrieval: 5-operation retrieval pattern eliminating N+1 query amplification (Count query + paginated data query + batch College + batch Admin + batch Document).
+    - In-memory active document calculation: dynamically filters out documents whose ID is referenced by a successor's `replaces_document_id`.
+    - Search & sort whitelisting: validated search queries (<= 100 chars), ISO-8601 timestamps (`from <= to`), and strict sort whitelisting (`submittedForReviewAt`, `legalName`, `createdAt`) with deterministic tie-breaker (`id,asc`).
+    - Application review detail inspection (`GET /api/v1/super-admin/colleges/reviews/{collegeId}`) with full registration history timeline, proposed admin profile, and active verification documents. Rejects non-pending applications with `409 Conflict (APPLICATION_NOT_AWAITING_REVIEW)`.
+    - Secure document inspection & streaming download (`GET /api/v1/super-admin/colleges/reviews/{collegeId}/documents/{documentId}`) with 4-step multi-point ownership validation (college existence, document belonging to college, registration association existence, registration tenant matching) and safe download headers (`Content-Disposition: attachment`, `X-Content-Type-Options: nosniff`, `Cache-Control: private, no-cache, no-store`).
+    - Transactional review decision execution (`POST /api/v1/super-admin/colleges/reviews/{collegeId}/decision`) supporting `APPROVE`, `REQUEST_ACTION`, and non-permanent `REJECT`.
+    - Dual concurrency protection: pessimistic write lock (`findByIdWithLock`, 3000ms timeout) and optimistic version validation (`expectedVersion` matched against `college.getVersion()`, returning `409 Conflict (STALE_APPLICATION_VERSION)` on stale update).
+    - Action required safety guard: blocks `REQUEST_ACTION` if college has already reached 10 action-required rounds (`400 Bad Request (MAX_ACTION_REQUIRED_LIMIT_EXCEEDED)`).
+    - Reviewer audit event trail: records `COLLEGE_REGISTRATION_APPROVED`, `COLLEGE_REGISTRATION_ACTION_REQUIRED`, or `COLLEGE_REGISTRATION_REJECTED` in `audit_events` under the same transaction boundary.
+  - **Automated Test Results (Testcontainers MySQL 8.0.36 / Docker Desktop / Java 21 / Spring Boot 3.3.4):**
+    - Full backend regression suite (`mvn -f backend/pom.xml test`): **196 / 196 passed**, 0 failures, 0 errors, 0 skipped — `BUILD SUCCESS` (01:44 min).
+    - Focused integration suite (`mvn -f backend/pom.xml test -Dtest=CollegeReviewIntegrationTest`): **21 / 21 passed**, 0 failures, 0 errors, 0 skipped (57.93 s).
+    - Unit tests: 33 tests passed across 2 unit test classes (`CollegeReviewControllerUnitTest` 16, `CollegeReviewServiceUnitTest` 17).
+    - Executed against real Testcontainers MySQL 8.0.36 on dynamic Docker port; zero local MySQL fallback.
+    - Existing regression tests passed: 142 baseline tests across Auth, Outbox, Module 3.1A, Module 3.2, and Module 3.3.
+  - **Empirical Targeted Verification Evidence:**
+    - *Bounded Queue Query Count ($O(1)$ and Zero $N+1$ Amplification):* Verified across page sizes 1, 5, 20 against 25 seeded eligible applications in MySQL. Query count is strictly bounded at exactly 5 queries for populated pages ($N=1, 5, 20$) and 1 query for empty page ($N=0$), conclusively ruling out row-by-row $N+1$ query behavior.
+    - *Transaction Rollback Atomicity:* Hardened via `@SpyBean AuditEventService` injecting an unhandled exception immediately after executing real audit persistence (`callRealMethod()`) before transaction commit. Post-rollback raw JDBC assertions confirmed atomic rollback of `colleges.approval_status`, `college_registrations.status`, and uncommitted `audit_events` row (0 audit events persisted).
+    - *Zero Production Code Changes:* Targeted verification required no production code changes; existing production logic satisfied all invariants.
+  - **Reference Reports:**
+    - `docs/03-phase/phase-03-module-3.4-implementation-report.md`
+    - `docs/03-phase/phase-03-module-3.4-verification-report.md`
+- **Module 3.5 (Approval Lifecycle, College Activation & Revisions — Backend):** `APPROVED`.
+  - **Approval Status:** Explicitly approved by the project owner.
+  - **Implementation Scope:**
+    - Backend-only implementation.
+    - Production services created/updated: `CollegeLifecycleService.java`, `CollegeCleanupScheduler.java`, and dedicated proxy bean `DocumentPurgeMarkerService.java`.
+    - Configuration: `CleanupProperties.java` (`acadlytic.cleanup.*` specifying batch sizes, abandoned retention days, and permanent rejection retention days).
+    - Flyway Migration: `V5__crd_file_purged_at.sql` adding column `file_purged_at TIMESTAMP NULL` and index `idx_crd_file_purged_at (file_purged_at)` to `college_registration_documents`.
+    - Unit & Integration Test Suites: `CollegeLifecycleServiceUnitTest.java` (15 tests), `CollegeCleanupSchedulerUnitTest.java` (3 tests), `CollegeLifecycleIntegrationTest.java` (23 scenarios).
+    - Zero frontend files modified (deferred per approved backend-first strategy).
+    - Existing Module 3.1A, 3.2, 3.3, and 3.4 approvals remain unchanged.
+  - **Implemented Backend Capabilities:**
+    - **College Operational Activation:** Super Admin `APPROVE` decision transitions `colleges.status = ACTIVE`, enqueues outbox notification `COLLEGE_REGISTRATION_APPROVED`, and logs audit event `COLLEGE_ACTIVATED`.
+    - **Notification Dispatch:** Super Admin `REQUEST_ACTION` decision enqueues outbox notification `COLLEGE_REGISTRATION_ACTION_REQUIRED`. Non-permanent `REJECT` decision calculates remaining resubmission allowance ($3 - \text{resubmission\_count}$) and enqueues `COLLEGE_REGISTRATION_REJECTED`.
+    - **Permanent Rejection Lifecycle:** Upon rejection of the 3rd correction resubmission ($v_4$, `resubmission_count == 3`), marks `permanently_rejected = TRUE`, `colleges.status = INACTIVE`, deactivates all college users (`status = INACTIVE`), releases unique college code (appending `-REJECTED-<collegeId>`) and college admin emails (appending `+released-<collegeId>` and setting `email_released = TRUE`), revokes all active HTTP sessions via `SessionRevocationService`, enqueues outbox notification `COLLEGE_REGISTRATION_PERMANENTLY_REJECTED`, and logs audit events `COLLEGE_PERMANENTLY_REJECTED` and `COLLEGE_ADMIN_DEACTIVATED`.
+    - **Scheduled Archival & Cleanup:** Daily scheduler invokes:
+      1. Abandoned registration archival: 7-day retention check for unsubmitted drafts with unverified admins, transitioning college to `INACTIVE`, setting `archived_at = NOW()`, deactivating admin, releasing code/email, revoking sessions, logging audit event `ABANDONED_REGISTRATION_ARCHIVED`, and deleting draft physical files.
+      2. Permanently rejected college archival: 7-day retention check after rejection decision, setting `archived_at = NOW()`, logging audit event `PERMANENTLY_REJECTED_COLLEGE_ARCHIVED`.
+    - **Proxy-Effective `REQUIRES_NEW` Architecture:**
+      - Marker persistence is encapsulated in a dedicated Spring `@Service` component: `DocumentPurgeMarkerService.markDocumentFilePurged(...)` annotated with `@Transactional(propagation = Propagation.REQUIRES_NEW)`.
+      - Eliminates `this.` self-invocation bypass; calls cross Spring bean boundaries through CGLIB proxy interception (`TransactionInterceptor`).
+      - Physical file I/O operations (`documentStorageService.delete(...)` and `documentStorageService.exists(...)`) execute **strictly outside** database transactions.
+    - **Document Metadata Preservation:**
+      - Database rows in `college_registration_documents` are **never deleted**.
+      - Successful physical file deletion is tracked via `file_purged_at = NOW()`.
+      - Document metadata, checksums, registration linkages, and audit histories are permanently preserved.
+    - **Verified Repository Enum Mapping:**
+      - In `CollegeRepository.findAbandonedRegistrations`, verified and enforced type-safe JPQL query comparison `cr.status = :registrationStatus` mapped to `CollegeApprovalStatus.PENDING`, alongside `CollegeStatus.PENDING_VERIFICATION`, `Role.COLLEGE_ADMIN`, and `UserStatus.ACTIVE`.
+    - **Automated Keyset Sweeper & Multi-Run Retry:**
+      - Secondary sweeper `sweepResidualAbandonedDraftDocuments()` traverses draft documents across archived colleges without age cutoff using index-backed keyset predicate (`d.filePurgedAt IS NULL AND d.id > :lastProcessedId ORDER BY d.id ASC`).
+      - Cursor `lastProcessedId` resets to `0L` at the start of each scheduled execution.
+      - Failed physical file deletions (e.g., due to OS locks or transient I/O errors) retain `file_purged_at IS NULL` and are automatically re-selected in early batches on subsequent runs, while successfully purged documents (`file_purged_at IS NOT NULL`) are permanently filtered out by SQL.
+  - **Automated Test Results (Testcontainers MySQL 8.0.36 / Docker Desktop / Java 21 / Spring Boot 3.3.4):**
+    - Full backend regression suite (`mvn -f backend/pom.xml test`): **237 / 237 passed**, 0 failures, 0 errors, 0 skipped — `BUILD SUCCESS` (03:25 min).
+    - Focused lifecycle test suite (`mvn -f backend/pom.xml test -Dtest=CollegeLifecycleServiceUnitTest,CollegeCleanupSchedulerUnitTest,CollegeLifecycleIntegrationTest`): **41 / 41 passed**, 0 failures, 0 errors, 0 skipped — `BUILD SUCCESS` (01:33 min).
+    - Unit tests: 18 unit tests passed across 2 unit test classes (`CollegeLifecycleServiceUnitTest` 15, `CollegeCleanupSchedulerUnitTest` 3).
+    - Integration tests: 23 scenarios passed in `CollegeLifecycleIntegrationTest` (activation, permanent rejection, session revocation, code/email release, outbox notifications, concurrent review vs cleanup, scheduled archival, missing-file idempotency, multi-run failed document retry with cursor reset in Scenario 23).
+    - 100% clean test execution against Testcontainers `mysql:8.0.36` on Docker Desktop; zero local MySQL fallback.
+  - **Reference Reports:**
+    - `docs/03-phase/phase-03-module-3.5-inspection-and-planning-report.md`
+    - `docs/03-phase/phase-03-module-3.5-implementation-report.md`
+- **Module 3.1B (Public College Registration Portal — Frontend):** `APPROVED`.
+  - **Approval Status:** Explicitly approved by the user on 2026-11-24.
+  - **Implementation Scope:**
+    - Frontend implementation only.
+    - 8 production & test files created (`registrationSchema.ts`, `collegeRegistrationService.ts`, `useCollegeRegistration.ts`, `RegistrationSectionHeader.tsx`, `PasswordStrengthMeter.tsx`, `RegistrationSuccessView.tsx`, `RegistrationForm.tsx`, `register-college.test.tsx`).
+    - 5 existing files modified (`RegisterCollegePage.tsx`, `AuthLayout.tsx`, `index.ts` types, `queryKeys.ts`, `api.ts`).
+    - 16-control structured intake form across 3 logical visual sections (`Institution Details`, `Campus Address & Location`, `Primary Administrator Account`).
+    - Form layout expands dynamically to `sm:max-w-3xl` within `AuthLayout` for desktop usability, retaining `sm:max-w-md` for standard auth pages.
+    - Strict backend contract compliance: `toRegisterCollegeRequest` transformation maps the 16 form controls to the exact 15 fields expected by `POST /api/v1/college-registrations`. Client-side `confirmPassword` is validated in Zod and strictly omitted from payload serialization.
+    - Pre-validation trimming and sanitization: required strings trimmed; college code normalized to uppercase; administrator email normalized to lowercase; optional fields (`addressLine2`, `websiteUrl`) trimmed and converted to `null` if blank; raw user password preserved without trimming.
+    - Backend-authoritative password policy: enforces exact structural rules from `PasswordPolicyValidator.java` (12–128 characters, strictly forbidding containment of the administrator's email; no arbitrary uppercase/digit/symbol blocks).
+    - Centralized strict `Retry-After` parsing: `parseRetryAfter` in `api.ts` strictly validates `/^\d+$/` on string headers, rejecting non-integer prefixes (e.g. `"30abc"`), non-numeric strings, zeroes, and negatives. Symmetrically consumed by `useCollegeRegistration.ts`.
+    - Hardened `isApiError` type guard: verifies genuine `instanceof ApiError` and enforces strict structural validation for cross-boundary objects (`name === 'ApiError'`, `typeof message === 'string'`), strictly rejecting arbitrary objects containing only `errorCode`.
+    - Dynamic rate-limit handling: active countdown timer when `Retry-After` is valid; persistent warning with manual dismissal and retry when absent/malformed (never fabricates a countdown).
+    - Post-registration confirmation view (`RegistrationSuccessView`): provides application metadata, 4-step onboarding roadmap, spam notice, unauthenticated session status, and 48-hour email verification requirement.
+    - Zero backend source code or migration changes; zero API contract changes.
+  - **Automated Test Results (Vitest 2.1.9 / JSDOM / Node.js 22 / React 18):**
+    - Focused Module 3.1B suite (`src/test/register-college.test.tsx`): **26 / 26 passed** (0 failures, 0 errors, 0 skipped, 1.10s execution).
+    - Full frontend regression suite (`npm test`): **41 / 41 passed across 9 test files** (0 failures, 0 errors, 0 skipped, 14.96s execution).
+    - TypeScript compilation (`tsc`): PASSED (0 errors under strict mode).
+    - Production build (`npm run build`): PASSED (`tsc && vite build`, 1,738 modules transformed in 6.39s, clean production bundle in `dist/`).
+    - All 5 `isApiError` prototype-boundary conditions verified.
+    - Strict `parseRetryAfter` and `extractRetryAfter` validated across all numeric and malformed permutations.
+  - **Distinction of Verification:** Automated unit, component, integration, and build verification complete. Manual interactive browser verification against a running backend remains pending.
+  - **Reference Reports:**
+    - `docs/03-phase/phase-03-module-3.1B-inspection-and-planning-report.md` (v1.1)
+    - `docs/03-phase/phase-03-module-3.1B-implementation-report.md`
+- **Module 3.2 onward (Frontend):** `NOT_STARTED` / Pending (Next development phase).
+
+### Phase 03 Execution Strategy:
+**Phase 03 backend modules (3.1A, 3.2, 3.3, 3.4, and 3.5) and Frontend Module 3.1B are COMPLETE and APPROVED.**  
+The next development effort is the implementation and verification of remaining Phase 03 frontend modules (Module 3.2 onward). Phase 03 remains `IN_PROGRESS` until all frontend modules and end-to-end verification are complete.
 
 ### Next Planned Module:
-**Phase 03, Module 3.3 — College Admin Restricted Dashboard, Document Management & Review Submission (Backend)**
-- **Status:** `INSPECTION_AND_PLANNING`
-- **Scope:** Restricted dashboard data provider, registration revision profile completion/editing, document upload & attachment metadata handling, and transition to `SUBMITTED_FOR_REVIEW` (`COLLEGE_REGISTRATION_SUBMITTED_FOR_REVIEW` audit event).
+**Phase 03, Module 3.2 — Email Verification & Account Activation (Frontend)**
+- **Status:** `NOT_STARTED` (Ready for inspection and planning)
+- **Scope:**
+  - Token consumption from email verification link (`/auth/verify-email?token=...`).
+  - Verification submission handling and stateful feedback (success vs expired vs invalid).
+  - Resend verification email workflow with rate-limit protection.
+  - Seamless redirection of verified college administrator to restricted onboarding dashboard.
 
 # 14. IMPORTANT PROJECT BOUNDARIES
 

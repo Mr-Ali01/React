@@ -82,3 +82,42 @@ export interface ChangeEmailRequest {
 export interface VerifyEmailChangeRequest {
   token: string;
 }
+
+// Email Verification Payloads matching backend VerifyEmailRequest and VerifyEmailResponse
+export interface VerifyEmailRequest {
+  token: string;
+}
+
+export interface VerifyEmailResponse {
+  email: string;
+  emailVerified: boolean;
+  verifiedAt: string; // ISO-8601 timestamp string
+}
+
+// College Registration Response matching backend CollegeRegistrationResponse
+export interface CollegeRegistrationResponse {
+  collegeId: number;
+  registrationId: number;
+  versionNumber: number;
+  collegeName: string;
+  collegeCode: string;
+  status: CollegeApprovalStatus;
+  adminEmail: string;
+  submittedForReview: boolean;
+  message?: string | null;
+}
+
+// Re-export registration form and API request types and functions
+export {
+  toRegisterCollegeRequest,
+  registerCollegeSchema,
+} from '@/schemas/registrationSchema';
+export type {
+  RegisterCollegeFormValues,
+  RegisterCollegeRequest,
+} from '@/schemas/registrationSchema';
+
+// Re-export email verification schema and types
+export { verifyEmailSchema } from '@/schemas/verificationSchema';
+export type { VerifyEmailFormValues } from '@/schemas/verificationSchema';
+

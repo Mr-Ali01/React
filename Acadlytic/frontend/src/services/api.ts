@@ -11,6 +11,7 @@ export class ApiError extends Error {
   status?: number;
   errors?: Record<string, string> | string;
   data?: ApiResponse<unknown>;
+  retryAfter?: number;
 
   constructor(
     message: string,
@@ -19,6 +20,7 @@ export class ApiError extends Error {
       status?: number;
       errors?: Record<string, string> | string;
       data?: ApiResponse<unknown>;
+      retryAfter?: number;
     }
   ) {
     super(message);
@@ -27,12 +29,58 @@ export class ApiError extends Error {
     this.status = options?.status;
     this.errors = options?.errors;
     this.data = options?.data;
+    this.retryAfter = options?.retryAfter;
     Object.setPrototypeOf(this, ApiError.prototype);
   }
 }
 
 export function isApiError(error: unknown): error is ApiError {
-  return error instanceof ApiError;
+  if (error instanceof ApiError) {
+    return true;
+  }
+  if (typeof error === 'object' && error !== null) {
+    const candidate = error as Record<string, unknown>;
+    return (
+      candidate.name === 'ApiError' &&
+      typeof candidate.message === 'string' &&
+      (candidate.errorCode === undefined ||
+        typeof candidate.errorCode === 'string') &&
+      (candidate.status === undefined || typeof candidate.status === 'number')
+    );
+  }
+  return false;
+}
+
+/**
+ * Strict parser for HTTP Retry-After headers or values.
+ * Accepts:
+ * - Positive integers (number)
+ * - String containing only digits representing positive integer seconds (e.g. "30", " 30 ")
+ * Rejects:
+ * - Non-integer strings with digit prefixes (e.g. "30abc")
+ * - Non-numeric strings (e.g. "abc", "")
+ * - Zero ("0", 0) and negative values ("-1", -1)
+ * - Non-integer floats (30.5)
+ * - null, undefined, objects, booleans
+ *
+ * Returns positive integer number of seconds, or null.
+ */
+export function parseRetryAfter(value: unknown): number | null {
+  if (typeof value === 'number') {
+    return Number.isInteger(value) && value > 0 ? value : null;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!/^\d+$/.test(trimmed)) {
+      return null;
+    }
+    const parsed = parseInt(trimmed, 10);
+    return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+  }
+  if (Array.isArray(value) && value.length > 0) {
+    return parseRetryAfter(value[0]);
+  }
+  return null;
 }
 
 /**
@@ -192,11 +240,20 @@ apiClient.interceptors.response.use(
       error.message ||
       'An unexpected network error occurred';
 
+    const rawRetryHeader =
+      error.response?.headers?.['retry-after'] ??
+      (typeof error.response?.headers?.get === 'function'
+        ? error.response.headers.get('retry-after')
+        : undefined);
+    const parsedRetry = parseRetryAfter(rawRetryHeader);
+    const retryAfter = parsedRetry !== null ? parsedRetry : undefined;
+
     const apiError = new ApiError(errorMsg, {
       errorCode: responseData?.errorCode,
       status: error.response?.status,
       errors: responseData?.errors,
       data: responseData,
+      retryAfter,
     });
 
     return Promise.reject(apiError);
