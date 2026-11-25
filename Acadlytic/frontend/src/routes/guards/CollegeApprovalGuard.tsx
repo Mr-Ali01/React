@@ -18,10 +18,17 @@ export const CollegeApprovalGuard: React.FC = () => {
     return <Outlet />;
   }
 
-  // For college admins, if college is not approved, redirect to onboarding status
+  // Fail-closed authorization: dashboard access requires all three exact conditions:
+  // 1. collegeApprovalStatus === 'APPROVED'
+  // 2. collegeStatus === 'ACTIVE'
+  // 3. managementUnlocked === true
+  const isApproved = user.collegeApprovalStatus === 'APPROVED';
+  const isActive = user.collegeStatus === 'ACTIVE';
+  const isUnlocked = user.managementUnlocked === true;
+
   if (
     user.role === 'COLLEGE_ADMIN' &&
-    user.collegeApprovalStatus !== 'APPROVED'
+    (!isApproved || !isActive || !isUnlocked)
   ) {
     return <Navigate to="/onboarding-status" replace />;
   }

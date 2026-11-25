@@ -7,6 +7,7 @@ import {
   Activity,
   FileText,
   Clock,
+  ClipboardCheck,
   ChevronLeft,
 } from 'lucide-react';
 import { clsx } from 'clsx';
@@ -105,6 +106,10 @@ export const Sidebar: React.FC = () => {
                   <NavLink to="/admin/dashboard" className={navLinkClass}>
                     <Shield className="h-4 w-4 text-sky-500" />
                     Super Admin Portal
+                  </NavLink>
+                  <NavLink to="/admin/colleges/reviews" className={navLinkClass}>
+                    <ClipboardCheck className="h-4 w-4 text-amber-500" />
+                    Approval Queue
                   </NavLink>
                   <NavLink to="/admin/colleges" className={navLinkClass}>
                     <Building2 className="h-4 w-4 text-indigo-500" />

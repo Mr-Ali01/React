@@ -23,6 +23,8 @@ import { VerifyEmailPage } from '@/pages/auth/VerifyEmailPage';
 import { ChangePasswordPage } from '@/pages/auth/ChangePasswordPage';
 import { SuperAdminDashboardPage } from '@/pages/dashboard/SuperAdminDashboardPage';
 import { CollegeAdminDashboardPage } from '@/pages/dashboard/CollegeAdminDashboardPage';
+import { SuperAdminReviewQueuePage } from '@/pages/admin/SuperAdminReviewQueuePage';
+import { CollegeReviewDetailPage } from '@/pages/admin/CollegeReviewDetailPage';
 
 export const router = createBrowserRouter([
   {
@@ -44,10 +46,6 @@ export const router = createBrowserRouter([
           {
             path: 'unauthorized',
             element: <UnauthorizedPage />,
-          },
-          {
-            path: 'onboarding-status',
-            element: <OnboardingStatusPage />,
           },
         ],
       },
@@ -127,9 +125,48 @@ export const router = createBrowserRouter([
                     path: 'dashboard',
                     element: <SuperAdminDashboardPage />,
                   },
+                  // Phase 03 Module 3.4 Canonical Review Workflow Routes
+                  {
+                    path: 'colleges/reviews',
+                    element: <SuperAdminReviewQueuePage />,
+                  },
+                  {
+                    path: 'colleges/reviews/:collegeId',
+                    element: <CollegeReviewDetailPage />,
+                  },
+                  // Backward-compatible aliases for review routes
+                  {
+                    path: 'reviews',
+                    element: <SuperAdminReviewQueuePage />,
+                  },
+                  {
+                    path: 'reviews/:collegeId',
+                    element: <CollegeReviewDetailPage />,
+                  },
                   {
                     path: 'colleges',
                     element: <SuperAdminDashboardPage />,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+
+      // Protected College Admin Onboarding Status Route (Must be strictly outside CollegeApprovalGuard)
+      {
+        element: <ProtectedRoute />,
+        children: [
+          {
+            element: <RoleGuard allowedRoles={['COLLEGE_ADMIN']} />,
+            children: [
+              {
+                element: <AppLayout />,
+                children: [
+                  {
+                    path: 'onboarding-status',
+                    element: <OnboardingStatusPage />,
                   },
                 ],
               },

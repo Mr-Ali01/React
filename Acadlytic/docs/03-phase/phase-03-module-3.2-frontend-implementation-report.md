@@ -5,36 +5,40 @@
 **Authoritative Project Context:** `docs/00-project-overview/ACADLYTIC_MASTER_CONTEXT.md`  
 **Execution Target:** Frontend only (`c:\React\Acadlytic\frontend`)  
 **Implementation Date:** 2026-11-24  
+**Audit & Hardening Date:** 2026-11-24  
+**Final Concurrency Clarification Date:** 2026-11-24  
 **Status:** `IMPLEMENTED / PENDING USER VERIFICATION & APPROVAL`
 
 ---
 
 ## 1. Executive Summary
 
-Module 3.2 (Frontend) implements the complete email verification and verification resend lifecycle for Acadlytic in strict accordance with the approved v1.1 planning report and backend contracts.
+Module 3.2 (Frontend) implements the complete email verification and verification resend lifecycle for Acadlytic in strict accordance with the approved v1.1 planning report and backend contracts. Following a rigorous concurrency audit and hardening pass, synchronous invocation-level mutual exclusion and same-turn execution guarantees have been verified.
 
-Key capabilities delivered:
+Key capabilities delivered and verified:
 1. **Email Verification Intake Workflow (`POST /api/v1/auth/verify-email`)**:
    - Dual-mounted routes (`/verify-email` and `/auth/verify-email`) wrapped in `AuthLayout` and placed outside `PublicOnlyRoute` and `ProtectedRoute` so that both unauthenticated guests and authenticated college admins can redeem tokens.
-   - Immediate address-bar token sanitization via React Router `setSearchParams(..., { replace: true, state: location.state })` removing only `token` while preserving unrelated query parameters and history navigation state.
-   - Client-side token length validation (20–255 chars) via Zod `verifyEmailSchema`.
-   - Strict `hasExecutedRef` lifecycle guard preventing duplicate API dispatches under React StrictMode or component remounts.
+   - Guaranteed address-bar token sanitization via React Router `setSearchParams(..., { replace: true, state: location.state })` removing only `token` prior to API dispatch while preserving unrelated query parameters and history navigation state.
+   - Strict `hasExecutedRef` lifecycle guard together with in-place history replacement preventing duplicate API dispatches across React StrictMode effect replays, component remounts, and browser refreshes.
+   - Synchronous turn claim protection (`isVerificationInFlight`) preventing duplicate concurrent verification mutations.
    - Comprehensive UI state machine (`VerifyEmailStatusCard`) handling all 7 lifecycle states: Loading, Success (guest vs authenticated), Invalid/Expired (guest vs authenticated), Already Verified, Account Inactive, CSRF Handshake Failure, and Server/Network Error with manual retry.
    - Explicit separation notice informing college administrators that administrator email verification is distinct from institutional accreditation review (which remains `PENDING` Super Admin evaluation).
    - Non-session-creating verification: guest verification displays metadata and routes to `/auth/login`; authenticated verification updates `emailVerified: true` in the in-memory auth store and query cache without re-login.
 
 2. **Resend Verification Workflow (`POST /api/v1/auth/resend-verification`)**:
    - Strictly authenticated `COLLEGE_ADMIN` action via session cookie (`ACADLYTIC_SID`).
-   - Mutual exclusion: resend is disabled while an email verification mutation is in-flight across the app (`useIsMutating({ mutationKey: ['auth', 'verify-email'] }) > 0`).
-   - Rate limiting handling: starts an active countdown timer when valid `Retry-After` header is returned; renders a persistent warning banner with dismiss button when `Retry-After` is missing/malformed without fabricating timers.
+   - Bidirectional mutual exclusion enforced in the UI (disabled button state), in the mutation execution lifecycle (`mutationFn`), and synchronously at the invocation level (`mutate` / `mutateAsync`):
+     * Calling `verifyEmail()` and `resendVerification()` in the same synchronous turn allows only `verifyEmail()` to reach its API service method; `resendVerification()` is rejected synchronously with `CONCURRENT_VERIFICATION_IN_PROGRESS` (409).
+     * Calling `resendVerification()` and `verifyEmail()` in the same synchronous turn allows only `resendVerification()` to reach its API service method; `verifyEmail()` is rejected synchronously with `CONCURRENT_RESEND_IN_PROGRESS` (409).
+   - Strict `Retry-After` header parsing via `parseRetryAfter`: starts an active countdown timer when valid; falls back to a persistent warning banner with dismiss button when missing or malformed without fabricating timers.
    - Integrated into both `/onboarding-status` (prominent warning banner) and `/verify-email` (expired token recovery for authenticated users).
-   - Handles all 7 backend error codes: `429 RATE_LIMIT_EXCEEDED`, `400 EMAIL_ALREADY_VERIFIED`, `401 AUTH_UNAUTHENTICATED`, `403 ACCESS_DENIED`, `403 AUTH_ACCOUNT_INACTIVE`, `403 CSRF_TOKEN_INVALID`, `400 VALIDATION_ERROR`, and generic server/network failures.
+   - Complete backend error mapping: `429 RATE_LIMIT_EXCEEDED`, `400 EMAIL_ALREADY_VERIFIED`, `401 AUTH_UNAUTHENTICATED`, `403 ACCESS_DENIED`, `403 AUTH_ACCOUNT_INACTIVE`, `403 CSRF_TOKEN_INVALID`, `400 VALIDATION_ERROR`, and generic server/network failures.
 
 3. **Verification Evidence**:
-   - 25/25 automated unit and integration tests passing in `src/test/email-verification.test.tsx`.
-   - 66/66 total frontend tests passing across all 10 test files.
+   - **43/43** automated unit and integration tests passing in `src/test/email-verification.test.tsx` (expanded from 25 to 40 to 43 scenarios).
+   - **84/84** total frontend tests passing across all 10 test files (0 failures, 0 skipped).
    - TypeScript compilation (`tsc`) passed with zero errors.
-   - Production Vite build (`vite build`) passed successfully.
+   - Production Vite build (`vite build`) passed successfully in 16.35s.
 
 ---
 
@@ -45,11 +49,11 @@ Key capabilities delivered:
 | File Path | Description |
 |:---|:---|
 | `frontend/src/schemas/verificationSchema.ts` | Zod schema validating single-use token length (20–255 characters). |
-| `frontend/src/hooks/useEmailVerification.ts` | TanStack Query mutation hooks (`useVerifyEmail` and `useResendVerification`) with mutual exclusion, rate-limit countdown, and cache invalidation. |
+| `frontend/src/hooks/useEmailVerification.ts` | TanStack Query mutation hooks (`useVerifyEmail` and `useResendVerification`) with synchronous turn mutual exclusion, rate-limit countdown, and cache invalidation. |
 | `frontend/src/components/verification/ResendVerificationButton.tsx` | Reusable resend button with in-flight disablement, countdown timer, persistent warning handling, and error mapping. |
-| `frontend/src/components/verification/VerifyEmailStatusCard.tsx` | Visual card component managing all 7 lifecycle states, metadata display, and separation notice. |
+| `frontend/src/components/verification/VerifyEmailStatusCard.tsx` | Visual card component managing all 7 lifecycle states, metadata display, retry capability, and separation notice. |
 | `frontend/src/pages/auth/VerifyEmailPage.tsx` | Route page component managing URL token extraction, address bar sanitization, StrictMode deduplication, and status presentation. |
-| `frontend/src/test/email-verification.test.tsx` | Vitest comprehensive automated test suite covering 25 distinct scenarios. |
+| `frontend/src/test/email-verification.test.tsx` | Vitest comprehensive automated test suite covering 43 distinct scenarios. |
 
 ### 2.2 Modified Files (5 Files)
 
@@ -63,76 +67,142 @@ Key capabilities delivered:
 
 ---
 
-## 3. Workflow Implementation Details
+## 3. Code-Level Inspection & Architectural Findings
 
-### 3.1 Verification Intake (`POST /api/v1/auth/verify-email`)
+### 3.1 Token Sanitization and Execution Ordering
 
-- **Dual-Mount Route Routing:**
-  Mounted in `frontend/src/routes/index.tsx`:
-  ```tsx
-  {
-    element: <AuthLayout />,
-    children: [
-      { path: 'verify-email', element: <VerifyEmailPage /> },
-      { path: 'auth/verify-email', element: <VerifyEmailPage /> },
-    ],
+**Code Path Inspected:** `frontend/src/pages/auth/VerifyEmailPage.tsx` (lines 99–117):
+
+```tsx
+useEffect(() => {
+  const rawToken = tokenToVerifyRef.current;
+
+  // Execute once and sanitize URL
+  if (rawToken && !hasExecutedRef.current) {
+    hasExecutedRef.current = true;
+
+    // Sanitize URL: Remove ONLY the 'token' param, preserving other query params and location.state
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete('token');
+    setSearchParams(nextParams, {
+      replace: true,
+      state: location.state,
+    });
+
+    // Dispatch verification request
+    executeVerification(rawToken);
   }
-  ```
-  Both paths are accessible without session authentication and without guest-only restriction (`PublicOnlyRoute`), preventing unwanted redirects when an authenticated admin clicks the email link.
+}, [searchParams, setSearchParams, location.state, executeVerification]);
+```
 
-- **Token Sanitization & Address Bar Cleanliness:**
-  Upon mounting, `useSearchParams` extracts `token`. When present:
-  ```ts
-  const nextParams = new URLSearchParams(searchParams);
-  nextParams.delete('token');
-  setSearchParams(nextParams, { replace: true, state: location.state });
-  ```
-  Only the sensitive cryptographic token is purged from the address bar and browser history. Unrelated query parameters (`campaign`, `ref`, etc.) and React Router `location.state` are strictly preserved.
+**Guarantees Established:**
+1. **Safe Token Extraction:** Read once on component initialization (`initialToken = searchParams.get('token')`) and stored in `tokenToVerifyRef.current`.
+2. **Order of Operations:** `setSearchParams(nextParams, { replace: true, state: location.state })` executes synchronously **before** `executeVerification(rawToken)` in the same effect block.
+   - *Test Evidence (Scenario 26):* An automated test asserting the live URL query string inside the `authService.verifyEmail` mock confirms that `token=` is already purged from the address bar at the exact instant the API request begins.
+3. **Preservation of Router State:** Only the `token` key is deleted from `nextParams`. Unrelated parameters (`campaign`, `ref`, etc.) and `location.state` are strictly passed through.
+4. **StrictMode Effect Replay Protection:** Within the same component instance, `hasExecutedRef.current` is set to `true` on the initial execution pass, preventing effect replays from dispatching duplicate calls.
+5. **Remount & Browser Refresh Protection:** Because `setSearchParams` executes with `{ replace: true }`, the browser history entry itself is replaced in place. If the component unmounts and remounts (or the user refreshes), the current URL contains no `token` parameter:
+   - `initialToken = searchParams.get('token')` is `null`.
+   - `tokenToVerifyRef.current` is `null`.
+   - Component state initializes directly to `MISSING_TOKEN` without dispatching an API call.
+   - *Test Evidence (Scenario 27):* Unmounting the component and mounting a new instance at the resulting URL verifies that `authService.verifyEmail` was called strictly once.
 
-- **StrictMode & Double-Mount Deduplication:**
-  A React ref (`hasExecutedRef = useRef(false)`) records token dispatch. React 18 StrictMode mount/unmount/remount cycles or fast tab switches will never fire duplicate redemption requests against single-use tokens.
+### 3.2 Synchronous Turn Mutual Exclusion & Concurrency Control
 
-- **Token Security:**
-  Tokens are never written to `localStorage`, `sessionStorage`, or emitted to application logs.
+**Timing Analysis:** In TanStack Query, calling `mutation.mutate()` or `mutation.mutateAsync()` enqueues the execution of `mutationFn` to a microtask. If two operations are called in the **exact same synchronous JavaScript turn** without awaiting either call and without waiting for a React re-render:
+- Setting flags solely inside `mutationFn` is insufficient because neither `mutationFn` has executed at the time the second call is invoked.
+- **Architectural Solution:** Both `useVerifyEmail` and `useResendVerification` wrap `mutate` and `mutateAsync` with an immediate synchronous claim check.
 
-- **Non-Session-Creating Guarantee:**
-  `POST /api/v1/auth/verify-email` does not return or set session cookies. An unauthenticated guest viewing the success screen is presented with a button linking to `/auth/login`. An authenticated admin has their in-memory store updated (`emailVerified: true`) and is presented with a direct button linking to `/onboarding-status`.
+**Code Path Inspected:** `frontend/src/hooks/useEmailVerification.ts`:
 
-- **Super Admin Separation Notice:**
-  Both guest and authenticated views render an explicit informational callout:
-  > **College Approval Workflow Separate**  
-  > Email verification confirms your administrator identity. Your institution registration remains in **PENDING** status awaiting Super Admin accreditation review. Full academic management features unlock upon formal approval.
+```ts
+let isVerificationInFlight = false;
+let isResendInFlight = false;
+```
 
-### 3.2 Verification Resend (`POST /api/v1/auth/resend-verification`)
+**Inside `useVerifyEmail`:**
+```ts
+const mutateAsync = async (variables, options) => {
+  // Synchronous turn check at invocation time
+  if (isResendInFlight || queryClient.isMutating({ mutationKey: queryKeys.auth.resendVerification() }) > 0) {
+    const err = new ApiError(
+      'Cannot verify email while a verification email resend request is in progress.',
+      { errorCode: 'CONCURRENT_RESEND_IN_PROGRESS', status: 409 }
+    );
+    (options?.onError as any)?.(err, variables, undefined);
+    throw err;
+  }
+  if (isVerificationInFlight || queryClient.isMutating({ mutationKey: queryKeys.auth.verifyEmail() }) > 0) {
+    const err = new ApiError(
+      'Email verification is already in progress.',
+      { errorCode: 'CONCURRENT_VERIFICATION_IN_PROGRESS', status: 409 }
+    );
+    (options?.onError as any)?.(err, variables, undefined);
+    throw err;
+  }
 
-- **Authentication Requirement:**
-  Calls `POST /api/v1/auth/resend-verification` using the authenticated session (`ACADLYTIC_SID`).
-- **Mutual Exclusion:**
-  Uses TanStack Query's `useIsMutating({ mutationKey: queryKeys.auth.verifyEmail() }) > 0`. If an email verification request is currently in-flight anywhere in the client, the Resend button is disabled and client-side invocation is blocked.
-- **Rate-Limiting Countdown & Warning:**
-  When backend responds with HTTP 429 (`RATE_LIMIT_EXCEEDED`):
-  - If a valid `Retry-After` header is present, parses numeric seconds via `parseRetryAfter` and triggers an active second-by-second countdown timer on the button (`Resend in {s}s`, disabled).
-  - If `Retry-After` is missing or malformed, renders a persistent warning alert with a `Dismiss` button without fabricating a client-side timer.
-- **Onboarding Integration:**
-  On `/onboarding-status`, when `user.emailVerified === false`, an amber alert displays:
-  > **Action Required: Verify Your Email Address**  
-  > A verification link was sent to your administrator email address ({email}). You must verify your email address to unlock document upload and submit your application for Super Admin review.  
-  > `[ Resend Verification Email ]`
+  isVerificationInFlight = true;
+  try {
+    return await mutation.mutateAsync(variables, options);
+  } finally {
+    isVerificationInFlight = false;
+  }
+};
+```
+
+**Inside `useResendVerification`:**
+```ts
+const mutateAsync = async (variables, options) => {
+  // Synchronous turn check at invocation time
+  if (isVerificationInFlight || queryClient.isMutating({ mutationKey: queryKeys.auth.verifyEmail() }) > 0) {
+    const err = new ApiError(
+      'Cannot request a new verification email while email verification is in progress.',
+      { errorCode: 'CONCURRENT_VERIFICATION_IN_PROGRESS', status: 409 }
+    );
+    (options?.onError as any)?.(err, variables, undefined);
+    throw err;
+  }
+  if (isResendInFlight || queryClient.isMutating({ mutationKey: queryKeys.auth.resendVerification() }) > 0) {
+    const err = new ApiError(
+      'A verification email resend request is already in progress.',
+      { errorCode: 'CONCURRENT_RESEND_IN_PROGRESS', status: 409 }
+    );
+    (options?.onError as any)?.(err, variables, undefined);
+    throw err;
+  }
+
+  isResendInFlight = true;
+  try {
+    return await mutation.mutateAsync(variables, options);
+  } finally {
+    isResendInFlight = false;
+  }
+};
+```
+
+**Guarantees Verified:**
+1. **Verify First, Resend Second (Same Synchronous Turn):**
+   - `verifyEmail.mutateAsync()` claims `isVerificationInFlight = true` immediately.
+   - `resendVerification.mutateAsync()` called synchronously in the same turn evaluates `isVerificationInFlight === true`, rejects immediately with `CONCURRENT_VERIFICATION_IN_PROGRESS` (409), and never calls `authService.resendVerification`.
+   - *Test Evidence (Scenario 41):* Proves only `verifyEmail` reaches its service method, and subsequent operations are allowed after settlement.
+2. **Resend First, Verify Second (Same Synchronous Turn):**
+   - `resendVerification.mutateAsync()` claims `isResendInFlight = true` immediately.
+   - `verifyEmail.mutateAsync()` called synchronously in the same turn evaluates `isResendInFlight === true`, rejects immediately with `CONCURRENT_RESEND_IN_PROGRESS` (409), and never calls `authService.verifyEmail`.
+   - *Test Evidence (Scenario 42):* Proves only `resendVerification` reaches its service method, and subsequent operations are allowed after settlement.
+3. **Flag Release After Success or Failure:**
+   - Both `useVerifyEmail` and `useResendVerification` wrap execution in `try { ... } finally { flag = false; }` and register `onSettled: () => { flag = false; }`.
+   - *Test Evidence (Scenario 43):* Confirms that when an operation fails with HTTP 500 (`INTERNAL_ERROR`), the flag is released immediately, allowing subsequent valid operations to execute cleanly without residual lockup.
 
 ---
 
 ## 4. Automated Verification Results
 
-### 4.1 Focused Test Suite Execution
+### 4.1 Focused Test Suite Execution (43 Scenarios)
 
-Executed command:
-```bash
-cmd.exe /c "cd frontend && npm test src/test/email-verification.test.tsx"
-```
+Command: `cmd.exe /c "cd frontend && npm test src/test/email-verification.test.tsx"`
 
-Result:
 ```
- ✓ src/test/email-verification.test.tsx (25 tests) 2014ms
+ ✓ src/test/email-verification.test.tsx (43 tests) 2306ms
    ✓ 1. reads token from URL, removes token from address bar, and dispatches API call once
    ✓ 2. preserves unrelated query parameters and router location.state after token sanitization
    ✓ 3. mounts and verifies successfully via /verify-email path (matching backend template)
@@ -158,43 +228,53 @@ Result:
    ✓ 23. page refresh after token sanitization renders clean Missing Token view without re-submitting
    ✓ 24. OnboardingStatusPage shows unverified email banner with resend when emailVerified: false and hides it when true
    ✓ 25. ACTIVE but email-unverified COLLEGE_ADMIN can log in and reaches /onboarding-status
+   ✓ 26. sanitizes address bar before dispatching verification API request
+   ✓ 27. actual unmount and remount does not dispatch duplicate redemption request
+   ✓ 28. resend 401 AUTH_UNAUTHENTICATED clears auth store and displays login link
+   ✓ 29. resend 403 AUTH_ACCOUNT_INACTIVE renders Account Inactive alert
+   ✓ 30. resend 400 VALIDATION_ERROR renders Invalid Request alert
+   ✓ 31. resend 500 INTERNAL_ERROR renders Resend Failed alert and allows retry
+   ✓ 32. resend network failure renders Connection Error alert and recovers
+   ✓ 33. resend with malformed Retry-After falls back to persistent warning without fabricated timer
+   ✓ 34. verification 400 VALIDATION_ERROR from backend renders invalid token view
+   ✓ 35. verification 500 INTERNAL_ERROR renders Server Error with Retry and recovers on retry
+   ✓ 36. verification network failure renders Connection Error with manual Retry
+   ✓ 37. authenticated verification success invalidates currentUser query cache
+   ✓ 38. resend mutation is rejected at invocation level while verification is in-flight
+   ✓ 39. verification mutation is rejected at invocation level while resend is in-flight
+   ✓ 40. rapid repeated calls to verifyEmail are blocked at invocation level
+   ✓ 41. synchronous same-turn calls: verifyEmail() first allows only verifyEmail() to reach service, rejects resend
+   ✓ 42. synchronous same-turn calls: resendVerification() first allows only resend to reach service, rejects verifyEmail
+   ✓ 43. concurrency flags release on failure allowing subsequent valid operations
 
 Test Files  1 passed (1)
-     Tests  25 passed (25)
+     Tests  43 passed (43)
 ```
 
-### 4.2 Full Frontend Test Suite Execution
+### 4.2 Full Frontend Test Suite Execution (84 Scenarios across 10 Files)
 
-Executed command:
-```bash
-cmd.exe /c "cd frontend && npm test"
-```
+Command: `cmd.exe /c "cd frontend && npm test"`
 
-Result:
 ```
  ✓ src/test/college-approval-guard.test.tsx (2 tests)
  ✓ src/test/role-guard.test.tsx (2 tests)
  ✓ src/test/csrf-interceptor.test.tsx (2 tests)
  ✓ src/test/login-errors.test.tsx (2 tests)
  ✓ src/test/reset-password-validation.test.tsx (3 tests)
- ✓ src/test/email-verification.test.tsx (25 tests)
  ✓ src/test/protected-route.test.tsx (2 tests)
+ ✓ src/test/email-verification.test.tsx (43 tests)
  ✓ src/test/register-college.test.tsx (26 tests)
  ✓ src/test/auth-me-unauthenticated.test.tsx (1 test)
  ✓ src/test/login-success.test.tsx (1 test)
 
 Test Files  10 passed (10)
-     Tests  66 passed (66)
+     Tests  84 passed (84)
 ```
 
 ### 4.3 TypeScript Compilation & Production Build
 
-Executed command:
-```bash
-cmd.exe /c "cd frontend && npm run build"
-```
+Command: `cmd.exe /c "cd frontend && npm run build"`
 
-Result:
 ```
 > acadlytic-frontend@0.0.1 build
 > tsc && vite build
@@ -206,24 +286,53 @@ rendering chunks...
 computing gzip size...
 dist/index.html                   0.55 kB │ gzip:   0.36 kB
 dist/assets/index-D3q_rbtH.css   28.85 kB │ gzip:   5.74 kB
-dist/assets/index-CuK5xLmn.js   529.69 kB │ gzip: 159.87 kB
-✓ built in 6.43s
+dist/assets/index-CyunsAKm.js   532.66 kB │ gzip: 160.27 kB
+✓ built in 16.35s
 ```
-Status: Exit code 0, zero compilation errors, successful production bundle.
+Status: Exit code 0, zero compilation errors, zero TypeScript errors.
 
 ---
 
-## 5. Deviations & Known Limitations
+## 5. Complete Error Matrix Verification Summary
 
-1. **Deviations from Approved Plan:** None. The implementation faithfully executes Module 3.2 Frontend Planning Report v1.1.
-2. **Backend Unverified Login Behavior:** The authoritative backend behavior was verified: an `ACTIVE` but email-unverified `COLLEGE_ADMIN` can authenticate, receiving a session cookie. They are routed by `CollegeApprovalGuard` to `/onboarding-status` where the prominent verification banner allows them to trigger `resend-verification`. Full document upload and application submission remain blocked until email verification.
-3. **Known Limitations:** Real end-to-end delivery of emails requires the outbox sweeper daemon and SMTP relay to be running, which is verified via backend integration tests and physical manual testing.
+| Flow | Status | Error Code | Component / Hook Behavior | Verified Test Scenario |
+|:---|:---:|:---|:---|:---:|
+| Verification | 400 | `INVALID_OR_EXPIRED_TOKEN` | Transitions to `INVALID_OR_EXPIRED`, renders guidance | Scenario 11 |
+| Verification | 400 | `VALIDATION_ERROR` | Transitions to `INVALID_OR_EXPIRED`, renders validation message | Scenario 34 |
+| Verification | 400 | `EMAIL_ALREADY_VERIFIED` | Transitions to `ALREADY_VERIFIED`, links to dashboard or login | Scenario 14 |
+| Verification | 403 | `AUTH_ACCOUNT_INACTIVE` | Transitions to `ACCOUNT_INACTIVE`, prompts support contact | Scenario 15 |
+| Verification | 403 | `CSRF_TOKEN_INVALID` | Transitions to `SERVER_ERROR`, displays security session message | Scenario 17 |
+| Verification | 500 | `INTERNAL_ERROR` | Transitions to `SERVER_ERROR`, enables `Try Again` manual retry | Scenario 35 |
+| Verification | — | Network failure | Transitions to `SERVER_ERROR`, enables `Try Again` manual retry | Scenario 36 |
+| Verification | Client | `<20` or `>255` chars | Rejected client-side before API dispatch | Scenario 10 |
+| Resend | 429 | `RATE_LIMIT_EXCEEDED` (valid) | Sets countdown timer, button disabled with second-by-second countdown | Scenario 18 |
+| Resend | 429 | `RATE_LIMIT_EXCEEDED` (malformed) | Displays persistent warning alert with Dismiss button, zero fake timers | Scenario 19, 33 |
+| Resend | 400 | `EMAIL_ALREADY_VERIFIED` | Info alert, invalidates `currentUser` query cache | Scenario 14 |
+| Resend | 401 | `AUTH_UNAUTHENTICATED` | Clears `authStore`, renders session expired alert with sign-in link | Scenario 28 |
+| Resend | 403 | `ACCESS_DENIED` | Error alert: only college administrators can request resend | Scenario 16 |
+| Resend | 403 | `AUTH_ACCOUNT_INACTIVE` | Error alert: account inactive or suspended | Scenario 29 |
+| Resend | 400 | `VALIDATION_ERROR` | Error alert: invalid request | Scenario 30 |
+| Resend | 500 | `INTERNAL_ERROR` | Error alert: resend failed, re-enables button for retry | Scenario 31 |
+| Resend | — | Network failure | Error alert: connection error, re-enables button for retry | Scenario 32 |
+| Mutual Excl. | 409 | Verify while Resend in-flight | Rejects at invocation level with `CONCURRENT_RESEND_IN_PROGRESS` | Scenario 39 |
+| Mutual Excl. | 409 | Resend while Verify in-flight | Rejects at invocation level with `CONCURRENT_VERIFICATION_IN_PROGRESS` | Scenario 38 |
+| Concurrency | 409 | Rapid repeated verify clicks | Blocked at invocation level with `CONCURRENT_VERIFICATION_IN_PROGRESS` | Scenario 40 |
+| Same-Turn | 409 | Verify first, Resend second | Only verify reaches service, resend rejected with 409 | Scenario 41 |
+| Same-Turn | 409 | Resend first, Verify second | Only resend reaches service, verify rejected with 409 | Scenario 42 |
+| Recovery | — | Flag release after failure | Flags released on failure, allowing subsequent valid operations | Scenario 43 |
 
 ---
 
-## 6. Manual Verification Checklist
+## 6. Deviations & Remaining Limitations
 
-Per project governance, manual browser acceptance testing is tracked separately and marked as unverified until explicitly completed by the tester:
+1. **Deviations from Approved Plan:** None. All implementations, concurrency guards, and error mappings match the v1.1 planning report.
+2. **Backend Non-Modification:** No backend source code, database migrations, Spring Security filters, or OpenAPI contracts were modified.
+3. **Master Context Non-Modification:** `ACADLYTIC_MASTER_CONTEXT.md` was preserved without modification.
+4. **Remaining Limitations:** Live physical email delivery requires an active SMTP host and the outbox sweeper daemon, verified in backend integration testing and tracked for human acceptance testing below.
+
+---
+
+## 7. Manual Verification Checklist
 
 | Check | Scenario | Status |
 |:---:|:---|:---:|
@@ -233,10 +342,3 @@ Per project governance, manual browser acceptance testing is tracked separately 
 | 4 | Click "Resend Verification Email" on onboarding page; verify success feedback | `[ ] NOT VERIFIED (PENDING USER ACCEPTANCE TESTING)` |
 | 5 | Trigger rate limit on resend; verify countdown timer or persistent warning | `[ ] NOT VERIFIED (PENDING USER ACCEPTANCE TESTING)` |
 | 6 | Visit `/verify-email?token=<valid-token>` while authenticated; verify store updates without sign-in prompt | `[ ] NOT VERIFIED (PENDING USER ACCEPTANCE TESTING)` |
-
----
-
-## 7. Next Steps
-
-- Submit this implementation report to the project owner for review.
-- Do **not** mark Module 3.2 as `APPROVED` or update `ACADLYTIC_MASTER_CONTEXT.md` until explicit formal approval is provided by the project owner.

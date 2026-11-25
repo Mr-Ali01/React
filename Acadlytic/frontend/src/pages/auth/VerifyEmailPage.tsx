@@ -64,6 +64,14 @@ export const VerifyEmailPage: React.FC = () => {
                 return;
               }
 
+              if (errorCode === 'VALIDATION_ERROR') {
+                setUiState('INVALID_OR_EXPIRED');
+                setErrorMessage(
+                  err.message || 'The verification token format is invalid.'
+                );
+                return;
+              }
+
               if (errorCode === 'AUTH_ACCOUNT_INACTIVE') {
                 setUiState('ACCOUNT_INACTIVE');
                 setErrorMessage(err.message || 'Your account is inactive.');

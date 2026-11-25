@@ -719,10 +719,10 @@ The project maintains an active, living record of architectural planning, phase 
 ## 13.1 Overall Project Status
 
 - **Current Development Phase:** Phase 03 — College Registration, Restricted Dashboard & Approval Workflow
-- **Current Module / Status:** Phase 03 Backend Modules (3.1A, 3.2, 3.3, 3.4 & 3.5) and Frontend Module 3.1B are **APPROVED**. Complete Phase 03 backend verified on Testcontainers MySQL 8.0.36 (237/237 tests passing, schema V5). Phase 03 Frontend Module 3.1B verified via automated tests (26/26 focused tests, 41/41 full suite tests passing) and production build. Phase 03 remains `IN_PROGRESS` (Frontend Modules 3.2 onward remain pending).
-- **Last Approved Module:** Phase 03, Module 3.1B — Public College Registration Portal (Frontend) (Explicitly APPROVED by user on 2026-11-24).
-- **Next Planned Phase / Module:** Phase 03, Module 3.2 — Email Verification & Account Activation (Frontend).
-- **Overall MVP Progress Status:** Phase 01/02 Implemented (Verification Pending); Phase 03 Backend Complete & APPROVED (Modules 3.1A, 3.2, 3.3, 3.4, and 3.5 Approved; 237/237 backend tests passing; schema V5 active); Phase 03 Frontend Module 3.1B Complete & APPROVED (26/26 focused tests, 41/41 full suite tests passing; build clean); Phase 03 Frontend Modules 3.2 onward PENDING. Phase 03 remains `IN_PROGRESS` pending remaining frontend modules.
+- **Current Module / Status:** Phase 03 Backend Modules (3.1A, 3.2, 3.3, 3.4 & 3.5) and Frontend Modules (3.1B, 3.2, 3.3, 3.4 & 3.5) are **APPROVED**. Complete Phase 03 backend verified on Testcontainers MySQL 8.0.36 (237/237 tests passing, schema V5). Phase 03 Frontend Modules verified via automated tests (168/168 tests passing across 13 test files; Module 3.1B: 26/26; Module 3.2: 43/43; Module 3.3: 26/26; Module 3.4: 26/26; Module 3.5: 32/32; strict `tsc -b` passed, and production Vite build passed; Module 3.5 explicitly approved by project owner on 2026-11-25; reference report v1.2). Phase 03 remains `IN_PROGRESS` (interactive browser/API verification against Docker services remains pending).
+- **Last Approved Module:** Phase 03, Module 3.5 — Approval Lifecycle, College Activation & Revisions (Frontend) (Explicitly APPROVED by project owner on 2026-11-25; reference report v1.2).
+- **Next Planned Phase / Module:** Phase 03 Manual End-to-End Browser & Live API Verification (Docker environment).
+- **Overall MVP Progress Status:** Phase 01/02 Implemented (Verification Pending); Phase 03 Backend Complete & APPROVED (Modules 3.1A, 3.2, 3.3, 3.4, and 3.5 Approved; 237/237 backend tests passing; schema V5 active); Phase 03 Frontend Complete & APPROVED (Modules 3.1B, 3.2, 3.3, 3.4, and 3.5 Approved; 168/168 full frontend tests passing across 13 test files; production build clean). Phase 03 overall remains `IN_PROGRESS` pending live manual browser/API verification against Docker services.
 
 ---
 
@@ -740,7 +740,7 @@ Status Definitions:
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Phase 01** | Project & Application Foundation | IMPLEMENTATION_COMPLETE | IMPLEMENTATION_COMPLETE | IMPLEMENTATION_COMPLETE | IMPLEMENTATION_COMPLETE | NOT_VERIFIED | VERIFICATION_PENDING |
 | **Phase 02** | Authentication & Authorization Foundation | IMPLEMENTATION_COMPLETE | IMPLEMENTATION_COMPLETE | IMPLEMENTATION_COMPLETE | IMPLEMENTATION_COMPLETE | VERIFICATION_PENDING | VERIFICATION_PENDING |
-| **Phase 03** | College Registration, Restricted Dashboard & Approval Workflow | APPROVED (3.1A, 3.2, 3.3, 3.4 & 3.5 Approved) | IN_PROGRESS (3.1B Approved; 3.2+ Pending) | IMPLEMENTATION_COMPLETE (V5) | IMPLEMENTATION_COMPLETE (237 Backend Tests Passed, Testcontainers MySQL; 41 Frontend Tests Passed, Vitest) | NOT_VERIFIED | IN_PROGRESS (Backend Approved; Module 3.1B Approved; Frontend 3.2+ Pending) |
+| **Phase 03** | College Registration, Restricted Dashboard & Approval Workflow | APPROVED (3.1A, 3.2, 3.3, 3.4 & 3.5 Approved) | APPROVED (3.1B, 3.2, 3.3, 3.4 & 3.5 Approved) | IMPLEMENTATION_COMPLETE (V5) | IMPLEMENTATION_COMPLETE (237 Backend Tests Passed, Testcontainers MySQL; 168 Frontend Tests Passed, Vitest) | NOT_VERIFIED | IN_PROGRESS (Backend Approved; Frontend Modules 3.1B, 3.2, 3.3, 3.4 & 3.5 Approved; Manual Verification Pending) |
 | **Phase 04** | College Management (Tenant Management & Profile) | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED |
 | **Phase 05** | Academic Structure (Programs, Semesters, Subjects, Credits) | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED |
 | **Phase 06** | Student Records Management (Records & Enrollment) | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED |
@@ -765,8 +765,8 @@ Status Definitions:
 
 > [!IMPORTANT]
 > **Phase 03 Status Distinction:**  
-> **All Phase 03 Backend Modules (3.1A, 3.2, 3.3, 3.4 & 3.5) and Frontend Module 3.1B APPROVED; Remaining Phase 03 Frontend Modules (3.2 onward) PENDING.**  
-> All five backend modules of Phase 03—Module 3.1A (Backend Registration Foundation), Module 3.2 (Email Verification & College Admin Verification Lifecycle), Module 3.3 (Restricted Dashboard, Document Management & Review Submission), Module 3.4 (Super Admin Approval Queue & Review Workflow), and Module 3.5 (Approval Lifecycle, College Activation & Revisions)—have been completed, verified on Testcontainers MySQL 8.0.36 (237/237 tests passing, Flyway schema V5), and explicitly approved by the user. Module 3.1B (Public College Registration Portal — Frontend) has been implemented, hardened (`isApiError` validation and strict `parseRetryAfter`), verified via 26/26 automated tests and production build, and explicitly approved by the user. Phase 03 remains `IN_PROGRESS` until the remaining frontend modules (3.2, 3.3, 3.4, 3.5) are implemented, verified, and approved.
+> **All Phase 03 Backend Modules (3.1A, 3.2, 3.3, 3.4 & 3.5) and Frontend Modules (3.1B, 3.2, 3.3, 3.4 & 3.5) APPROVED; Live Manual Browser/API Verification PENDING.**  
+> All five backend modules of Phase 03—Module 3.1A (Backend Registration Foundation), Module 3.2 (Email Verification & College Admin Verification Lifecycle), Module 3.3 (Restricted Dashboard, Document Management & Review Submission), Module 3.4 (Super Admin Approval Queue & Review Workflow), and Module 3.5 (Approval Lifecycle, College Activation & Revisions)—have been completed, verified on Testcontainers MySQL 8.0.36 (237/237 tests passing, Flyway schema V5), and explicitly approved by the user. All five frontend modules of Phase 03—Module 3.1B (Public College Registration Portal), Module 3.2 (Email Verification & Account Activation), Module 3.3 (College Admin Restricted Dashboard, Document Management & Review Submission), Module 3.4 (Super Admin Approval Queue & Review Workflow), and Module 3.5 (Approval Lifecycle, College Activation & Revisions)—have been implemented, verified via 168/168 automated tests across 13 test files, strict `tsc -b` compilation passed with 0 errors, and Vite production build passed, with Module 3.5 explicitly approved by the project owner on 2026-11-25 (reference report v1.2). Phase 03 overall remains `IN_PROGRESS` until live manual browser/API verification against Docker services is completed.
 
 ---
 
@@ -888,44 +888,85 @@ Status Definitions:
 
 ## 13.4 Frontend Progress Tracker
 
-### Implemented Pages & UI Components (Phase 01, Phase 02 & Phase 03 Module 3.1B)
+### Implemented Pages & UI Components (Phase 01, Phase 02, Phase 03 Module 3.1B, Module 3.2, Module 3.3 & Module 3.4)
 - **Pages:**
   - `LoginPage` (`src/pages/auth/LoginPage.tsx`): Email/password credentials entry, failed attempt lockout display, CSRF bootstrap, redirect to dashboard or original target URL.
   - `ForgotPasswordPage` (`src/pages/auth/ForgotPasswordPage.tsx`): Password reset request with generic non-enumerating confirmation message.
   - `ResetPasswordPage` (`src/pages/auth/ResetPasswordPage.tsx`): Raw token consumption from URL query params, automatic URL token clearing, password validation schema, submission.
   - `ChangePasswordPage` (`src/pages/auth/ChangePasswordPage.tsx`): Authenticated user password update.
   - `HomePage`, `HealthCheckPage`, `NotFoundPage`, `UnauthorizedPage`.
-  - `OnboardingStatusPage` (`src/pages/OnboardingStatusPage.tsx`): Static informational status view informing pending college admins of their review stage. *Existing foundational implementation; Phase 03 college onboarding workflow remains PENDING.*
+  - `OnboardingStatusPage` (`src/pages/OnboardingStatusPage.tsx`): Complete restricted dashboard for unapproved and pending college admins. Integrates authoritative aggregate fetching via `useMyApplication`, immediate client-side redirection for approved admins (`/college/dashboard`), unverified email alert banner with embedded `<ResendVerificationButton />`, HTTP 403 permanent rejection handling, hero status banner, review feedback card, 4-step compliance checklist, college profile card with edit modal, document management table with lineage badges and upload/replace/delete modals, submit review confirmation modal, and revision history drawer. *Phase 03 Module 3.3 APPROVED.*
   - `RegisterCollegePage` (`src/pages/auth/RegisterCollegePage.tsx`): Interactive self-service college registration intake wizard toggling between `RegistrationForm` and `RegistrationSuccessView`. *Phase 03 Module 3.1B APPROVED.*
+  - `VerifyEmailPage` (`src/pages/auth/VerifyEmailPage.tsx`): Dedicated email token consumption view extracting raw token from query params, immediately stripping the token from the browser address bar before dispatching the redemption API request while preserving unrelated query params and router location state, rendering responsive status states (`VERIFYING`, `SUCCESS`, `INVALID_OR_EXPIRED`, `UNAUTHENTICATED`, `RATE_LIMITED`, `ERROR`). *Phase 03 Module 3.2 APPROVED.*
+  - `SuperAdminReviewQueuePage` (`src/pages/admin/SuperAdminReviewQueuePage.tsx`): Super Admin college verification approval queue featuring search, client-side date range validation (`from <= to`) with ISO-8601 UTC boundary serialization, sort ordering, pagination reset on filter changes, and responsive table. *Phase 03 Module 3.4 APPROVED.*
+  - `CollegeReviewDetailPage` (`src/pages/admin/CollegeReviewDetailPage.tsx`): Comprehensive institutional review dossier displaying administrative credentials, profile details, active verification documents with SHA-256 checksums, decision history audit trail, optimistic version concurrency conflict recovery (`409 STALE_APPLICATION_VERSION`), and decision modal workflows. *Phase 03 Module 3.4 APPROVED.*
   - `CollegeAdminDashboardPage`, `SuperAdminDashboardPage` (Minimal landing shells pending respective phases).
 - **Module 3.1B Registration Components (`src/components/registration/`):**
   - `RegistrationForm`: 16-control structured intake form across 3 sections (Institution Details, Campus Address & Location, Primary Administrator Account) with responsive layout (`sm:max-w-3xl` in `AuthLayout`), field-level server error mapping, dynamic rate-limit countdown, and CSRF token retry handling.
   - `RegistrationSuccessView`: Post-submission confirmation displaying registration metadata, 4-step onboarding roadmap, spam notice, unauthenticated session status, and 48-hour email verification requirement.
   - `PasswordStrengthMeter`: Real-time structural validation (12–128 characters, email containment prohibition matching `PasswordPolicyValidator.java`) and advisory entropy guidance.
   - `RegistrationSectionHeader`: Presentational section header with numbered step badges.
+- **Module 3.2 Email Verification Components (`src/components/verification/`):**
+  - `VerifyEmailStatusCard`: Stateful status card rendering accessible alerts, loading spinners, dynamic error titles/descriptions, and contextual action buttons (Login redirect, Dashboard redirect, Try Again, and Resend Verification).
+  - `ResendVerificationButton`: Authenticated resend action button featuring dual-layer rate limit handling, active second-by-second countdown timer (`Resend in Xs`) when `Retry-After` is valid, and persistent warning with manual dismissal when `Retry-After` is missing/malformed (never fabricates countdown).
+- **Module 3.3 Onboarding Dashboard Components (`src/components/onboarding/`):**
+  - `OnboardingStatusBanner`: Hero status banner with lifecycle badge, revision badge, resubmission counters, frozen review notice, and "Start Correction Draft" action.
+  - `ReviewFeedbackCard`: Decoupled review card presenting Super Admin deficiency notes, rejection reasons, and review timestamps.
+  - `OnboardingChecklistCard`: 4-step interactive compliance checklist with embedded `<ResendVerificationButton />`, progress bar, and review submit trigger.
+  - `CollegeProfileCard`: Institutional details card (legal name, permanent code, address, phone, website, university) with edit modal trigger.
+  - `EditProfileModal`: React Hook Form + Zod resolver modal for draft profile editing with immutable college code and backend field-error mapping.
+  - `DocumentManagementSection`: Active verification documents table with category badges, formatted file sizes, replacement lineage badges, and download/replace/delete actions.
+  - `DocumentUploadModal`: Upload modal with category selector, drag-and-drop file picker, 10MB limit enforcement, pre-upload binary magic byte probe, and replace mode.
+  - `SubmitApplicationModal`: Confirmation modal detailing irrevocable application freeze and checklist verification before triggering review submission.
+  - `RevisionHistoryDrawer`: Timeline modal dialog presenting the historical revision audit trail ($v_1, v_2\dots$) with outcomes and reviewer notes.
+  - `index.ts`: Barrel export cleanly encapsulating all 9 onboarding domain components.
+- **Module 3.4 Super Admin Review Components (`src/components/review/`):**
+  - `CollegeReviewHeader`: Header displaying college legal name, approval status badge, code, revision number, submission timestamp, concurrency version lock, and embedded `ResubmissionAllowanceBadge`.
+  - `ReviewAdminUserCard`: Proposed administrator card displaying full name, verified email badge, contact phone, and registration timestamp.
+  - `CollegeProfileReviewCard`: Institutional profile card detailing legal entity name, affiliation, registered campus address, phone, and sanitized external website link.
+  - `ResubmissionAllowanceBadge`: Badge tracking submitted correction revisions ($v_1=0$ initial vs $v_2..v_4$ corrections), action cycles ($0..10$), and final revision / action ceiling warnings.
+  - `ReviewDocumentListCard`: Table of active compliance documents with category badges, formatted file sizes, monospaced SHA-256 checksum snippets with full tooltip hashes, and streaming download trigger.
+  - `SubmittedRevisionCard`: Presentational snapshot card for specific revision details.
+  - `RevisionHistoryTimelineCard`: Audit timeline displaying chronological past review decisions, reviewer admin emails, timestamps, decision badges, and constructive notes / rejection reasons.
+  - `ReviewDecisionPanel`: Prominent action toolbar with "Approve", "Request Action" (disabled if action count $\ge 10$), and "Reject" (annotated for final revisions) buttons. Disables all decisions if status is not `PENDING`.
+  - `ReviewDecisionModal`: Accessible modal dialog for review decision confirmation and input with React Hook Form + Zod validation, `noValidate` flag, concurrency version locking, guidance callouts, double-submission prevention, and explicit 409 conflict handling.
+  - `ReviewQueueFilterBar`: Accessible search and filter bar with search input, HTML5 date pickers (`htmlFor`/`id` paired), sorting dropdown, date range validation error banner, and clear filters reset button.
+  - `ReviewQueueTable`: Responsive data table rendering pending applications, college code, revision badge, administrator contact, submission timestamp, document count badge, empty state, and review navigation button.
+  - `index.ts`: Clean barrel export encapsulating all 11 domain review components and formatting helpers.
 - **Component Primitives (`src/components/ui/`):**
   - Accessible `Button`, `Card`, `Input`, `Select`, `Textarea`, `Modal`, `Alert`, `Table`, `LoadingSpinner`, `ErrorState`.
 - **Layouts & Navigation (`src/layouts/`, `src/components/navigation/`):**
-  - `RootLayout` (Global provider wrapper: QueryClientProvider, router outlet), `AuthLayout` (Dynamic centered auth card container: `sm:max-w-3xl` for registration, `sm:max-w-md` for standard auth), `AppLayout` (Authenticated shell with Header and Sidebar), `Header`, `Sidebar`, `PageContainer`.
+  - `RootLayout` (Global provider wrapper: QueryClientProvider, router outlet), `AuthLayout` (Dynamic centered auth card container: `sm:max-w-3xl` for registration, `sm:max-w-md` for standard auth), `AppLayout` (Authenticated shell with Header and Sidebar), `Header`, `Sidebar` (Enhanced with Super Admin "Approval Queue" navigation link pointing to `/admin/colleges/reviews` with `ClipboardCheck` icon), `PageContainer`.
 
 ### Routes & Protected Routing (`src/routes/`)
 - `ProtectedRoute`: Checks `isAuthenticated` and `CurrentUser`; redirects unauthenticated requests to `/auth/login` preserving return URL in location state.
 - `PublicOnlyRoute`: Prevents authenticated users from accessing login/forgot-password pages, redirecting to their respective role dashboard.
 - `RoleGuard`: Enforces role-based permissions (`SUPER_ADMIN` vs `COLLEGE_ADMIN`), routing unauthorized users to `/unauthorized`.
-- `CollegeApprovalGuard`: Architectural route guard routing unapproved college administrators to `/onboarding-status`. *Existing foundational implementation; Phase 03 college onboarding workflow remains PENDING.*
+- `SuperAdminReviewQueuePage` & `CollegeReviewDetailPage` Routes: Mounted under `/admin` (`ProtectedRoute` and `RoleGuard allowedRoles={['SUPER_ADMIN']}`) at canonical routes `/admin/colleges/reviews` and `/admin/colleges/reviews/:collegeId`, with `/admin/reviews` and `/admin/reviews/:collegeId` preserved as backward-compatible aliases.
+- `CollegeApprovalGuard`: Architectural route guard routing unapproved college administrators to `/onboarding-status`. Route `/onboarding-status` is nested under `ProtectedRoute` and `RoleGuard allowedRoles={['COLLEGE_ADMIN']}`, but strictly *outside* `CollegeApprovalGuard`. Approved admins visiting `/onboarding-status` are redirected client-side by `OnboardingStatusPage` via `<Navigate to="/college/dashboard" replace />`, while unapproved admins attempting to reach `/college/*` are redirected by `CollegeApprovalGuard` to `/onboarding-status` (eliminating redirect loops). *Phase 03 Module 3.3 APPROVED.*
+- `VerifyEmailPage` Routes: Dual-mounted at `/verify-email` and `/auth/verify-email`, wrapped in `AuthLayout` outside `PublicOnlyRoute` and `ProtectedRoute`, ensuring full accessibility to both unauthenticated guests and authenticated college administrators while performing in-place URL token sanitization.
 
 ### State Management & API Integration
 - **Client State (Zustand 5):** `useAuthStore` (tracks `user`, `isAuthenticated`, `isLoading`), `useAppStore` (tracks layout sidebar state). Strictly no Redux Toolkit.
-- **Server State (TanStack Query 5):** Centralized `queryKeys` factory (including `colleges.registration`), `useCurrentUser` (syncs `GET /api/v1/auth/me`), `useLogin`, `useLogout`, `useHealth`, `useCollegeRegistration` (mutation hook submitting 15-field payload via `toRegisterCollegeRequest`).
-- **HTTP Client (Axios):** `src/services/api.ts` configured with `withCredentials: true`, automatic extraction of `XSRF-TOKEN` cookie into `X-XSRF-TOKEN` header, and transparent single-retry on `403 CSRF_TOKEN_INVALID`. Strictly no JWT or localStorage auth tokens. Enhanced with:
+- **Server State (TanStack Query 5):** Centralized `queryKeys` factory (including `colleges.registration`, `auth.verifyEmail`, `auth.resendVerification`, `onboarding.myApplication`, `onboarding.activeDocuments`, `reviews.queueRoot`, `reviews.queue`, `reviews.detail`), `useCurrentUser` (syncs `GET /api/v1/auth/me`), `useLogin`, `useLogout`, `useHealth`, `useCollegeRegistration`, `useVerifyEmail`, `useResendVerification`, `useMyApplication`, `useCreateCorrectionDraft`, `useUpdateDraftProfile`, `useUploadDocument`, `useDeleteDocument`, `useSubmitApplication`, `useReviewQueue` (placeholderData: keepPreviousData), `useReviewDetail`, `useRecordDecision` (invalidates `queryKeys.reviews.queueRoot()` and `queryKeys.reviews.detail(collegeId)`), `useDownloadReviewDocument`.
+- **HTTP Client (Axios) & Domain Services:** `src/services/api.ts` configured with `withCredentials: true`, automatic extraction of `XSRF-TOKEN` cookie into `X-XSRF-TOKEN` header, and transparent single-retry on `403 CSRF_TOKEN_INVALID`. Strictly no JWT or localStorage auth tokens. Enhanced with:
   - `ApiError`: Typed error carrying `errorCode`, `status`, field `errors`, `data`, and `retryAfter?: number`.
   - `parseRetryAfter`: Centralized, strict parser enforcing `/^\d+$/` regex matching, strictly rejecting non-integer prefixes (`"30abc"`), zeroes, negatives, and non-numeric values.
   - `isApiError`: Hardened type guard validating genuine `ApiError` instances and strict structural properties for cross-boundary objects, rejecting arbitrary objects containing only `errorCode`.
-- **Form Validation:** React Hook Form + Zod validation schemas (`registerCollegeSchema`) enforcing pre-validation trimming, college code normalization to uppercase, admin email normalization to lowercase, optional field nullification, and backend-identical password policy.
+  - `onboardingService.ts`: Full API client for all 8 restricted onboarding endpoints, with multipart boundary handling (`{ headers: { 'Content-Type': undefined } }`) and safe delayed blob URL cleanup (`setTimeout(revokeObjectURL, 60000)`).
+  - `reviewService.ts`: Full API client for all 4 Super Admin review endpoints (`GET /reviews`, `GET /reviews/{id}`, `GET /reviews/{id}/documents/{docId}`, `POST /reviews/{id}/decision`) with safe delayed blob URL cleanup (`setTimeout(revokeObjectURL, 60000)`).
+- **Form Validation & Schemas:**
+  - `registerCollegeSchema`: React Hook Form + Zod validation schemas enforcing pre-validation trimming, college code normalization to uppercase, admin email normalization to lowercase, optional field nullification, and backend-identical password policy.
+  - `verificationSchema.ts` (`src/schemas/verificationSchema.ts`): Zod schema defining `verifyEmailSchema` to validate token presence, length (20–255 characters), trimming, and non-empty string constraints.
+  - `onboardingSchema.ts` (`src/schemas/onboardingSchema.ts`): Zod schemas defining `updateApplicationSchema`, `documentUploadSchema`, and `probeFileMagicBytes`.
+  - `reviewSchema.ts` (`src/schemas/reviewSchema.ts`): Zod schemas defining `reviewDecisionSchema` (enforcing action constraints, required review notes for `REQUEST_ACTION` $\ge 10$ chars, required rejection reason for `REJECT` $\ge 10$ chars, and `expectedVersion`) and `reviewQueueFilterSchema` (search $\le 100$ chars, date range `from <= to`).
 
 ### Automated Tests & Quality Checks
-- **Vitest Unit & Component Tests: 41 Passed, 0 Failed across 9 test files.**
-  - `src/test/register-college.test.tsx` (26 tests): PASSED (covers all 16 controls, Zod trimming/sanitization, password policy matching backend, exact 15-field payload, error mapping, rate-limit countdown and missing/malformed `Retry-After` handling, CSRF error, `isApiError` 5 prototype-boundary conditions, `parseRetryAfter` strict parsing).
+- **Vitest Unit & Component Tests: 136 Passed, 0 Failed across 12 test files.**
+  - `src/test/super-admin-review.test.tsx` (26 tests): PASSED (covers review queue rendering with items, empty state, search query dispatch, date range validation and ISO-8601 instant serialization, sort order dispatch, filter reset, resubmission semantics v1 vs v4 final, full review detail dossier rendering, SHA-256 checksum monospaced snippet and tooltip, streaming document download trigger, review audit timeline, APPROVE guidance and version locking, APPROVE submission with `expectedVersion`, REQUEST_ACTION validation requiring notes $\ge 10$ chars, REQUEST_ACTION submission with notes and `expectedVersion`, REQUEST_ACTION disabled when `actionRequiredCount >= 10`, REJECT validation requiring rejectionReason $\ge 10$ chars, REJECT submission with reason and `expectedVersion`, permanent rejection warning on revision v4, 409 `STALE_APPLICATION_VERSION` recovery without silent retry, 409 `APPLICATION_NOT_AWAITING_REVIEW` feedback, cache invalidation of `queueRoot` and detail, disabled decision actions when college is already APPROVED, malformed `collegeId` handling, 404/500 fetch error handling, and queue-to-detail navigation).
+  - `src/test/onboarding-dashboard.test.tsx` (26 tests): PASSED
+  - `src/test/email-verification.test.tsx` (43 tests): PASSED
+  - `src/test/register-college.test.tsx` (26 tests): PASSED
   - `src/test/role-guard.test.tsx` (2 tests): PASSED
   - `src/test/college-approval-guard.test.tsx` (2 tests): PASSED
   - `src/test/csrf-interceptor.test.tsx` (2 tests): PASSED
@@ -935,8 +976,8 @@ Status Definitions:
   - `src/test/reset-password-validation.test.tsx` (3 tests): PASSED
   - `src/test/login-success.test.tsx` (1 test): PASSED
 - **Static Analysis & Build:**
-  - TypeScript compilation (`tsc`): PASSED (0 errors under strict mode).
-  - Production build (`npm run build`): PASSED (1,738 modules transformed, clean production bundle in `frontend/dist/` in 6.39s).
+  - TypeScript compilation (`tsc -b`): PASSED (0 errors under strict mode).
+  - Production build (`npm run build`): PASSED (`tsc && vite build`, 1,777 modules transformed in 9.92s, clean production bundle in `dist/`).
 
 ### Outstanding Frontend Work
 - Perform manual interactive verification in browser against a live running backend.
@@ -950,9 +991,9 @@ Status Definitions:
 | :--- | :--- | :--- | :--- |
 | **Backend Unit Tests** | `com.acadlytic` unit suite | **PASSED** | 122 unit tests passed cleanly across all modules (including 15 in `CollegeLifecycleServiceUnitTest`, 3 in `CollegeCleanupSchedulerUnitTest`, 16 in `CollegeReviewControllerUnitTest`, 17 in `CollegeReviewServiceUnitTest`, 15 in `CollegeOnboardingServiceUnitTest`, 9 in `DocumentValidatorUnitTest`, 7 in `LocalFileSystemDocumentStorageServiceUnitTest`, 4 in `DocumentStorageCompensationUnitTest`, and auth/outbox unit tests). |
 | **Backend Integration Tests** | Testcontainers MySQL suite | **PASSED** | 115 integration tests passed across all modules on Testcontainers MySQL 8.0.36 (including 23 in `CollegeLifecycleIntegrationTest`, 21 in `CollegeReviewIntegrationTest`, 10 in `CollegeOnboardingIntegrationTest`, 11 in `EmailVerificationIntegrationTest`, 5 in `CollegeRegistrationIntegrationTest`, and baseline Phase 01/02 integration tests). **237/237 total backend tests passing, 0 failures, 0 errors, 0 skipped.** |
-| **Frontend Tests** | Vitest component & hook suite | **PASSED** | 15 tests passed across 8 test suites. |
+| **Frontend Tests** | Vitest component & hook suite | **PASSED** | 168 tests passed across 13 test files (including 32 in `college-activation.test.tsx`, 26 in `super-admin-review.test.tsx`, 26 in `onboarding-dashboard.test.tsx`, 43 in `email-verification.test.tsx`, 26 in `register-college.test.tsx`, and 15 in baseline Phase 01/02 suites). |
 | **Backend Build** | `mvn compile` | **PASSED** | Compiles cleanly on Java 21 / Spring Boot 3.3.4. |
-| **Frontend Build** | `npm run build` | **PASSED** | Vite transforms 1,717 modules cleanly with 0 type errors. |
+| **Frontend Build** | `npm run build` | **PASSED** | Vite transforms 1,783 modules cleanly with 0 type errors in 8.50s. |
 | **Live API Verification** | `curl` / Postman auth flow | **PENDING** | Manual live login, session, and CSRF bootstrap check pending. |
 | **Database Verification** | MySQL 8 schema & migrations | **PENDING** | Flyway V1, V2, V3, V4, and V5 applied cleanly in tests on Testcontainers MySQL 8.0.36; live host DB migration pending. |
 | **Browser Verification** | Interactive UI & DevTools | **PENDING** | 10-step manual checklist in `docs/verification/phase-02-manual-checklist.md` awaiting execution. |
@@ -995,7 +1036,7 @@ Status Definitions:
 
 ## 13.7 Current Development Position & Next Planned Phase
 
-The current development position is in **Phase 03 — College Registration, Restricted Dashboard & Approval Workflow** with all Phase 03 backend modules **APPROVED**: **Module 3.1A (APPROVED)**, **Module 3.2 (APPROVED)**, **Module 3.3 (APPROVED)**, **Module 3.4 (APPROVED)**, and **Module 3.5 (APPROVED)** (237/237 backend tests on Testcontainers MySQL 8.0.36) and Frontend **Module 3.1B APPROVED** (26/26 focused tests, 41/41 full suite tests). Phase 03 remains `IN_PROGRESS` pending remaining frontend modules.
+The current development position is in **Phase 03 — College Registration, Restricted Dashboard & Approval Workflow** with all Phase 03 backend modules **APPROVED**: **Module 3.1A (APPROVED)**, **Module 3.2 (APPROVED)**, **Module 3.3 (APPROVED)**, **Module 3.4 (APPROVED)**, and **Module 3.5 (APPROVED)** (237/237 backend tests on Testcontainers MySQL 8.0.36), and all Phase 03 frontend modules **APPROVED**: **Module 3.1B (APPROVED)**, **Module 3.2 (APPROVED)**, **Module 3.3 (APPROVED)**, **Module 3.4 (APPROVED)**, and **Module 3.5 (APPROVED)** (168/168 full suite tests across 13 test files). Phase 03 overall remains `IN_PROGRESS` pending live manual browser/API verification against Docker services.
 
 ### Phase 03 Module Progress:
 - **Module 3.1A (Backend Registration Foundation):** `APPROVED`. Public registration intake endpoint (`POST /api/v1/college-registrations`), versioned registration revision (V4 schema), IP sliding-window rate limiter, transactional outbox dispatch, and `COLLEGE_REGISTRATION_CREATED` audit event. Explicitly approved by user.
@@ -1157,20 +1198,120 @@ The current development position is in **Phase 03 — College Registration, Rest
   - **Reference Reports:**
     - `docs/03-phase/phase-03-module-3.1B-inspection-and-planning-report.md` (v1.1)
     - `docs/03-phase/phase-03-module-3.1B-implementation-report.md`
-- **Module 3.2 onward (Frontend):** `NOT_STARTED` / Pending (Next development phase).
+- **Module 3.2 (Email Verification & Account Activation — Frontend):** `APPROVED`.
+  - **Approval Status:** Explicitly approved by the project owner on 2026-11-24.
+  - **Implementation Scope:**
+    - Frontend implementation only.
+    - 6 files created: `frontend/src/schemas/verificationSchema.ts` (Zod validation for 20–255 character single-use tokens), `frontend/src/hooks/useEmailVerification.ts` (TanStack Query mutation hooks with invocation-level synchronous turn mutual exclusion), `frontend/src/components/verification/ResendVerificationButton.tsx` (reusable button with dual-layer rate limiting), `frontend/src/components/verification/VerifyEmailStatusCard.tsx` (state machine status card), `frontend/src/pages/auth/VerifyEmailPage.tsx` (URL token extraction and in-place sanitization), `frontend/src/test/email-verification.test.tsx` (43 automated Vitest scenarios).
+    - 5 files modified: `frontend/src/types/index.ts` (request/response DTOs and schema re-exports), `frontend/src/services/authService.ts` (`verifyEmail` and `resendVerification` API methods), `frontend/src/services/queryKeys.ts` (auth query keys), `frontend/src/routes/index.tsx` (dual route mounting), `frontend/src/pages/OnboardingStatusPage.tsx` (unverified warning banner and resend action). Total files affected: 11.
+    - Dual-mounted token consumption routes at `/verify-email` and `/auth/verify-email`, wrapped in `AuthLayout` outside `PublicOnlyRoute` and `ProtectedRoute` so both unauthenticated guests and authenticated college administrators can redeem verification tokens.
+    - Token sanitization & execution order: URL token extracted and stripped from address bar prior to API dispatch; unrelated query parameters and router location state preserved; duplicate requests prevented under React StrictMode and component remounts.
+    - Comprehensive error mapping: maps 400 validation errors, 401 unauthenticated session clearance, 403 inactive account lockout, 500 internal errors, and network disconnects; invalidates `currentUser` query cache and updates `useAuthStore` on verification success or already-verified error.
+    - Synchronous turn concurrency hardening: wraps `mutate` and `mutateAsync` with immediate invocation-level locks (`isVerificationInFlight`, `isResendInFlight`); same-synchronous-turn calls in both orders (`verifyEmail` then `resend`, and `resend` then `verifyEmail`) verified where only the first operation reaches `authService` while the second synchronously rejects with documented `ApiError(409)` (`CONCURRENT_RESEND_IN_PROGRESS` or `CONCURRENT_VERIFICATION_IN_PROGRESS`); guaranteed release on both success and failure in `finally` and `onSettled`.
+    - Dual-layer rate limiting: exact `Retry-After` countdown when valid; persistent alert without fabricated timer when missing/malformed.
+    - Zero backend source code or migration changes; zero API contract changes.
+  - **Automated Test Results (Vitest 2.1.9 / JSDOM / Node.js 22 / React 18):**
+    - Focused Module 3.2 suite (`src/test/email-verification.test.tsx`): **43 / 43 passed** (0 failures, 0 errors, 0 skipped, 1.23s execution).
+    - Full frontend regression suite (`npm test`): **84 / 84 passed across 10 test files** (0 failures, 0 errors, 0 skipped, 20.48s execution).
+    - TypeScript compilation (`tsc`): PASSED (0 errors under strict mode).
+    - Production build (`npm run build`): PASSED (`tsc && vite build`, 1,878 modules transformed in 16.35s, clean production bundle in `dist/`).
+    - Same-synchronous-turn verification/resend concurrency tests passed in both invocation orders.
+  - **Distinction of Verification:** Automated unit, component, hook, integration, and build verification complete. Manual interactive browser verification against a running backend remains pending (`NOT_VERIFIED`).
+  - **Reference Reports:**
+    - `docs/03-phase/phase-03-module-3.2-frontend-inspection-and-planning-report.md` (v1.1)
+    - `docs/03-phase/phase-03-module-3.2-frontend-implementation-report.md`
+- **Module 3.3 (College Admin Restricted Dashboard, Document Management & Review Submission — Frontend):** `APPROVED`.
+  - **Approval Status:** Explicitly approved by the project owner on 2026-11-25.
+  - **Implementation Scope:**
+    - Frontend implementation only.
+    - 14 files created: `frontend/src/schemas/onboardingSchema.ts`, `frontend/src/services/onboardingService.ts`, `frontend/src/hooks/useOnboarding.ts`, `frontend/src/components/onboarding/OnboardingStatusBanner.tsx`, `frontend/src/components/onboarding/ReviewFeedbackCard.tsx`, `frontend/src/components/onboarding/OnboardingChecklistCard.tsx`, `frontend/src/components/onboarding/CollegeProfileCard.tsx`, `frontend/src/components/onboarding/EditProfileModal.tsx`, `frontend/src/components/onboarding/DocumentManagementSection.tsx`, `frontend/src/components/onboarding/DocumentUploadModal.tsx`, `frontend/src/components/onboarding/SubmitApplicationModal.tsx`, `frontend/src/components/onboarding/RevisionHistoryDrawer.tsx`, `frontend/src/components/onboarding/index.ts` (barrel export cleanly encapsulating the 9 onboarding domain components), `frontend/src/test/onboarding-dashboard.test.tsx` (26 automated Vitest integration test scenarios).
+    - 5 files modified: `frontend/src/types/index.ts` (onboarding DTOs & response contracts), `frontend/src/services/queryKeys.ts` (onboarding query key factory), `frontend/src/pages/OnboardingStatusPage.tsx` (complete restricted dashboard page implementation), `frontend/src/routes/index.tsx` (protected route nesting outside `CollegeApprovalGuard`), `frontend/.gitignore` (added `vite.config.js` and `vite.config.d.ts` build artifacts to ignore list). Total files affected: 19.
+    - Protected route architecture without loops: `/onboarding-status` nested under `ProtectedRoute` and `RoleGuard allowedRoles={['COLLEGE_ADMIN']}`, strictly outside `CollegeApprovalGuard`. Approved admins visiting `/onboarding-status` redirect client-side via `<Navigate to="/college/dashboard" replace />`, while unapproved admins accessing `/college/*` are redirected to `/onboarding-status` by `CollegeApprovalGuard`.
+    - Authoritative state derivations: `isApplicationFrozenInReview` and `isDraftEditable` resilient against Jackson boolean property variants (`isFrozenInReview` vs `frozenInReview`) with deterministic fallback to core revision fields (`submittedForReviewAt !== null && !isDraft && status === 'PENDING'`).
+    - Single-source data fetching: centered around `useMyApplication` querying `GET /api/v1/college-registrations/my-application`; all draft mutations invalidate `queryKeys.onboarding.myApplication()`.
+    - Server-confirmed profile updates: `useUpdateDraftProfile` avoids optimistic local updates and synchronizes `user.collegeName` in `useAuthStore` using the server-returned `legalName`.
+    - Document lifecycle & lineage: 5 active document ceiling enforcement, replacement lineage tracking via `replacesDocumentId`, and predecessor restoration on replacement deletion.
+    - Streaming download & boundary safety: `{ headers: { 'Content-Type': undefined } }` for multipart upload; 60-second delayed `revokeObjectURL` for safe streaming download completion.
+    - Two-tier permanent rejection lifecycle: HTTP 403 `REGISTRATION_PERMANENTLY_REJECTED` renders unrecoverable rejection state with "Return to Login" button; subsequent session destruction handled cleanly via global 401 interceptor.
+    - Zero backend source code or migration changes; zero API contract changes.
+  - **Automated Test Results (Vitest 2.1.9 / JSDOM / Node.js 22 / React 18):**
+    - Focused Module 3.3 suite (`src/test/onboarding-dashboard.test.tsx`): **26 / 26 passed** (0 failures, 0 errors, 0 skipped, 4.72s execution).
+    - Full frontend regression suite (`npx vitest run`): **110 / 110 passed across 11 test files** (0 failures, 0 errors, 0 skipped, 25.55s execution).
+    - TypeScript compilation (`tsc -b`): PASSED (0 errors under strict mode).
+    - Production build (`npm run build`): PASSED (`tsc && vite build`, 1,759 modules transformed in 5.56s, clean production bundle in `dist/`).
+  - **Accepted Test-Coverage Caveats (Preserved Limitations):**
+    1. *Document mutation query invalidation not directly tested:* `useUploadDocument` and `useDeleteDocument` invalidate `myApplication` and `activeDocuments` in production, but `queryClient.invalidateQueries` is not explicitly asserted with a Vitest spy in integration tests.
+    2. *Subsequent 401 auth cleanup & login redirect not directly tested in Module 3.3 suite:* Tested in global auth interceptor suite (`email-verification.test.tsx` Test 28, `auth-me-unauthenticated.test.tsx`), but not directly asserted within `onboarding-dashboard.test.tsx`.
+    3. *Blob URL revocation cleanup not directly tested:* Delayed 60-second timer and `window.URL.revokeObjectURL` in `onboardingService.downloadDocument` are implemented but not directly tested with a fake-timer spy.
+    4. *Server-confirmed legal-name Auth Store synchronization not directly tested:* `useUpdateDraftProfile` synchronizes `useAuthStore.user.collegeName` in production, but `useAuthStore.getState().user?.collegeName` is not directly asserted in Test 11.
+  - **Distinction of Verification:** Automated unit, component, hook, integration, and build verification complete. Manual interactive browser verification against a running backend remains pending (`NOT_VERIFIED`).
+  - **Reference Reports:**
+    - `docs/03-phase/phase-03-module-3.3-frontend-inspection-and-planning-report.md` (v1.1)
+    - `docs/03-phase/phase-03-module-3.3-frontend-implementation-report.md` (v1.1)
+- **Module 3.4 (Super Admin Approval Queue & Review Workflow — Frontend):** `APPROVED`.
+  - **Approval Status:** Explicitly approved by the project owner on 2026-11-25.
+  - **Implementation Scope:**
+    - Frontend implementation only.
+    - 18 files created: 11 review domain components in `frontend/src/components/review/` (`CollegeReviewHeader.tsx`, `ReviewAdminUserCard.tsx`, `CollegeProfileReviewCard.tsx`, `ResubmissionAllowanceBadge.tsx`, `ReviewDocumentListCard.tsx`, `SubmittedRevisionCard.tsx`, `RevisionHistoryTimelineCard.tsx`, `ReviewDecisionPanel.tsx`, `ReviewDecisionModal.tsx`, `ReviewQueueFilterBar.tsx`, `ReviewQueueTable.tsx`), 1 barrel export (`src/components/review/index.ts`), 2 admin review pages (`src/pages/admin/SuperAdminReviewQueuePage.tsx`, `src/pages/admin/CollegeReviewDetailPage.tsx`), 1 service (`src/services/reviewService.ts`), 1 hook (`src/hooks/useCollegeReview.ts`), 1 schema (`src/schemas/reviewSchema.ts`), and 1 integration test suite (`src/test/super-admin-review.test.tsx`).
+    - 4 files modified: `src/routes/index.tsx` (canonical routes and backward-compatible aliases), `src/components/navigation/Sidebar.tsx` (Approval Queue navigation link with `ClipboardCheck` icon), `src/services/queryKeys.ts` (review queue & detail query keys), and `src/types/index.ts` (review DTOs & response contracts). Total files affected: 22.
+    - Canonical route restoration at `/admin/colleges/reviews` and `/admin/colleges/reviews/:collegeId`, preserving `/admin/reviews` and `/admin/reviews/:collegeId` as backward-compatible aliases.
+    - Super Admin college approval queue with search, client-side date range validation (`from <= to`), ISO-8601 UTC boundary serialization (`T00:00:00.000Z` to `T23:59:59.999Z`), sort ordering, pagination reset, and responsive data table.
+    - Review dossier inspector displaying proposed administrator details, verified email badge, institutional profile, active verification documents with SHA-256 checksum snippets and tooltip hashes, streaming document downloads, and chronological decision audit trails.
+    - Polymorphic, accessible `ReviewDecisionModal` supporting `APPROVE`, `REQUEST_ACTION` (with notes $\ge 10$ chars, disabled at 10-action ceiling), and `REJECT` (with reason $\ge 10$ chars, permanent rejection warning on revision $v_4$).
+    - Optimistic version concurrency control (`expectedVersion: college.concurrencyVersion`), with explicit `409 STALE_APPLICATION_VERSION` workflow halting, modal closure, application detail refetching, prominent conflict banner display, and fresh reviewer inspection requirement (zero silent retries).
+    - Resubmission allowance semantics ($v_1=0$, $v_2=1$, $v_3=2$, $v_4=3$) adhering strictly to approved business rules.
+    - Zero backend source code or migration changes; zero API contract changes.
+  - **Automated Test Results (Vitest 2.1.9 / JSDOM / Node.js 22 / React 18):**
+    - Focused Module 3.4 suite (`src/test/super-admin-review.test.tsx`): **26 / 26 passed** (0 failures, 0 errors, 0 skipped, 3.71s execution).
+    - Full frontend regression suite (`npx vitest run`): **136 / 136 passed across 12 test files** (0 failures, 0 errors, 0 skipped, 19.56s execution).
+    - TypeScript compilation (`tsc -b`): PASSED (0 errors under strict mode).
+    - Production build (`npm run build`): PASSED (`tsc && vite build`, 1,777 modules transformed in 11.17s, clean production bundle in `dist/`).
+  - **Accepted Test-Coverage Caveats (Preserved Limitations):**
+    1. *Manual interactive browser/API verification pending:* Manual interactive browser/API verification against the real Spring Boot + MySQL + Mailpit environment remains pending.
+    2. *Blob URL revocation cleanup not directly asserted:* The 60-second Blob URL revocation cleanup timer is implemented in `reviewService.downloadReviewDocument`, but its exact timer-based cleanup is not directly asserted by automated tests.
+  - **Distinction of Verification:** Automated unit, component, hook, integration, and build verification complete. Manual interactive browser verification against a running backend remains pending (`NOT_VERIFIED`).
+  - **Reference Reports:**
+    - `docs/03-phase/phase-03-module-3.4-frontend-inspection-and-planning-report.md` (v1.1 APPROVED)
+    - `docs/03-phase/phase-03-module-3.4-frontend-implementation-report.md` (v1.1 APPROVED)
+- **Module 3.5 (Approval Lifecycle, College Activation & Revisions — Frontend):** `APPROVED`.
+  - **Approval Status:** Explicitly approved by the project owner on 2026-11-25.
+  - **Implementation Scope:**
+    - Frontend implementation only.
+    - 7 files created: 5 activation domain components in `frontend/src/components/activation/` (`CollegeActivationHeroBanner.tsx`, `ActivationMilestoneCard.tsx`, `InstitutionalReadinessRoadmapCard.tsx`, `ApprovedDossierModal.tsx`, `SuspendedCollegeCard.tsx`), 1 barrel export (`src/components/activation/index.ts`), and 1 integration test suite (`src/test/college-activation.test.tsx`).
+    - 5 files modified in working tree: `src/pages/dashboard/CollegeAdminDashboardPage.tsx` (operational welcome dashboard integrating activation components without internal database IDs), `src/pages/OnboardingStatusPage.tsx` (403 error disambiguation, in-place suspended/inactive state handling, fail-closed dashboard redirect, live polling synchronization with loop prevention), `src/routes/guards/CollegeApprovalGuard.tsx` (fail-closed route authorization requiring APPROVED + ACTIVE + managementUnlocked), `src/test/college-approval-guard.test.tsx` (explicit active status fixture update), and `src/test/onboarding-dashboard.test.tsx` (explicit active status fixture update). Total files affected: 12.
+    - Operational welcome dashboard (`/college/dashboard`) featuring celebratory hero banner, legal entity name, permanent college code (`college.code`), university affiliation, and emerald status badges (`ACTIVE`, `APPROVED`, `UNLOCKED`).
+    - Strict institutional identifier integrity: canonical `college.code` used exclusively in all UI views; zero exposure of database IDs, UUIDs, or raw storage keys.
+    - Authoritative verification milestone tracking: 4 checklist items strictly derived from authoritative user and application state (`emailVerified`, `requiredDocumentsUploaded`, `approvalStatus === 'APPROVED'`, `collegeStatus === 'ACTIVE'`).
+    - Read-only approved registration dossier inspector (`ApprovedDossierModal.tsx`) with verified institutional profile, active compliance documents with streaming download triggers (`onboardingService.downloadDocument`), and historical revision audit timeline ($v_1 \dots v_n$).
+    - Exact permanent rejection business rule invariant: permanent rejection is permitted strictly on the third correction submission associated with $v_4$ (`resubmissionCount == 3`), while $v_5$ is blocked upstream. UI displays permanent rejection badge strictly when `rev.isPermanentRejection === true`, never inferring from revision numbers.
+    - Disambiguated 403 error routing: `REGISTRATION_PERMANENTLY_REJECTED` routes to inlined permanent rejection view; `COLLEGE_SUSPENDED` and `COLLEGE_INACTIVE` render in-place `SuspendedCollegeCard`.
+    - Live approval synchronization: detects approved status on `/onboarding-status`, calls `authService.getMe()`, refreshes Auth Store, invalidates query cache, and safely navigates to dashboard with redirect-loop prevention on sync failure.
+    - Sanitized institutional support guidance: removed unverified emails and directs users to designated platform Super Administrator.
+    - Zero backend source code or migration changes; zero API contract changes.
+  - **Automated Test Results (Vitest 2.1.9 / JSDOM / Node.js 22 / React 18):**
+    - Focused Module 3.5 suite (`src/test/college-activation.test.tsx`): **32 / 32 passed** (0 failures, 0 errors, 0 skipped, 2.69s execution).
+    - Full frontend regression suite (`npx vitest run`): **168 / 168 passed across 13 test files** (0 failures, 0 errors, 0 skipped, 19.06s execution).
+    - TypeScript compilation (`tsc -b`): PASSED (0 errors under strict mode).
+    - Production build (`npm run build`): PASSED (`tsc && vite build`, 1,783 modules transformed in 8.50s, clean production bundle in `dist/`).
+  - **Accepted Test-Coverage Caveats (Preserved Limitations):**
+    1. *Manual interactive browser/API verification pending:* Interactive browser/API verification against live Docker services (MySQL 8, Mailpit, Spring Boot) remains pending (`NOT_VERIFIED`).
+    2. *Blob URL revocation cleanup not directly asserted:* The 60-second delayed Blob URL revocation cleanup timer in `onboardingService.downloadDocument` is implemented in production but its exact timer-based cleanup is not directly asserted with a fake-timer spy.
+  - **Distinction of Verification:** Automated unit, component, hook, integration, and build verification complete. Manual interactive browser verification against a running backend remains pending (`NOT_VERIFIED`).
+  - **Reference Reports:**
+    - `docs/03-phase/phase-03-module-3.5-frontend-inspection-and-planning-report.md` (v1.1 APPROVED)
+    - `docs/03-phase/phase-03-module-3.5-frontend-implementation-report.md` (v1.2 APPROVED)
 
 ### Phase 03 Execution Strategy:
-**Phase 03 backend modules (3.1A, 3.2, 3.3, 3.4, and 3.5) and Frontend Module 3.1B are COMPLETE and APPROVED.**  
-The next development effort is the implementation and verification of remaining Phase 03 frontend modules (Module 3.2 onward). Phase 03 remains `IN_PROGRESS` until all frontend modules and end-to-end verification are complete.
+**All Phase 03 backend modules (3.1A, 3.2, 3.3, 3.4, and 3.5) and all Phase 03 frontend modules (3.1B, 3.2, 3.3, 3.4, and 3.5) are COMPLETE and APPROVED.**  
+Phase 03 overall remains `IN_PROGRESS` until full end-to-end integration and live manual browser/API verification against Docker services are completed.
 
-### Next Planned Module:
-**Phase 03, Module 3.2 — Email Verification & Account Activation (Frontend)**
-- **Status:** `NOT_STARTED` (Ready for inspection and planning)
+### Next Planned Activity:
+**Phase 03 Manual End-to-End Browser & Live API Verification**
+- **Status:** `PENDING`
 - **Scope:**
-  - Token consumption from email verification link (`/auth/verify-email?token=...`).
-  - Verification submission handling and stateful feedback (success vs expired vs invalid).
-  - Resend verification email workflow with rate-limit protection.
-  - Seamless redirection of verified college administrator to restricted onboarding dashboard.
+  - Execute end-to-end verification checklist against live running backend, MySQL 8, and Mailpit containers.
+  - Verify complete lifecycle: public registration, email verification, restricted dashboard editing, document upload/replacement, review submission, Super Admin queue inspection, review decision execution (approve/action/reject), and college activation transition.
+  - Formal Phase 03 release closure sign-off prior to advancing to Phase 04 (College Management).
 
 # 14. IMPORTANT PROJECT BOUNDARIES
 

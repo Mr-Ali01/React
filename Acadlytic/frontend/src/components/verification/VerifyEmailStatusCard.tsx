@@ -184,8 +184,8 @@ export const VerifyEmailStatusCard: React.FC<VerifyEmailStatusCardProps> = ({
             Verification Link Invalid or Expired
           </h2>
           <p className="mt-2 text-sm text-slate-600 max-w-sm mx-auto">
-            This verification link has expired (tokens are valid for 48 hours), has
-            already been used, or was superseded by a newer link.
+            {errorMessage ||
+              'This verification link has expired (tokens are valid for 48 hours), has already been used, or was superseded by a newer link.'}
           </p>
         </div>
 

@@ -64,6 +64,7 @@ describe('6. CollegeApprovalGuard Workflow', () => {
         collegeId: 10,
         collegeCode: 'PCOL',
         collegeApprovalStatus: 'APPROVED',
+        collegeStatus: 'ACTIVE',
         managementUnlocked: true,
         emailVerified: true,
       },

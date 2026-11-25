@@ -1,13 +1,19 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { screen, waitFor, act, fireEvent } from '@testing-library/react';
+import { screen, waitFor, act, fireEvent, renderHook } from '@testing-library/react';
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { VerifyEmailPage } from '@/pages/auth/VerifyEmailPage';
 import { OnboardingStatusPage } from '@/pages/OnboardingStatusPage';
 import { authService } from '@/services/authService';
 import { ApiError } from '@/services/api';
 import { useAuthStore } from '@/stores/authStore';
-import { renderWithProviders } from './test-utils';
+import { renderWithProviders, createTestQueryClient } from './test-utils';
 import { VerifyEmailResponse } from '@/types';
+import {
+  useVerifyEmail,
+  useResendVerification,
+  _resetConcurrencyFlags,
+} from '@/hooks/useEmailVerification';
 
 const VALID_SAMPLE_TOKEN = 'sample-valid-43-character-cryptographic-token-value';
 
@@ -15,6 +21,7 @@ describe('Module 3.2 — Email Verification & Account Activation (Frontend)', ()
   beforeEach(() => {
     vi.restoreAllMocks();
     useAuthStore.getState().clearAuth();
+    _resetConcurrencyFlags();
   });
 
   afterEach(() => {
@@ -386,7 +393,7 @@ describe('Module 3.2 — Email Verification & Account Activation (Frontend)', ()
         screen.getByText('Verification Link Invalid or Expired')
       ).toBeInTheDocument();
       expect(
-        screen.getByText(/tokens are valid for 48 hours/i)
+        screen.getByText(/the token is invalid or has expired/i)
       ).toBeInTheDocument();
     });
   });
@@ -1016,5 +1023,878 @@ describe('Module 3.2 — Email Verification & Account Activation (Frontend)', ()
     expect(
       screen.getByRole('button', { name: /resend verification email/i })
     ).toBeInTheDocument();
+  });
+
+  // --------------------------------------------------------------------------
+  // Scenario 26: Token sanitization precedes API dispatch (Execution Order)
+  // --------------------------------------------------------------------------
+  it('26. sanitizes address bar before dispatching verification API request', async () => {
+    let searchAtCallTime = 'UNSET';
+    let locationSearchLive = '';
+
+    const LocationTracker = () => {
+      const loc = useLocation();
+      locationSearchLive = loc.search;
+      return null;
+    };
+
+    vi.spyOn(authService, 'verifyEmail').mockImplementation(async () => {
+      // At the exact moment verifyEmail is invoked, the address bar search must already NOT contain 'token='
+      searchAtCallTime = locationSearchLive;
+      return {
+        email: 'order-check@horizon.edu',
+        emailVerified: true,
+        verifiedAt: '2026-11-24T19:00:00Z',
+      };
+    });
+
+    renderWithProviders(
+      <MemoryRouter initialEntries={[`/verify-email?token=${VALID_SAMPLE_TOKEN}&ref=onboarding`]}>
+        <LocationTracker />
+        <Routes>
+          <Route path="/verify-email" element={<VerifyEmailPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Email Verified Successfully')).toBeInTheDocument();
+    });
+
+    expect(searchAtCallTime).not.toContain('token=');
+    expect(searchAtCallTime).toContain('ref=onboarding');
+  });
+
+  // --------------------------------------------------------------------------
+  // Scenario 27: Actual component unmount and remount does not duplicate redemption
+  // --------------------------------------------------------------------------
+  it('27. actual unmount and remount does not dispatch duplicate redemption request', async () => {
+    const verifySpy = vi.spyOn(authService, 'verifyEmail').mockResolvedValue({
+      email: 'remount@horizon.edu',
+      emailVerified: true,
+      verifiedAt: '2026-11-24T19:00:00Z',
+    });
+
+    let currentNavLocation = '';
+    const NavWatcher = () => {
+      const loc = useLocation();
+      currentNavLocation = loc.pathname + loc.search;
+      return null;
+    };
+
+    // 1. Initial mount with token
+    const { unmount } = renderWithProviders(
+      <MemoryRouter initialEntries={[`/verify-email?token=${VALID_SAMPLE_TOKEN}`]}>
+        <NavWatcher />
+        <Routes>
+          <Route path="/verify-email" element={<VerifyEmailPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(verifySpy).toHaveBeenCalledTimes(1);
+      expect(screen.getByText('Email Verified Successfully')).toBeInTheDocument();
+    });
+
+    // Address bar was sanitized to '/verify-email'
+    expect(currentNavLocation).toBe('/verify-email');
+
+    // 2. Unmount the component completely
+    unmount();
+
+    // 3. Remount fresh component at the current sanitized URL
+    renderWithProviders(
+      <MemoryRouter initialEntries={[currentNavLocation]}>
+        <Routes>
+          <Route path="/verify-email" element={<VerifyEmailPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    // Verify spy was NOT called a second time
+    expect(verifySpy).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('No Verification Token Found')).toBeInTheDocument();
+  });
+
+  // --------------------------------------------------------------------------
+  // Scenario 28: Resend 401 AUTH_UNAUTHENTICATED clears auth store and prompts login
+  // --------------------------------------------------------------------------
+  it('28. resend 401 AUTH_UNAUTHENTICATED clears auth store and displays login link', async () => {
+    useAuthStore.setState({
+      isAuthenticated: true,
+      user: {
+        id: 28,
+        email: 'expired-session@horizon.edu',
+        firstName: 'Expired',
+        lastName: 'Session',
+        role: 'COLLEGE_ADMIN',
+        managementUnlocked: false,
+        emailVerified: false,
+      },
+      isLoading: false,
+    });
+
+    vi.spyOn(authService, 'resendVerification').mockRejectedValueOnce(
+      new ApiError('Authenticated account not found.', {
+        errorCode: 'AUTH_UNAUTHENTICATED',
+        status: 401,
+      })
+    );
+
+    const { ResendVerificationButton } = await import(
+      '@/components/verification/ResendVerificationButton'
+    );
+
+    renderWithProviders(
+      <MemoryRouter>
+        <ResendVerificationButton />
+      </MemoryRouter>
+    );
+
+    const resendBtn = screen.getByRole('button', {
+      name: /resend verification email/i,
+    });
+    fireEvent.click(resendBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('Session Expired')).toBeInTheDocument();
+      expect(
+        screen.getByText(/your session has expired\. please sign in again/i)
+      ).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: /sign in/i })).toHaveAttribute(
+        'href',
+        '/auth/login'
+      );
+    });
+
+    // AuthStore must be cleared immediately
+    expect(useAuthStore.getState().isAuthenticated).toBe(false);
+    expect(useAuthStore.getState().user).toBeNull();
+  });
+
+  // --------------------------------------------------------------------------
+  // Scenario 29: Resend 403 AUTH_ACCOUNT_INACTIVE renders Account Inactive alert
+  // --------------------------------------------------------------------------
+  it('29. resend 403 AUTH_ACCOUNT_INACTIVE renders Account Inactive alert', async () => {
+    useAuthStore.setState({
+      isAuthenticated: true,
+      user: {
+        id: 29,
+        email: 'inactive@horizon.edu',
+        firstName: 'Inactive',
+        lastName: 'Admin',
+        role: 'COLLEGE_ADMIN',
+        managementUnlocked: false,
+        emailVerified: false,
+      },
+      isLoading: false,
+    });
+
+    vi.spyOn(authService, 'resendVerification').mockRejectedValueOnce(
+      new ApiError('Your account is not active.', {
+        errorCode: 'AUTH_ACCOUNT_INACTIVE',
+        status: 403,
+      })
+    );
+
+    const { ResendVerificationButton } = await import(
+      '@/components/verification/ResendVerificationButton'
+    );
+
+    renderWithProviders(<ResendVerificationButton />);
+
+    const resendBtn = screen.getByRole('button', {
+      name: /resend verification email/i,
+    });
+    fireEvent.click(resendBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('Account Inactive')).toBeInTheDocument();
+      expect(
+        screen.getByText(/your account has been suspended or deactivated/i)
+      ).toBeInTheDocument();
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // Scenario 30: Resend 400 VALIDATION_ERROR renders Invalid Request alert
+  // --------------------------------------------------------------------------
+  it('30. resend 400 VALIDATION_ERROR renders Invalid Request alert', async () => {
+    useAuthStore.setState({
+      isAuthenticated: true,
+      user: {
+        id: 30,
+        email: 'val-err@horizon.edu',
+        firstName: 'Val',
+        lastName: 'Error',
+        role: 'COLLEGE_ADMIN',
+        managementUnlocked: false,
+        emailVerified: false,
+      },
+      isLoading: false,
+    });
+
+    vi.spyOn(authService, 'resendVerification').mockRejectedValueOnce(
+      new ApiError('Validation error', {
+        errorCode: 'VALIDATION_ERROR',
+        status: 400,
+      })
+    );
+
+    const { ResendVerificationButton } = await import(
+      '@/components/verification/ResendVerificationButton'
+    );
+
+    renderWithProviders(<ResendVerificationButton />);
+
+    const resendBtn = screen.getByRole('button', {
+      name: /resend verification email/i,
+    });
+    fireEvent.click(resendBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('Invalid Request')).toBeInTheDocument();
+      expect(
+        screen.getByText(/unable to process verification resend/i)
+      ).toBeInTheDocument();
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // Scenario 31: Resend 500 INTERNAL_ERROR renders Resend Failed alert and recovers
+  // --------------------------------------------------------------------------
+  it('31. resend 500 INTERNAL_ERROR renders Resend Failed alert and allows retry', async () => {
+    useAuthStore.setState({
+      isAuthenticated: true,
+      user: {
+        id: 31,
+        email: 'server-err@horizon.edu',
+        firstName: 'Server',
+        lastName: 'Error',
+        role: 'COLLEGE_ADMIN',
+        managementUnlocked: false,
+        emailVerified: false,
+      },
+      isLoading: false,
+    });
+
+    const resendSpy = vi
+      .spyOn(authService, 'resendVerification')
+      .mockRejectedValueOnce(
+        new ApiError('Database error', {
+          errorCode: 'INTERNAL_ERROR',
+          status: 500,
+        })
+      )
+      .mockResolvedValueOnce(undefined);
+
+    const { ResendVerificationButton } = await import(
+      '@/components/verification/ResendVerificationButton'
+    );
+
+    renderWithProviders(<ResendVerificationButton />);
+
+    const resendBtn = screen.getByRole('button', {
+      name: /resend verification email/i,
+    });
+    fireEvent.click(resendBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('Resend Failed')).toBeInTheDocument();
+    });
+
+    // Button is re-enabled, user can retry
+    expect(resendBtn).toBeEnabled();
+    fireEvent.click(resendBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('Verification Email Sent')).toBeInTheDocument();
+    });
+    expect(resendSpy).toHaveBeenCalledTimes(2);
+  });
+
+  // --------------------------------------------------------------------------
+  // Scenario 32: Resend Network Failure renders Connection Error alert
+  // --------------------------------------------------------------------------
+  it('32. resend network failure renders Connection Error alert and recovers', async () => {
+    useAuthStore.setState({
+      isAuthenticated: true,
+      user: {
+        id: 32,
+        email: 'net-err@horizon.edu',
+        firstName: 'Net',
+        lastName: 'Error',
+        role: 'COLLEGE_ADMIN',
+        managementUnlocked: false,
+        emailVerified: false,
+      },
+      isLoading: false,
+    });
+
+    vi.spyOn(authService, 'resendVerification').mockRejectedValueOnce(
+      new TypeError('Failed to fetch')
+    );
+
+    const { ResendVerificationButton } = await import(
+      '@/components/verification/ResendVerificationButton'
+    );
+
+    renderWithProviders(<ResendVerificationButton />);
+
+    const resendBtn = screen.getByRole('button', {
+      name: /resend verification email/i,
+    });
+    fireEvent.click(resendBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('Connection Error')).toBeInTheDocument();
+      expect(
+        screen.getByText(/unable to reach acadlytic\. please check your internet connection/i)
+      ).toBeInTheDocument();
+    });
+
+    expect(resendBtn).toBeEnabled();
+  });
+
+  // --------------------------------------------------------------------------
+  // Scenario 33: Resend with malformed Retry-After header falls back to persistent warning
+  // --------------------------------------------------------------------------
+  it('33. resend with malformed Retry-After falls back to persistent warning without fabricated timer', async () => {
+    useAuthStore.setState({
+      isAuthenticated: true,
+      user: {
+        id: 33,
+        email: 'malformed-retry@horizon.edu',
+        firstName: 'Malformed',
+        lastName: 'Retry',
+        role: 'COLLEGE_ADMIN',
+        managementUnlocked: false,
+        emailVerified: false,
+      },
+      isLoading: false,
+    });
+
+    vi.spyOn(authService, 'resendVerification').mockRejectedValueOnce(
+      new ApiError('Rate limit reached', {
+        errorCode: 'RATE_LIMIT_EXCEEDED',
+        status: 429,
+        retryAfter: 'invalid-non-numeric-header' as any,
+      })
+    );
+
+    const { ResendVerificationButton } = await import(
+      '@/components/verification/ResendVerificationButton'
+    );
+
+    renderWithProviders(<ResendVerificationButton />);
+
+    const resendBtn = screen.getByRole('button', {
+      name: /resend verification email/i,
+    });
+    fireEvent.click(resendBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('Rate Limit Reached')).toBeInTheDocument();
+      expect(
+        screen.getByText(/please wait a while before retrying/i)
+      ).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /dismiss/i })).toBeInTheDocument();
+    });
+
+    // Resend button has NO fabricated countdown
+    expect(screen.queryByText(/resend in/i)).not.toBeInTheDocument();
+  });
+
+  // --------------------------------------------------------------------------
+  // Scenario 34: Verification 400 VALIDATION_ERROR from backend renders invalid token view
+  // --------------------------------------------------------------------------
+  it('34. verification 400 VALIDATION_ERROR from backend renders invalid token view', async () => {
+    vi.spyOn(authService, 'verifyEmail').mockRejectedValueOnce(
+      new ApiError('The verification token format is invalid.', {
+        errorCode: 'VALIDATION_ERROR',
+        status: 400,
+      })
+    );
+
+    renderWithProviders(
+      <MemoryRouter initialEntries={[`/verify-email?token=${VALID_SAMPLE_TOKEN}`]}>
+        <Routes>
+          <Route path="/verify-email" element={<VerifyEmailPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('Verification Link Invalid or Expired')
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText(/the verification token format is invalid/i)
+      ).toBeInTheDocument();
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // Scenario 35: Verification 500 INTERNAL_ERROR renders Server Error with Retry and recovers
+  // --------------------------------------------------------------------------
+  it('35. verification 500 INTERNAL_ERROR renders Server Error with Retry and recovers on retry', async () => {
+    const verifySpy = vi
+      .spyOn(authService, 'verifyEmail')
+      .mockRejectedValueOnce(
+        new ApiError('Database connection error', {
+          errorCode: 'INTERNAL_ERROR',
+          status: 500,
+        })
+      )
+      .mockResolvedValueOnce({
+        email: 'server-retry@horizon.edu',
+        emailVerified: true,
+        verifiedAt: '2026-11-24T19:00:00Z',
+      });
+
+    renderWithProviders(
+      <MemoryRouter initialEntries={[`/verify-email?token=${VALID_SAMPLE_TOKEN}`]}>
+        <Routes>
+          <Route path="/verify-email" element={<VerifyEmailPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Verification Failed')).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: /try again/i })
+      ).toBeInTheDocument();
+    });
+
+    // Click retry
+    const retryBtn = screen.getByRole('button', { name: /try again/i });
+    fireEvent.click(retryBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('Email Verified Successfully')).toBeInTheDocument();
+    });
+
+    expect(verifySpy).toHaveBeenCalledTimes(2);
+  });
+
+  // --------------------------------------------------------------------------
+  // Scenario 36: Verification Network Failure renders Connection Error with Retry
+  // --------------------------------------------------------------------------
+  it('36. verification network failure renders Connection Error with manual Retry', async () => {
+    vi.spyOn(authService, 'verifyEmail').mockRejectedValueOnce(
+      new TypeError('Failed to fetch')
+    );
+
+    renderWithProviders(
+      <MemoryRouter initialEntries={[`/verify-email?token=${VALID_SAMPLE_TOKEN}`]}>
+        <Routes>
+          <Route path="/verify-email" element={<VerifyEmailPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Verification Failed')).toBeInTheDocument();
+      expect(
+        screen.getByText(/unable to reach acadlytic\. please verify your connection/i)
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: /try again/i })
+      ).toBeInTheDocument();
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // Scenario 37: Authenticated verification success invalidates currentUser query
+  // --------------------------------------------------------------------------
+  it('37. authenticated verification success invalidates currentUser query cache', async () => {
+    useAuthStore.setState({
+      isAuthenticated: true,
+      user: {
+        id: 37,
+        email: 'invalidate-test@horizon.edu',
+        firstName: 'Inval',
+        lastName: 'Test',
+        role: 'COLLEGE_ADMIN',
+        managementUnlocked: false,
+        emailVerified: false,
+      },
+      isLoading: false,
+    });
+
+    vi.spyOn(authService, 'verifyEmail').mockResolvedValueOnce({
+      email: 'invalidate-test@horizon.edu',
+      emailVerified: true,
+      verifiedAt: '2026-11-24T19:00:00Z',
+    });
+
+    const queryClient = createTestQueryClient();
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+
+    renderWithProviders(
+      <MemoryRouter initialEntries={[`/verify-email?token=${VALID_SAMPLE_TOKEN}`]}>
+        <Routes>
+          <Route path="/verify-email" element={<VerifyEmailPage />} />
+        </Routes>
+      </MemoryRouter>,
+      { queryClient }
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Email Verified Successfully')).toBeInTheDocument();
+    });
+
+    expect(invalidateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        queryKey: ['auth', 'currentUser'],
+      })
+    );
+  });
+
+  // --------------------------------------------------------------------------
+  // Scenario 38: Invocation-level mutual exclusion: Resend rejected while verify in-flight
+  // --------------------------------------------------------------------------
+  it('38. resend mutation is rejected at invocation level while verification is in-flight', async () => {
+    const queryClient = createTestQueryClient();
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+
+    let resolveVerify!: (v: VerifyEmailResponse) => void;
+    const verifyPromise = new Promise<VerifyEmailResponse>((res) => {
+      resolveVerify = res;
+    });
+    vi.spyOn(authService, 'verifyEmail').mockImplementation(() => verifyPromise);
+    const resendSpy = vi.spyOn(authService, 'resendVerification');
+
+    const { result: verifyHook } = renderHook(() => useVerifyEmail(), { wrapper });
+    const { result: resendHook } = renderHook(() => useResendVerification(), { wrapper });
+
+    // Start verification mutation
+    act(() => {
+      verifyHook.current.mutate({ token: VALID_SAMPLE_TOKEN });
+    });
+
+    // While verification is in-flight, attempting resend directly rejects with 409
+    let caughtError: any = null;
+    await act(async () => {
+      try {
+        await resendHook.current.mutateAsync();
+      } catch (err) {
+        caughtError = err;
+      }
+    });
+
+    expect(caughtError).toBeInstanceOf(ApiError);
+    expect(caughtError.errorCode).toBe('CONCURRENT_VERIFICATION_IN_PROGRESS');
+    expect(caughtError.status).toBe(409);
+    expect(resendSpy).not.toHaveBeenCalled();
+
+    // Clean up in-flight mutation
+    await act(async () => {
+      resolveVerify({
+        email: 'done@horizon.edu',
+        emailVerified: true,
+        verifiedAt: '2026-11-24T19:00:00Z',
+      });
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // Scenario 39: Invocation-level mutual exclusion: Verify rejected while resend in-flight
+  // --------------------------------------------------------------------------
+  it('39. verification mutation is rejected at invocation level while resend is in-flight', async () => {
+    const queryClient = createTestQueryClient();
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+
+    let resolveResend!: () => void;
+    const resendPromise = new Promise<void>((res) => {
+      resolveResend = res;
+    });
+    vi.spyOn(authService, 'resendVerification').mockImplementation(() => resendPromise);
+    const verifySpy = vi.spyOn(authService, 'verifyEmail');
+
+    const { result: verifyHook } = renderHook(() => useVerifyEmail(), { wrapper });
+    const { result: resendHook } = renderHook(() => useResendVerification(), { wrapper });
+
+    // Start resend mutation
+    act(() => {
+      resendHook.current.mutate();
+    });
+
+    // While resend is in-flight, attempting verification rejects with 409
+    let caughtError: any = null;
+    await act(async () => {
+      try {
+        await verifyHook.current.mutateAsync({ token: VALID_SAMPLE_TOKEN });
+      } catch (err) {
+        caughtError = err;
+      }
+    });
+
+    expect(caughtError).toBeInstanceOf(ApiError);
+    expect(caughtError.errorCode).toBe('CONCURRENT_RESEND_IN_PROGRESS');
+    expect(caughtError.status).toBe(409);
+    expect(verifySpy).not.toHaveBeenCalled();
+
+    // Clean up in-flight mutation
+    await act(async () => {
+      resolveResend();
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // Scenario 40: Concurrency guard: Rapid repeated calls to verifyEmail are blocked at invocation level
+  // --------------------------------------------------------------------------
+  it('40. rapid repeated calls to verifyEmail are blocked at invocation level', async () => {
+    const queryClient = createTestQueryClient();
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+
+    let resolveVerify!: (v: VerifyEmailResponse) => void;
+    const verifyPromise = new Promise<VerifyEmailResponse>((res) => {
+      resolveVerify = res;
+    });
+    const verifySpy = vi.spyOn(authService, 'verifyEmail').mockImplementation(() => verifyPromise);
+
+    const { result: verifyHook } = renderHook(() => useVerifyEmail(), { wrapper });
+
+    // Dispatch first verification
+    act(() => {
+      verifyHook.current.mutate({ token: VALID_SAMPLE_TOKEN });
+    });
+
+    // Attempt second concurrent verification before first completes
+    let secondError: any = null;
+    await act(async () => {
+      try {
+        await verifyHook.current.mutateAsync({ token: VALID_SAMPLE_TOKEN });
+      } catch (err) {
+        secondError = err;
+      }
+    });
+
+    expect(secondError).toBeInstanceOf(ApiError);
+    expect(secondError.errorCode).toBe('CONCURRENT_VERIFICATION_IN_PROGRESS');
+    expect(secondError.status).toBe(409);
+
+    // Verify authService was dispatched strictly once
+    expect(verifySpy).toHaveBeenCalledTimes(1);
+
+    // Clean up in-flight mutation
+    await act(async () => {
+      resolveVerify({
+        email: 'done@horizon.edu',
+        emailVerified: true,
+        verifiedAt: '2026-11-24T19:00:00Z',
+      });
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // Scenario 41: Synchronous same-turn call order: verifyEmail() then resendVerification()
+  // --------------------------------------------------------------------------
+  it('41. synchronous same-turn calls: verifyEmail() first allows only verifyEmail() to reach service, rejects resend', async () => {
+    _resetConcurrencyFlags();
+    const queryClient = createTestQueryClient();
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+
+    let resolveVerify!: (v: VerifyEmailResponse) => void;
+    const verifyPromise = new Promise<VerifyEmailResponse>((res) => {
+      resolveVerify = res;
+    });
+    const verifySpy = vi
+      .spyOn(authService, 'verifyEmail')
+      .mockImplementation(() => verifyPromise);
+    const resendSpy = vi.spyOn(authService, 'resendVerification');
+
+    const { result: verifyHook } = renderHook(() => useVerifyEmail(), { wrapper });
+    const { result: resendHook } = renderHook(() => useResendVerification(), { wrapper });
+
+    // In the EXACT SAME synchronous JavaScript turn:
+    // Call 1: verifyEmail.mutateAsync (NOT awaited)
+    const pVerify = verifyHook.current.mutateAsync({ token: VALID_SAMPLE_TOKEN });
+
+    // Call 2: resend.mutateAsync in the SAME synchronous turn (zero awaits, zero re-renders)
+    let resendError: any = null;
+    const pResend = resendHook.current.mutateAsync().catch((err) => {
+      resendError = err;
+    });
+
+    // Await the synchronous-turn rejected resend promise
+    await pResend;
+
+    // Resend was rejected with documented error
+    expect(resendError).toBeInstanceOf(ApiError);
+    expect(resendError.errorCode).toBe('CONCURRENT_VERIFICATION_IN_PROGRESS');
+    expect(resendError.status).toBe(409);
+
+    // Only verify reached its API service method; resend NEVER called authService
+    expect(resendSpy).not.toHaveBeenCalled();
+
+    // Resolve verify mutation
+    await act(async () => {
+      resolveVerify({
+        email: 'turn1@horizon.edu',
+        emailVerified: true,
+        verifiedAt: '2026-11-24T19:00:00Z',
+      });
+      await pVerify;
+    });
+
+    expect(verifySpy).toHaveBeenCalledTimes(1);
+
+    // Flags released after success: subsequent resend operation is allowed
+    const subsequentResendSpy = vi
+      .spyOn(authService, 'resendVerification')
+      .mockResolvedValueOnce(undefined);
+
+    await act(async () => {
+      await resendHook.current.mutateAsync();
+    });
+
+    expect(subsequentResendSpy).toHaveBeenCalledTimes(1);
+  });
+
+  // --------------------------------------------------------------------------
+  // Scenario 42: Synchronous same-turn call order: resendVerification() then verifyEmail()
+  // --------------------------------------------------------------------------
+  it('42. synchronous same-turn calls: resendVerification() first allows only resend to reach service, rejects verifyEmail', async () => {
+    _resetConcurrencyFlags();
+    const queryClient = createTestQueryClient();
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+
+    let resolveResend!: () => void;
+    const resendPromise = new Promise<void>((res) => {
+      resolveResend = res;
+    });
+    const resendSpy = vi
+      .spyOn(authService, 'resendVerification')
+      .mockImplementation(() => resendPromise);
+    const verifySpy = vi.spyOn(authService, 'verifyEmail');
+
+    const { result: verifyHook } = renderHook(() => useVerifyEmail(), { wrapper });
+    const { result: resendHook } = renderHook(() => useResendVerification(), { wrapper });
+
+    // In the EXACT SAME synchronous JavaScript turn:
+    // Call 1: resend.mutateAsync (NOT awaited)
+    const pResend = resendHook.current.mutateAsync();
+
+    // Call 2: verifyEmail.mutateAsync in the SAME synchronous turn (zero awaits, zero re-renders)
+    let verifyError: any = null;
+    const pVerify = verifyHook.current
+      .mutateAsync({ token: VALID_SAMPLE_TOKEN })
+      .catch((err) => {
+        verifyError = err;
+      });
+
+    // Await the synchronous-turn rejected verify promise
+    await pVerify;
+
+    // Verify was rejected with documented error
+    expect(verifyError).toBeInstanceOf(ApiError);
+    expect(verifyError.errorCode).toBe('CONCURRENT_RESEND_IN_PROGRESS');
+    expect(verifyError.status).toBe(409);
+
+    // Only resend reached its API service method; verify NEVER called authService
+    expect(verifySpy).not.toHaveBeenCalled();
+
+    // Resolve resend mutation
+    await act(async () => {
+      resolveResend();
+      await pResend;
+    });
+
+    expect(resendSpy).toHaveBeenCalledTimes(1);
+
+    // Flags released after success: subsequent verify operation is allowed
+    const subsequentVerifySpy = vi
+      .spyOn(authService, 'verifyEmail')
+      .mockResolvedValueOnce({
+        email: 'turn2@horizon.edu',
+        emailVerified: true,
+        verifiedAt: '2026-11-24T19:00:00Z',
+      });
+
+    await act(async () => {
+      await verifyHook.current.mutateAsync({ token: VALID_SAMPLE_TOKEN });
+    });
+
+    expect(subsequentVerifySpy).toHaveBeenCalledTimes(1);
+  });
+
+  // --------------------------------------------------------------------------
+  // Scenario 43: Concurrency flags release on failure allowing subsequent operations
+  // --------------------------------------------------------------------------
+  it('43. concurrency flags release on failure allowing subsequent valid operations', async () => {
+    _resetConcurrencyFlags();
+    const queryClient = createTestQueryClient();
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+
+    // 1. Verify fails with 500 error
+    vi.spyOn(authService, 'verifyEmail').mockRejectedValueOnce(
+      new ApiError('Database failure', { errorCode: 'INTERNAL_ERROR', status: 500 })
+    );
+
+    const { result: verifyHook } = renderHook(() => useVerifyEmail(), { wrapper });
+    const { result: resendHook } = renderHook(() => useResendVerification(), { wrapper });
+
+    await act(async () => {
+      try {
+        await verifyHook.current.mutateAsync({ token: VALID_SAMPLE_TOKEN });
+      } catch (err) {
+        expect((err as ApiError).errorCode).toBe('INTERNAL_ERROR');
+      }
+    });
+
+    // After failure, flags MUST be released: resend can execute cleanly
+    const resendSpy = vi
+      .spyOn(authService, 'resendVerification')
+      .mockResolvedValueOnce(undefined);
+
+    await act(async () => {
+      await resendHook.current.mutateAsync();
+    });
+
+    expect(resendSpy).toHaveBeenCalledTimes(1);
+
+    // 2. Resend fails with 500 error
+    vi.spyOn(authService, 'resendVerification').mockRejectedValueOnce(
+      new ApiError('Resend failure', { errorCode: 'INTERNAL_ERROR', status: 500 })
+    );
+
+    await act(async () => {
+      try {
+        await resendHook.current.mutateAsync();
+      } catch (err) {
+        expect((err as ApiError).errorCode).toBe('INTERNAL_ERROR');
+      }
+    });
+
+    // After resend failure, flags MUST be released: verify can execute cleanly
+    const verifySuccessSpy = vi
+      .spyOn(authService, 'verifyEmail')
+      .mockResolvedValueOnce({
+        email: 'recovery@horizon.edu',
+        emailVerified: true,
+        verifiedAt: '2026-11-24T19:00:00Z',
+      });
+
+    await act(async () => {
+      await verifyHook.current.mutateAsync({ token: VALID_SAMPLE_TOKEN });
+    });
+
+    expect(verifySuccessSpy).toHaveBeenCalledTimes(1);
   });
 });
