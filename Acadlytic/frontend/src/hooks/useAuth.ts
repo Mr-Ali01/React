@@ -11,7 +11,8 @@ import { CurrentUser, LoginRequest } from '@/types';
  * Stale time is set to 1 minute with window focus refetching to detect session revocation or status change promptly.
  */
 export const useCurrentUser = () => {
-  const { setUser, clearAuth, setLoading } = useAuthStore();
+  const { setUser, clearAuth, setLoading, isInitialized, isLoading } =
+    useAuthStore();
 
   const query = useQuery<CurrentUser, Error>({
     queryKey: queryKeys.auth.currentUser(),
@@ -21,8 +22,15 @@ export const useCurrentUser = () => {
     refetchOnWindowFocus: true,
   });
 
+  // Initial bootstrap is active ONLY before initial getMe check completes
+  const isInitializing =
+    (!isInitialized && isLoading) || (!isInitialized && query.isLoading);
+
   useEffect(() => {
-    setLoading(query.isLoading);
+    // Only synchronize loading flag during initial application bootstrap
+    if (!isInitialized) {
+      setLoading(query.isLoading);
+    }
     if (query.data) {
       setUser(query.data);
     } else if (query.isError) {
@@ -32,12 +40,16 @@ export const useCurrentUser = () => {
     query.data,
     query.isError,
     query.isLoading,
+    isInitialized,
     setUser,
     clearAuth,
     setLoading,
   ]);
 
-  return query;
+  return {
+    ...query,
+    isInitializing,
+  };
 };
 
 /**

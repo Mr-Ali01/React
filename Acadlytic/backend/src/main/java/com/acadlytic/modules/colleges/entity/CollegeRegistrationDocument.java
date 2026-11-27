@@ -9,6 +9,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 
 import java.time.Instant;
 
@@ -59,10 +60,46 @@ public class CollegeRegistrationDocument {
     @Column(name = "file_purged_at")
     private Instant filePurgedAt;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "verification_status", nullable = false, length = 30)
+    private DocumentVerificationStatus verificationStatus;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "verification_provenance", nullable = false, length = 40)
+    private DocumentVerificationProvenance verificationProvenance;
+
+    @Column(name = "rejection_reason")
+    private String rejectionReason;
+
+    @Column(name = "last_reviewed_by_user_id")
+    private Long lastReviewedByUserId;
+
+    @Column(name = "last_reviewed_at")
+    private Instant lastReviewedAt;
+
+    @Column(name = "source_document_id")
+    private Long sourceDocumentId;
+
+    @Column(name = "source_registration_id")
+    private Long sourceRegistrationId;
+
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version;
+
     @PrePersist
     protected void onCreate() {
         if (this.createdAt == null) {
             this.createdAt = Instant.now();
+        }
+        if (this.verificationStatus == null) {
+            this.verificationStatus = DocumentVerificationStatus.PENDING;
+        }
+        if (this.verificationProvenance == null) {
+            this.verificationProvenance = DocumentVerificationProvenance.NOT_REVIEWED;
+        }
+        if (this.version == null) {
+            this.version = 0L;
         }
     }
 
@@ -160,5 +197,69 @@ public class CollegeRegistrationDocument {
 
     public void setFilePurgedAt(Instant filePurgedAt) {
         this.filePurgedAt = filePurgedAt;
+    }
+
+    public DocumentVerificationStatus getVerificationStatus() {
+        return verificationStatus;
+    }
+
+    public void setVerificationStatus(DocumentVerificationStatus verificationStatus) {
+        this.verificationStatus = verificationStatus;
+    }
+
+    public DocumentVerificationProvenance getVerificationProvenance() {
+        return verificationProvenance;
+    }
+
+    public void setVerificationProvenance(DocumentVerificationProvenance verificationProvenance) {
+        this.verificationProvenance = verificationProvenance;
+    }
+
+    public String getRejectionReason() {
+        return rejectionReason;
+    }
+
+    public void setRejectionReason(String rejectionReason) {
+        this.rejectionReason = rejectionReason;
+    }
+
+    public Long getLastReviewedByUserId() {
+        return lastReviewedByUserId;
+    }
+
+    public void setLastReviewedByUserId(Long lastReviewedByUserId) {
+        this.lastReviewedByUserId = lastReviewedByUserId;
+    }
+
+    public Instant getLastReviewedAt() {
+        return lastReviewedAt;
+    }
+
+    public void setLastReviewedAt(Instant lastReviewedAt) {
+        this.lastReviewedAt = lastReviewedAt;
+    }
+
+    public Long getSourceDocumentId() {
+        return sourceDocumentId;
+    }
+
+    public void setSourceDocumentId(Long sourceDocumentId) {
+        this.sourceDocumentId = sourceDocumentId;
+    }
+
+    public Long getSourceRegistrationId() {
+        return sourceRegistrationId;
+    }
+
+    public void setSourceRegistrationId(Long sourceRegistrationId) {
+        this.sourceRegistrationId = sourceRegistrationId;
+    }
+
+    public Long getVersion() {
+        return version;
+    }
+
+    public void setVersion(Long version) {
+        this.version = version;
     }
 }

@@ -74,16 +74,20 @@ export const CollegeReviewHeader: React.FC<CollegeReviewHeaderProps> = ({
           <div className="flex flex-wrap items-center gap-3 text-sm text-slate-500">
             <span className="inline-flex items-center gap-1 font-mono text-xs bg-slate-100 px-2 py-0.5 rounded text-slate-700">
               <Tag className="h-3 w-3" />
-              {college.collegeCode || college.code}
+              {college.collegeCode || college.code || 'Code unavailable'}
             </span>
             <span>•</span>
-            <span>Revision v{college.versionNumber ?? 1}</span>
+            <span>
+              {college.versionNumber != null
+                ? `Revision v${college.versionNumber}`
+                : 'Revision unavailable'}
+            </span>
             <span>•</span>
             <span>
               Submitted{' '}
               {college.submittedForReviewAt
                 ? new Date(college.submittedForReviewAt).toLocaleString()
-                : 'Pending'}
+                : 'Submission time unavailable'}
             </span>
           </div>
 
@@ -96,8 +100,15 @@ export const CollegeReviewHeader: React.FC<CollegeReviewHeaderProps> = ({
         </div>
 
         <div className="flex items-center gap-2 sm:self-start">
-          <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-mono bg-slate-50 text-slate-600 border border-slate-200" title="Server Concurrency Version">
-            Version #{college.concurrencyVersion}
+          <span
+            className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-mono bg-slate-50 text-slate-600 border border-slate-200"
+            title="Server Concurrency Version"
+          >
+            {typeof college.concurrencyVersion === 'number' &&
+            Number.isSafeInteger(college.concurrencyVersion) &&
+            college.concurrencyVersion >= 0
+              ? `Version #${college.concurrencyVersion}`
+              : 'Version unavailable'}
           </span>
         </div>
       </div>

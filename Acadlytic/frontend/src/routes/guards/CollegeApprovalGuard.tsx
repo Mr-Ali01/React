@@ -3,9 +3,10 @@ import { Navigate, Outlet } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
 
 export const CollegeApprovalGuard: React.FC = () => {
-  const { user, isAuthenticated, isLoading } = useAuthStore();
+  const { user, isAuthenticated, isLoading, isInitialized } = useAuthStore();
 
-  if (isLoading) {
+  const isInitializing = !isInitialized && isLoading;
+  if (isInitializing) {
     return null;
   }
 

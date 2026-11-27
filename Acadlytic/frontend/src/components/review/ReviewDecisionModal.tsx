@@ -39,10 +39,16 @@ export const ReviewDecisionModal: React.FC<ReviewDecisionModalProps> = ({
   onDecisionSuccess,
   onStaleConflict,
 }) => {
+  const targetCollegeId = (college.id ?? college.collegeId ?? 0) as number;
   const { mutateAsync: recordDecision, isPending } = useRecordDecision(
-    college.collegeId
+    targetCollegeId
   );
   const [serverError, setServerError] = useState<string | null>(null);
+
+  const hasValidVersion =
+    typeof college.concurrencyVersion === 'number' &&
+    Number.isSafeInteger(college.concurrencyVersion) &&
+    college.concurrencyVersion >= 0;
 
   const {
     register,
@@ -55,7 +61,7 @@ export const ReviewDecisionModal: React.FC<ReviewDecisionModalProps> = ({
     mode: 'onTouched',
     defaultValues: {
       action: action || 'APPROVE',
-      expectedVersion: college.concurrencyVersion,
+      expectedVersion: college.concurrencyVersion ?? 0,
       notes: '',
       rejectionReason: '',
     },
@@ -66,7 +72,7 @@ export const ReviewDecisionModal: React.FC<ReviewDecisionModalProps> = ({
     if (action && isOpen) {
       reset({
         action,
-        expectedVersion: college.concurrencyVersion,
+        expectedVersion: college.concurrencyVersion ?? 0,
         notes: '',
         rejectionReason: '',
       });
@@ -83,19 +89,26 @@ export const ReviewDecisionModal: React.FC<ReviewDecisionModalProps> = ({
   const getModalTitle = () => {
     switch (action) {
       case 'APPROVE':
-        return `Approve College Registration — ${college.legalName}`;
+        return `Approve College Registration — ${college.legalName || 'College Application'}`;
       case 'REQUEST_ACTION':
-        return `Request Action / Corrections — ${college.legalName}`;
+        return `Request Action / Corrections — ${college.legalName || 'College Application'}`;
       case 'REJECT':
         return isFinalRevision
-          ? `Reject Application (Permanent) — ${college.legalName}`
-          : `Reject College Application — ${college.legalName}`;
+          ? `Reject Application (Permanent) — ${college.legalName || 'College Application'}`
+          : `Reject College Application — ${college.legalName || 'College Application'}`;
     }
   };
 
   const onSubmit = async (values: ReviewDecisionFormValues) => {
     try {
       setServerError(null);
+      if (!hasValidVersion || college.concurrencyVersion == null) {
+        setServerError(
+          'Cannot submit review decision: authoritative concurrency version is missing or invalid.'
+        );
+        return;
+      }
+
       const payload = {
         action: values.action,
         notes: values.notes?.trim() ? values.notes.trim() : null,
@@ -110,11 +123,7 @@ export const ReviewDecisionModal: React.FC<ReviewDecisionModalProps> = ({
       onDecisionSuccess(result);
     } catch (err: unknown) {
       if (isApiError(err)) {
-        if (
-          err.errorCode === 'STALE_APPLICATION_VERSION' ||
-          (err.status === 409 &&
-            err.errorCode !== 'APPLICATION_NOT_AWAITING_REVIEW')
-        ) {
+        if (err.errorCode === 'STALE_APPLICATION_VERSION') {
           // Strict stale version handling: abort decision, close modal, notify reviewer
           onClose();
           onStaleConflict();
@@ -124,6 +133,27 @@ export const ReviewDecisionModal: React.FC<ReviewDecisionModalProps> = ({
         if (err.errorCode === 'APPLICATION_NOT_AWAITING_REVIEW') {
           setServerError(
             'This application is no longer awaiting review. Please return to the review queue.'
+          );
+          return;
+        }
+
+        if (err.errorCode === 'REQUIRED_DOCUMENTS_MISSING') {
+          setServerError(
+            'Cannot approve college registration: One or more mandatory verification documents are missing.'
+          );
+          return;
+        }
+
+        if (err.errorCode === 'DOCUMENTS_REJECTED') {
+          setServerError(
+            'Cannot approve college registration: One or more active verification documents have been rejected. Please request action/corrections from the college.'
+          );
+          return;
+        }
+
+        if (err.errorCode === 'DOCUMENTS_NOT_VERIFIED') {
+          setServerError(
+            'Cannot approve college registration: All active verification documents must be verified and accepted before approving the institution.'
           );
           return;
         }
@@ -145,6 +175,12 @@ export const ReviewDecisionModal: React.FC<ReviewDecisionModalProps> = ({
       size="lg"
     >
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
+        {!hasValidVersion && (
+          <Alert variant="error" title="Concurrency Version Unavailable">
+            Authoritative concurrency version is missing or invalid. Decisions cannot be submitted.
+          </Alert>
+        )}
+
         {serverError && (
           <Alert variant="error" title="Submission Error">
             {serverError}
@@ -298,7 +334,7 @@ export const ReviewDecisionModal: React.FC<ReviewDecisionModalProps> = ({
                 ? 'border-amber-500 text-amber-800 hover:bg-amber-100'
                 : ''
             }
-            disabled={isPending}
+            disabled={isPending || !hasValidVersion}
           >
             {isPending
               ? 'Submitting Decision...'

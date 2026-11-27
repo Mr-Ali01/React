@@ -48,7 +48,8 @@ public abstract class AbstractMySqlIntegrationTest {
                             .withCommand(
                                     "--character-set-server=utf8mb4",
                                     "--collation-server=utf8mb4_unicode_ci",
-                                    "--default-time-zone=+00:00"
+                                    "--default-time-zone=+00:00",
+                                    "--log-bin-trust-function-creators=1"
                             );
                     container.start();
                     available = true;

@@ -9,6 +9,7 @@ import { queryKeys } from '@/services/queryKeys';
 import type {
   ReviewQueueParams,
   ReviewDecisionRequest,
+  DocumentReviewDecisionRequest,
 } from '@/types';
 
 /**
@@ -35,7 +36,9 @@ export function useReviewDetail(collegeId: number) {
 
 /**
  * Hook to submit an authoritative review decision (APPROVE, REQUEST_ACTION, REJECT).
- * On success, invalidates the entire review queue root and the specific detail query.
+ * On success, invalidates the entire review queue root.
+ * Does NOT invalidate current college review detail to prevent HTTP 409 Conflict,
+ * because decisions transition the application out of PENDING status.
  */
 export function useRecordDecision(collegeId: number) {
   const queryClient = useQueryClient();
@@ -47,10 +50,6 @@ export function useRecordDecision(collegeId: number) {
       // Invalidate all active pages and filter variations in review queue
       queryClient.invalidateQueries({
         queryKey: queryKeys.reviews.queueRoot(),
-      });
-      // Invalidate current college review detail
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.reviews.detail(collegeId),
       });
     },
   });
@@ -70,5 +69,58 @@ export function useDownloadReviewDocument() {
       documentId: number;
       filename?: string;
     }) => reviewService.downloadReviewDocument(collegeId, documentId, filename),
+  });
+}
+
+/**
+ * Hook to submit an authoritative document review decision (ACCEPT or REJECT).
+ * On success, invalidates parent college review detail to refresh document status, badges, and versions.
+ */
+export function useRecordDocumentDecision(collegeId: number) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      documentId,
+      request,
+    }: {
+      documentId: number;
+      request: DocumentReviewDecisionRequest;
+    }) => reviewService.recordDocumentDecision(collegeId, documentId, request),
+    onSuccess: (_, variables) => {
+      // Invalidate current college review detail (refreshes activeDocuments, statuses, and versions)
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.reviews.detail(collegeId),
+      });
+      // Invalidate document history query if open
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.reviews.documentHistory(
+          collegeId,
+          variables.documentId
+        ),
+      });
+    },
+  });
+}
+
+/**
+ * Hook to fetch chronological review decision history records for an individual document.
+ * Unblocked by college lifecycle freeze (read-only audit trail).
+ */
+export function useDocumentReviewHistory(
+  collegeId: number,
+  documentId: number,
+  enabled: boolean = true
+) {
+  return useQuery({
+    queryKey: queryKeys.reviews.documentHistory(collegeId, documentId),
+    queryFn: () => reviewService.getDocumentReviewHistory(collegeId, documentId),
+    enabled: Boolean(
+      enabled &&
+        collegeId > 0 &&
+        !isNaN(collegeId) &&
+        documentId > 0 &&
+        !isNaN(documentId)
+    ),
   });
 }

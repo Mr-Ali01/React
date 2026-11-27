@@ -80,26 +80,34 @@ export const RevisionHistoryTimelineCard: React.FC<
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   {getDecisionBadge(item.decision)}
-                  <span className="text-xs font-mono text-slate-500">
-                    Cycle (Action: {item.actionRequiredCountAtDecision ?? 0}/10,
-                    Correction: v{(item.resubmissionCountAtDecision ?? (item.versionNumber > 0 ? item.versionNumber - 1 : 0)) + 1})
-                  </span>
+                  {item.actionRequiredCountAtDecision != null &&
+                  item.resubmissionCountAtDecision != null ? (
+                    <span className="text-xs font-mono text-slate-500">
+                      Cycle (Action: {item.actionRequiredCountAtDecision}/10,
+                      Correction: v{item.resubmissionCountAtDecision + 1})
+                    </span>
+                  ) : item.versionNumber != null ? (
+                    <span className="text-xs font-mono text-slate-500">
+                      Revision v{item.versionNumber}
+                    </span>
+                  ) : null}
                 </div>
 
                 <div className="flex items-center gap-3 text-xs text-slate-500">
                   <span className="inline-flex items-center gap-1">
                     <User className="h-3 w-3" />
-                    {item.decisionByAdminEmail ||
-                      (item.reviewerUserId
-                        ? `Reviewer #${item.reviewerUserId}`
-                        : 'Super Admin')}
+                    {item.decisionByAdminEmail
+                      ? item.decisionByAdminEmail
+                      : item.reviewerUserId != null
+                      ? `Reviewer ID: #${item.reviewerUserId}`
+                      : 'Reviewer: Unavailable'}
                   </span>
                   <span>•</span>
                   <span className="inline-flex items-center gap-1">
                     <Calendar className="h-3 w-3" />
                     {item.decisionAt
                       ? new Date(item.decisionAt).toLocaleString()
-                      : 'N/A'}
+                      : 'Decision timestamp unavailable'}
                   </span>
                 </div>
               </div>

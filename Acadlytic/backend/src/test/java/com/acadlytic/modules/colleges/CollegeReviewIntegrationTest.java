@@ -18,6 +18,8 @@ import com.acadlytic.modules.colleges.entity.CollegeRegistration;
 import com.acadlytic.modules.colleges.entity.CollegeRegistrationDocument;
 import com.acadlytic.modules.colleges.entity.CollegeStatus;
 import com.acadlytic.modules.colleges.entity.DocumentCategory;
+import com.acadlytic.modules.colleges.entity.DocumentVerificationProvenance;
+import com.acadlytic.modules.colleges.entity.DocumentVerificationStatus;
 import com.acadlytic.modules.colleges.repository.CollegeRegistrationDocumentRepository;
 import com.acadlytic.modules.colleges.repository.CollegeRegistrationRepository;
 import com.acadlytic.modules.colleges.repository.CollegeRepository;
@@ -104,8 +106,9 @@ class CollegeReviewIntegrationTest extends AbstractMySqlIntegrationTest {
         ipRateLimiter.clear();
         jdbcTemplate.execute("DELETE FROM SPRING_SESSION_ATTRIBUTES");
         jdbcTemplate.execute("DELETE FROM SPRING_SESSION");
+        jdbcTemplate.execute("TRUNCATE TABLE college_document_reviews");
         jdbcTemplate.execute("UPDATE colleges SET current_registration_id = NULL");
-        jdbcTemplate.execute("UPDATE college_registration_documents SET replaces_document_id = NULL");
+        jdbcTemplate.execute("UPDATE college_registration_documents SET source_document_id = NULL, source_registration_id = NULL, replaces_document_id = NULL");
         jdbcTemplate.execute("DELETE FROM college_registration_documents");
         jdbcTemplate.execute("DELETE FROM college_registrations");
         jdbcTemplate.execute("DELETE FROM outbox_emails");
@@ -211,6 +214,28 @@ class CollegeReviewIntegrationTest extends AbstractMySqlIntegrationTest {
         documentRepository.saveAndFlush(doc);
 
         return new CollegeContext(college, reg, admin);
+    }
+
+    private void seedSignatoryAndAcceptDocs(CollegeContext ctx) {
+        var docs = documentRepository.findByRegistrationId(ctx.registration().getId());
+        for (CollegeRegistrationDocument d : docs) {
+            d.setVerificationStatus(DocumentVerificationStatus.ACCEPTED);
+            d.setVerificationProvenance(DocumentVerificationProvenance.DIRECT_REVIEW);
+            documentRepository.saveAndFlush(d);
+        }
+        var stored = documentStorageService.store(VALID_PDF_BYTES, "signatory.pdf", "application/pdf", "checksumSign123");
+        CollegeRegistrationDocument doc = new CollegeRegistrationDocument();
+        doc.setCollegeId(ctx.college().getId());
+        doc.setRegistrationId(ctx.registration().getId());
+        doc.setDocumentCategory(DocumentCategory.AUTHORIZED_SIGNATORY_ID);
+        doc.setOriginalFilename("signatory.pdf");
+        doc.setMimeType("application/pdf");
+        doc.setFileSizeBytes(VALID_PDF_BYTES.length);
+        doc.setSha256Checksum("checksumSign123");
+        doc.setStorageKey(stored.storageKey());
+        doc.setVerificationStatus(DocumentVerificationStatus.ACCEPTED);
+        doc.setVerificationProvenance(DocumentVerificationProvenance.DIRECT_REVIEW);
+        documentRepository.saveAndFlush(doc);
     }
 
     @Test
@@ -530,6 +555,7 @@ class CollegeReviewIntegrationTest extends AbstractMySqlIntegrationTest {
     void approveDecision_transitionsRevisionAndCollege_andRecordsAudit() throws Exception {
         SessionCookies superAdmin = setupSuperAdmin();
         CollegeContext ctx = seedPendingCollegeWithAdminAndDocs("COLL-APPV", "Approve Coll", "admin@appv.edu");
+        seedSignatoryAndAcceptDocs(ctx);
 
         ReviewDecisionRequest request = new ReviewDecisionRequest(
                 ReviewDecisionAction.APPROVE, ctx.college().getVersion(), "All documents verified.", null);
@@ -760,6 +786,7 @@ class CollegeReviewIntegrationTest extends AbstractMySqlIntegrationTest {
     void transactionRollback_postMutationFailure_rollsBackReviewStatusAndAuditEvent() throws Exception {
         SessionCookies superAdmin = setupSuperAdmin();
         CollegeContext ctx = seedPendingCollegeWithAdminAndDocs("COLL-ATOMIC", "Atomic Coll", "admin@atomic.edu");
+        seedSignatoryAndAcceptDocs(ctx);
 
         Long collegeId = ctx.college().getId();
         Long registrationId = ctx.registration().getId();

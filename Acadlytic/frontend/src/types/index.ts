@@ -128,6 +128,20 @@ export type DocumentCategory =
   | 'INSTITUTION_REGISTRATION_PROOF'
   | 'ADDITIONAL_SUPPORTING_DOCUMENT';
 
+// Module 3.6 Document Verification Enums matching backend com.acadlytic.modules.colleges.entity
+export type DocumentVerificationStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED';
+
+export type DocumentVerificationProvenance =
+  | 'NOT_REVIEWED'
+  | 'DIRECT_REVIEW'
+  | 'CARRIED_FORWARD'
+  | 'LEGACY_COLLEGE_APPROVAL';
+
+export type DocumentReviewAction = 'ACCEPT' | 'REJECT';
+
+// Strict closed typing matching backend CollegeDocumentReview.action
+export type DocumentHistoryAction = 'ACCEPTED' | 'REJECTED';
+
 // Module 3.3 College Onboarding DTOs
 export interface CollegeSummaryResponse {
   id: number;
@@ -192,6 +206,13 @@ export interface DocumentResponse {
   sha256Checksum: string;
   replacesDocumentId: number | null;
   createdAt: string;
+  // Module 3.6 verification attributes:
+  verificationStatus?: DocumentVerificationStatus;
+  verificationProvenance?: DocumentVerificationProvenance;
+  rejectionReason?: string | null;
+  lastReviewedAt?: string | null;
+  lastReviewedByUserId?: number | null;
+  version?: number;
 }
 
 export interface RevisionSummaryResponse {
@@ -282,64 +303,66 @@ export interface ReviewQueueItemResponse {
 // ==========================================
 
 export interface RawCollegeReviewSummaryResponse {
-  id: number;
-  name: string;
-  code: string;
-  approvalStatus: CollegeApprovalStatus;
-  status: CollegeStatus;
-  permanentlyRejected: boolean;
-  resubmissionCount: number;
-  actionRequiredCount: number;
-  createdAt: string;
+  id?: number | null;
+  name?: string | null;
+  code?: string | null;
+  approvalStatus?: CollegeApprovalStatus;
+  status?: CollegeStatus;
+  permanentlyRejected?: boolean;
+  resubmissionCount?: number;
+  actionRequiredCount?: number;
+  createdAt?: string | null;
+  concurrencyVersion?: number | null;
+  versionNumber?: number | null;
 }
 
 export interface RawReviewAdminUserResponse {
-  id: number;
+  id?: number | null;
   email: string;
-  firstName: string;
-  lastName: string;
+  firstName?: string | null;
+  lastName?: string | null;
   emailVerifiedAt?: string | null;
-  createdAt: string;
+  createdAt?: string | null;
 }
 
 export interface RawSubmittedRevisionResponse {
-  id: number;
-  versionNumber: number;
-  status: CollegeApprovalStatus;
-  legalName: string;
-  addressLine1: string;
+  id?: number | null;
+  versionNumber?: number | null;
+  status?: CollegeApprovalStatus;
+  legalName?: string | null;
+  addressLine1?: string | null;
   addressLine2?: string | null;
-  city: string;
-  state: string;
-  country: string;
-  postalCode: string;
+  city?: string | null;
+  state?: string | null;
+  country?: string | null;
+  postalCode?: string | null;
   websiteUrl?: string | null;
-  contactPhone: string;
-  affiliatedUniversityName: string;
+  contactPhone?: string | null;
+  affiliatedUniversityName?: string | null;
   submittedForReviewAt?: string | null;
 }
 
 export interface RawReviewHistoryItemResponse {
-  id: number;
-  versionNumber: number;
-  status: CollegeApprovalStatus;
-  legalName: string;
+  id?: number | null;
+  versionNumber?: number | null;
+  status?: CollegeApprovalStatus | string;
+  legalName?: string | null;
   submittedForReviewAt?: string | null;
   reviewerUserId?: number | null;
   reviewNotes?: string | null;
   rejectionReason?: string | null;
-  isPermanentRejection: boolean;
+  isPermanentRejection?: boolean;
   reviewedAt?: string | null;
-  createdAt: string;
+  createdAt?: string | null;
 }
 
 export interface RawCollegeReviewDetailResponse {
-  college: RawCollegeReviewSummaryResponse;
+  college?: RawCollegeReviewSummaryResponse | null;
   adminUser?: RawReviewAdminUserResponse | null;
-  submittedRevision: RawSubmittedRevisionResponse;
-  activeDocuments: DocumentResponse[];
-  revisionHistory: RawReviewHistoryItemResponse[];
-  concurrencyVersion: number;
+  submittedRevision?: RawSubmittedRevisionResponse | null;
+  activeDocuments?: DocumentResponse[];
+  revisionHistory?: RawReviewHistoryItemResponse[];
+  concurrencyVersion?: number | null;
 }
 
 // ==========================================
@@ -347,61 +370,61 @@ export interface RawCollegeReviewDetailResponse {
 // ==========================================
 
 export interface ReviewAdminUserResponse {
-  id: number;
-  fullName: string;
+  id?: number | null;
+  fullName?: string | null;
   email: string;
   phone?: string | null;
   emailVerified: boolean;
-  registeredAt: string;
+  registeredAt?: string | null;
 }
 
 export interface SubmittedRevisionResponse {
-  id: number;
-  versionNumber: number;
-  status: CollegeApprovalStatus;
-  legalName: string;
-  addressLine1: string;
+  id?: number | null;
+  versionNumber?: number | null;
+  status?: CollegeApprovalStatus;
+  legalName?: string | null;
+  addressLine1?: string | null;
   addressLine2?: string | null;
-  city: string;
-  state: string;
-  country: string;
-  postalCode: string;
+  city?: string | null;
+  state?: string | null;
+  country?: string | null;
+  postalCode?: string | null;
   websiteUrl?: string | null;
-  contactPhone: string;
-  affiliatedUniversityName: string;
+  contactPhone?: string | null;
+  affiliatedUniversityName?: string | null;
   submittedForReviewAt?: string | null;
   reviewedAt?: string | null;
   isDraft?: boolean;
 }
 
 export interface ReviewHistoryItemResponse {
-  id: number;
-  versionNumber?: number;
+  id?: number | null;
+  versionNumber?: number | null;
   decision: ReviewDecisionAction;
   notes?: string | null;
   reviewNotes?: string | null;
   rejectionReason?: string | null;
   isPermanentRejection?: boolean;
-  actionRequiredCountAtDecision?: number;
-  resubmissionCountAtDecision?: number;
-  decisionAt: string;
+  actionRequiredCountAtDecision?: number | null;
+  resubmissionCountAtDecision?: number | null;
+  decisionAt?: string | null;
   decisionByAdminEmail?: string | null;
   reviewerUserId?: number | null;
 }
 
 export interface CollegeReviewSummaryResponse {
-  collegeId: number;
-  id?: number;
-  collegeCode: string;
-  code?: string;
-  legalName: string;
-  name?: string;
+  collegeId?: number | null;
+  id?: number | null;
+  collegeCode?: string | null;
+  code?: string | null;
+  legalName?: string | null;
+  name?: string | null;
   approvalStatus: CollegeApprovalStatus;
   status: CollegeStatus;
-  registrationId?: number;
-  versionNumber?: number;
+  registrationId?: number | null;
+  versionNumber?: number | null;
   submittedForReviewAt?: string | null;
-  concurrencyVersion: number;
+  concurrencyVersion?: number | null;
   resubmissionCount: number;
   actionRequiredCount: number;
   permanentlyRejected?: boolean;
@@ -411,12 +434,12 @@ export interface CollegeReviewDetailResponse {
   college: CollegeReviewSummaryResponse;
   adminUser?: ReviewAdminUserResponse | null;
   activeDocuments: DocumentResponse[];
-  currentRevision: SubmittedRevisionResponse;
-  submittedRevision?: SubmittedRevisionResponse;
+  currentRevision?: SubmittedRevisionResponse | null;
+  submittedRevision?: SubmittedRevisionResponse | null;
   submittedRevisions: SubmittedRevisionResponse[];
   reviewHistory: ReviewHistoryItemResponse[];
   revisionHistory?: RawReviewHistoryItemResponse[];
-  concurrencyVersion: number;
+  concurrencyVersion?: number | null;
 }
 
 export interface ReviewDecisionRequest {
@@ -448,14 +471,57 @@ export interface ReviewQueueParams {
   sort?: string; // e.g. 'submittedForReviewAt,asc'
 }
 
+// ==========================================
+// Module 3.6 Document Review DTOs & Payloads
+// ==========================================
+
+// Document Review Decision Request matching backend DocumentReviewDecisionRequest
+export interface DocumentReviewDecisionRequest {
+  action: DocumentReviewAction;
+  notes?: string | null;
+  rejectionReason?: string | null;
+  expectedDocumentVersion: number;
+}
+
+// Document Review Decision Response matching backend DocumentReviewDecisionResponse
+export interface DocumentReviewDecisionResponse {
+  documentId: number;
+  registrationId: number;
+  documentCategory: DocumentCategory;
+  verificationStatus: DocumentVerificationStatus;
+  verificationProvenance: DocumentVerificationProvenance;
+  rejectionReason: string | null;
+  lastReviewedAt: string;
+  lastReviewedByUserId: number;
+  reviewerEmail?: string | null;
+  version: number;
+}
+
+// Document Review History Record matching backend DocumentReviewHistoryItemResponse
+export interface DocumentReviewHistoryItemResponse {
+  id: number;
+  reviewId?: number;
+  documentId: number;
+  registrationId: number;
+  collegeId: number;
+  action: DocumentHistoryAction;
+  rejectionReason: string | null;
+  reviewerUserId: number | null;
+  reviewerEmail: string | null;
+  reviewedAt: string;
+  createdAt: string;
+}
+
 // Re-export review schemas and types
 export {
   reviewDecisionSchema,
   reviewQueueFilterSchema,
+  documentReviewDecisionSchema,
 } from '@/schemas/reviewSchema';
 export type {
   ReviewDecisionFormValues,
   ReviewQueueFilterFormValues,
+  DocumentReviewDecisionFormValues,
 } from '@/schemas/reviewSchema';
 
 

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { Ban, CheckCircle2, ShieldAlert } from 'lucide-react';
 import { PageContainer } from '@/components/layout/PageContainer';
@@ -49,16 +49,12 @@ export const OnboardingStatusPage: React.FC = () => {
   const [actionError, setActionError] = useState<string | null>(null);
   const [isTransitioning, setIsTransitioning] = useState(false);
 
-  // 1. If user is already approved and active, route immediately to active college dashboard
+  // Approval and activation state derivations
   const isApproved = user?.collegeApprovalStatus === 'APPROVED';
   const isActive = user?.collegeStatus === 'ACTIVE';
   const isUnlocked = user?.managementUnlocked === true;
 
-  if (isApproved && isActive && isUnlocked) {
-    return <Navigate to="/college/dashboard" replace />;
-  }
-
-  // 2. Fetch the authoritative restricted dashboard aggregate
+  // 1. Fetch the authoritative restricted dashboard aggregate
   const {
     data: application,
     isLoading,
@@ -67,7 +63,7 @@ export const OnboardingStatusPage: React.FC = () => {
     refetch,
   } = useMyApplication();
 
-  // 3. Live approval synchronization: when application reflects approved & active in polling
+  // 2. Live approval synchronization: when application reflects approved & active in polling
   useEffect(() => {
     if (
       application?.college?.approvalStatus === 'APPROVED' &&
@@ -101,16 +97,41 @@ export const OnboardingStatusPage: React.FC = () => {
     queryClient,
   ]);
 
-  // 4. Mutation hooks
+  // 3. Mutation hooks
   const { mutate: createCorrectionDraft, isPending: isStartingCorrection } =
     useCreateCorrectionDraft();
   const { mutate: deleteDocument } = useDeleteDocument();
   const { mutate: submitApplication, isPending: isSubmittingApplication } =
     useSubmitApplication();
 
+  // 4. Unconditional navigation effect for approved and unlocked institution administrator
+  useEffect(() => {
+    if (isApproved && isActive && isUnlocked) {
+      navigate('/college/dashboard', { replace: true });
+    }
+  }, [isApproved, isActive, isUnlocked, navigate]);
+
   const isEmailVerified = Boolean(
     user?.emailVerified ?? application?.checklist?.emailVerified ?? false
   );
+
+  // 5. Approved institution redirection state (rendered strictly after all hooks execute)
+  if (isApproved && isActive && isUnlocked) {
+    return (
+      <PageContainer
+        title="College Onboarding Status"
+        subtitle="Review the approval and verification progress of your affiliated institution."
+        maxWidth="5xl"
+      >
+        <div className="py-24 flex flex-col items-center justify-center gap-3">
+          <LoadingSpinner size="lg" />
+          <p className="text-sm text-slate-500 font-medium">
+            Redirecting to College Dashboard...
+          </p>
+        </div>
+      </PageContainer>
+    );
+  }
 
   // 5. Account suspension or inactivity handling
   const isSuspendedOrInactive =

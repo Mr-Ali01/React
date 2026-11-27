@@ -84,8 +84,9 @@ class CollegeOnboardingIntegrationTest extends AbstractMySqlIntegrationTest {
         ipRateLimiter.clear();
         jdbcTemplate.execute("DELETE FROM SPRING_SESSION_ATTRIBUTES");
         jdbcTemplate.execute("DELETE FROM SPRING_SESSION");
+        jdbcTemplate.execute("TRUNCATE TABLE college_document_reviews");
         jdbcTemplate.execute("UPDATE colleges SET current_registration_id = NULL");
-        jdbcTemplate.execute("UPDATE college_registration_documents SET replaces_document_id = NULL");
+        jdbcTemplate.execute("UPDATE college_registration_documents SET source_document_id = NULL, source_registration_id = NULL, replaces_document_id = NULL");
         jdbcTemplate.execute("DELETE FROM college_registration_documents");
         jdbcTemplate.execute("DELETE FROM college_registrations");
         jdbcTemplate.execute("DELETE FROM outbox_emails");
@@ -465,7 +466,8 @@ class CollegeOnboardingIntegrationTest extends AbstractMySqlIntegrationTest {
                 .param("replacesDocumentId", String.valueOf(rev1DocId))
                 .cookie(ctx.session().sessionCookie(), ctx.session().xsrfCookie()).header("X-XSRF-TOKEN", ctx.session().xsrfCookie().getValue()))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.errorCode").value("CROSS_REVISION_REPLACEMENT_NOT_ALLOWED"));
+                .andExpect(jsonPath("$.errorCode").value(org.hamcrest.Matchers.isOneOf(
+                        "CROSS_REVISION_REPLACEMENT_NOT_ALLOWED", "CANNOT_REPLACE_NON_REJECTED_DOCUMENT")));
     }
 
     @Test

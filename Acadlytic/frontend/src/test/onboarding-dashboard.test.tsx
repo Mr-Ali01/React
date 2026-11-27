@@ -1491,5 +1491,77 @@ describe('Module 3.3 — College Admin Restricted Dashboard (Frontend)', () => {
 
       expect(isApplicationFrozenInReview(revisionWithTimestamp, frozenChecklist)).toBe(true);
     });
+
+    it('39. dynamic transition from PENDING to APPROVED while mounted executes all hooks unconditionally and navigates to /college/dashboard without React Hooks runtime error', async () => {
+      // 1. Initial State: PENDING, not active, locked
+      useAuthStore.setState({
+        isAuthenticated: true,
+        isLoading: false,
+        user: {
+          id: 101,
+          email: 'admin.northstar@example.com',
+          firstName: 'Northstar',
+          lastName: 'Admin',
+          role: 'COLLEGE_ADMIN',
+          collegeId: 3,
+          collegeCode: 'NISM-TEST-2026-01',
+          collegeApprovalStatus: 'PENDING',
+          collegeStatus: 'PENDING_VERIFICATION',
+          managementUnlocked: false,
+          emailVerified: true,
+        },
+      });
+
+      vi.spyOn(onboardingService, 'getMyApplication').mockResolvedValue(baseApplication);
+
+      renderWithProviders(
+        <MemoryRouter initialEntries={['/onboarding-status']}>
+          <Routes>
+            <Route path="/onboarding-status" element={<OnboardingStatusPage />} />
+            <Route
+              path="/college/dashboard"
+              element={<div data-testid="active-dashboard">Active Dashboard</div>}
+            />
+          </Routes>
+        </MemoryRouter>
+      );
+
+      // Verify initial pending mount renders without error
+      await waitFor(() => {
+        expect(screen.getByText('Draft — Pending Submission')).toBeInTheDocument();
+      });
+
+      // Spy on console.error to assert that NO React Hook order or early return error occurs
+      const consoleErrorSpy = vi.spyOn(console, 'error');
+
+      // 2. Simulate live approval event while component remains mounted!
+      useAuthStore.setState({
+        isAuthenticated: true,
+        isLoading: false,
+        user: {
+          id: 101,
+          email: 'admin.northstar@example.com',
+          firstName: 'Northstar',
+          lastName: 'Admin',
+          role: 'COLLEGE_ADMIN',
+          collegeId: 3,
+          collegeCode: 'NISM-TEST-2026-01',
+          collegeApprovalStatus: 'APPROVED',
+          collegeStatus: 'ACTIVE',
+          managementUnlocked: true,
+          emailVerified: true,
+        },
+      });
+
+      // 3. Verify no hook order error is logged
+      expect(consoleErrorSpy).not.toHaveBeenCalledWith(
+        expect.stringMatching(/Rendered fewer hooks than expected/i)
+      );
+
+      // 4. Verify smooth navigation to /college/dashboard
+      await waitFor(() => {
+        expect(screen.getByTestId('active-dashboard')).toBeInTheDocument();
+      });
+    });
   });
 });

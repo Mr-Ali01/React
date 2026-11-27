@@ -719,10 +719,10 @@ The project maintains an active, living record of architectural planning, phase 
 ## 13.1 Overall Project Status
 
 - **Current Development Phase:** Phase 03 — College Registration, Restricted Dashboard & Approval Workflow
-- **Current Module / Status:** Phase 03 Backend Modules (3.1A, 3.2, 3.3, 3.4 & 3.5) and Frontend Modules (3.1B, 3.2, 3.3, 3.4 & 3.5) are **APPROVED**. Complete Phase 03 backend verified on Testcontainers MySQL 8.0.36 (237/237 tests passing, schema V5). Phase 03 Frontend Modules verified via automated tests (168/168 tests passing across 13 test files; Module 3.1B: 26/26; Module 3.2: 43/43; Module 3.3: 26/26; Module 3.4: 26/26; Module 3.5: 32/32; strict `tsc -b` passed, and production Vite build passed; Module 3.5 explicitly approved by project owner on 2026-11-25; reference report v1.2). Phase 03 remains `IN_PROGRESS` (interactive browser/API verification against Docker services remains pending).
-- **Last Approved Module:** Phase 03, Module 3.5 — Approval Lifecycle, College Activation & Revisions (Frontend) (Explicitly APPROVED by project owner on 2026-11-25; reference report v1.2).
-- **Next Planned Phase / Module:** Phase 03 Manual End-to-End Browser & Live API Verification (Docker environment).
-- **Overall MVP Progress Status:** Phase 01/02 Implemented (Verification Pending); Phase 03 Backend Complete & APPROVED (Modules 3.1A, 3.2, 3.3, 3.4, and 3.5 Approved; 237/237 backend tests passing; schema V5 active); Phase 03 Frontend Complete & APPROVED (Modules 3.1B, 3.2, 3.3, 3.4, and 3.5 Approved; 168/168 full frontend tests passing across 13 test files; production build clean). Phase 03 overall remains `IN_PROGRESS` pending live manual browser/API verification against Docker services.
+- **Current Module / Status:** Phase 03 Baseline Backend Modules (3.1A, 3.2, 3.3, 3.4 & 3.5), Baseline Frontend Modules (3.1B, 3.2, 3.3, 3.4 & 3.5), Document-Level Review Database Schema & Flyway Migration Module 3.6A, Document-Level Review Backend Service & APIs Module 3.6B, Backend College Approval Integration & Lifecycle Module 3.6C, Super Admin Frontend Document Review Workflow (Unassigned), Document Review UI Redesign & College Admin Hooks Fix (Unassigned), and DEF-01 Targeted Remediation are **APPROVED**. Complete Phase 03 baseline backend verified on Testcontainers MySQL 8.0.36 (237/237 tests passing, schema V5 baseline). Module 3.6A database schema and Flyway V6 migration verified on Testcontainers MySQL 8.0.36 (17/17 migration test cases passing in `V6DocumentLevelReviewMigrationTest`, schema V6 active) and explicitly APPROVED by the project owner on 2026-11-26 (reference report `Module-3.6A-Implementation-Report-v1.3.md`). Module 3.6B backend service and APIs verified across the full backend suite (273/273 tests passing, 0 failures, 0 errors, 0 skipped, clean package build `target/acadlytic-backend-0.0.1-SNAPSHOT.jar`; 125 targeted review/onboarding/migration tests passing including 19/19 in `DocumentReviewIntegrationTest` on Testcontainers MySQL 8.0.36) and explicitly APPROVED by the project owner on 2026-11-26 (reference report `Module-3.6B-Implementation-Report-v1.1.md` — Consolidated Verification Edition). Module 3.6C backend college approval integration and lifecycle verified across full backend test suite (291/291 tests passing, 0 failures, 0 errors, 0 skipped, clean package build `BUILD SUCCESS`; 140 targeted Module 3.6 regression tests passing; 15/15 dedicated college approval integration tests in `CollegeApprovalIntegrationTest` on Testcontainers MySQL 8.0.36; replacement-document relationship and active-document selection verified correct with no production-code correction required) and explicitly APPROVED by the project owner on 2026-11-26 (reference reports `Module-3.6C-Implementation-Report-v1.0.md` and `Module-3.6C-Replacement-Verification-Report-v1.0.md`). Super Admin Frontend Document Review Workflow (Unassigned) verified via automated tests (212/212 full frontend tests passing across 13 test files; 58/58 review tests passing in `super-admin-review.test.tsx`; strict `tsc -b` passed, and production Vite build passed) and explicitly APPROVED by the project owner on 2026-11-26 (reference report `Module-03-Frontend-Document-Review-Implementation-Report-v1.1.md`; planning baseline `Module-03-Frontend-Document-Review-Planning-Report-v1.1.md`). Document Review UI Redesign & College Admin Hooks Fix (Unassigned) verified via automated tests (211/211 full frontend tests passing across 14 test files, strict `tsc` clean, production build clean) and manual browser Tests 1–4 completed successfully by user; explicitly APPROVED by project owner on 2026-11-27 (reference report `Module-03-Frontend-Document-Review-Implementation-Report-v1.0.md` / `v1.1`). Phase 03 DEF-01 Targeted Remediation (backend document verification gate moved to `APPROVE` branch, `REJECT` and `REQUEST_ACTION` unrestricted, frontend 409 error handling distinguishes `STALE_APPLICATION_VERSION`, `saveAndFlush` optimistic version fix, `DocumentReviewIntegrationTest` fixture stabilized) verified across full backend suite (296/296 passed on Testcontainers MySQL 8.0.36), full frontend suite (213/213 passed across 14 test files), and clean package build; Manual DEF-01 Test A PASSED (HTTP 409 `DOCUMENTS_REJECTED` with zero database/outbox mutations verified); explicitly APPROVED by project owner on 2026-11-27 (reference reports `Phase-03-Final-Backend-Verification-And-Test-Stabilization-Report-v1.0.md`, `DEF-01-Manual-API-Verification-Preflight-Report-v1.0.md`, `DEF-01-Test-A-Post-Request-Database-Invariant-Verification-Report-v1.0.md`, `DEF-01-Test-A-Outbox-Invariant-Evidence-Report-v1.0.md`). Phase 03 overall remains `IN_PROGRESS` (remaining live manual browser/API E2E verification against the live local application environment [Spring Boot backend, Vite frontend, and local MySQL] remains pending).
+- **Last Approved Module / Workflow:** Phase 03 DEF-01 Targeted Remediation and Document Review UI Redesign & College Admin Hooks Fix (Unassigned) (Explicitly APPROVED by project owner on 2026-11-27; preceded by Super Admin Frontend Document Review Workflow [Unassigned] approved on 2026-11-26 and Module 3.6C Backend College Approval Integration & Lifecycle approved on 2026-11-26).
+- **Next Planned Phase / Module:** Phase 03 — Remaining Manual Browser/API E2E Verification & Integration Hardening against the live local application environment (Spring Boot backend, Vite frontend, and local MySQL) (`PENDING`).
+- **Overall MVP Progress Status:** Phase 01/02 Implemented (Verification Pending); Phase 03 Baseline Backend Complete & APPROVED (Modules 3.1A, 3.2, 3.3, 3.4, and 3.5 Approved; 237/237 baseline backend tests passing); Phase 03 Baseline Frontend Complete & APPROVED (Modules 3.1B, 3.2, 3.3, 3.4, and 3.5 Approved; 200/200 baseline frontend tests passing across 13 test files); Phase 03 Document-Level Review Module 3.6A Database Schema & Flyway Migration APPROVED (Flyway schema V6 active; 17/17 Testcontainers migration tests passing; zero-artifact preflight callback verified; append-only audit schema verified); Phase 03 Document-Level Review Module 3.6B Backend Document Review Service & APIs APPROVED (273/273 full backend test suite passed; 125 targeted review/onboarding tests passed; clean package build verified; idempotency, reversals, hierarchical locking, zero parent mutation, duplicate replacement protection, and lifecycle freeze verified); Phase 03 Backend College Approval Integration & Lifecycle Module 3.6C APPROVED (291/291 full backend tests passing, 140 targeted Module 3.6 regression tests passing, 15/15 dedicated college approval tests passing; clean package build verified; replacement document active-set verification validated); Phase 03 Super Admin Frontend Document Review Workflow (Unassigned) APPROVED (58/58 review tests passing in `super-admin-review.test.tsx`; 212/212 full frontend tests passing across 13 test files; strict `tsc -b` and production Vite build clean; modal workflows, authoritative document version isolation, fail-closed data integrity warning badge & lockout, lifecycle freeze lockout with active history access, assessDocumentReadiness mandatory category enforcement, and error mapping delivered across 14 files); Phase 03 Document Review UI Redesign & College Admin Hooks Fix (Unassigned) APPROVED (single Review button per row, DocumentPreviewReviewModal, Direct Review provenance badge removed from UI, Rules of Hooks violation in OnboardingStatusPage fixed, post-approval navigation fixed, invalid 409 review-detail refetch eliminated; 211/211 frontend tests passing; manual browser Tests 1–4 passed); Phase 03 DEF-01 Targeted Remediation APPROVED (document verification gate moved to `case APPROVE ->`, `REQUEST_ACTION` and `REJECT` unrestricted, frontend 409 error disambiguation, `saveAndFlush` optimistic version fix; 296/296 full backend tests passing, 213/213 full frontend tests passing; Manual DEF-01 Test A PASSED with HTTP 409 `DOCUMENTS_REJECTED` and zero database/outbox mutations verified). Phase 03 overall remains `IN_PROGRESS`.
 
 ---
 
@@ -740,7 +740,7 @@ Status Definitions:
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Phase 01** | Project & Application Foundation | IMPLEMENTATION_COMPLETE | IMPLEMENTATION_COMPLETE | IMPLEMENTATION_COMPLETE | IMPLEMENTATION_COMPLETE | NOT_VERIFIED | VERIFICATION_PENDING |
 | **Phase 02** | Authentication & Authorization Foundation | IMPLEMENTATION_COMPLETE | IMPLEMENTATION_COMPLETE | IMPLEMENTATION_COMPLETE | IMPLEMENTATION_COMPLETE | VERIFICATION_PENDING | VERIFICATION_PENDING |
-| **Phase 03** | College Registration, Restricted Dashboard & Approval Workflow | APPROVED (3.1A, 3.2, 3.3, 3.4 & 3.5 Approved) | APPROVED (3.1B, 3.2, 3.3, 3.4 & 3.5 Approved) | IMPLEMENTATION_COMPLETE (V5) | IMPLEMENTATION_COMPLETE (237 Backend Tests Passed, Testcontainers MySQL; 168 Frontend Tests Passed, Vitest) | NOT_VERIFIED | IN_PROGRESS (Backend Approved; Frontend Modules 3.1B, 3.2, 3.3, 3.4 & 3.5 Approved; Manual Verification Pending) |
+| **Phase 03** | College Registration, Restricted Dashboard & Approval Workflow | APPROVED (3.1A, 3.2, 3.3, 3.4, 3.5, 3.6A, 3.6B, 3.6C & DEF-01 Remediation Approved) | APPROVED (3.1B, 3.2, 3.3, 3.4 & 3.5 Approved; Frontend Document Review Workflow Approved [Unassigned]; Document Review UI & Hooks Fix Approved [Unassigned]; DEF-01 Frontend 409 Fix Approved) | APPROVED (V6 Schema & Migration, Module 3.6A Approved) | IMPLEMENTATION_COMPLETE (296/296 Full Backend Tests Passed, Testcontainers MySQL; 213/213 Full Frontend Tests Passed across 14 test files, Vitest) | IN_PROGRESS (Manual Browser Tests 1–4 Passed; Manual DEF-01 Test A Passed; Remaining Manual E2E Scenarios Pending) | IN_PROGRESS (Baseline Backend & Frontend Modules 3.1A–3.5 Approved; Modules 3.6A, 3.6B & 3.6C Approved; Document Review UI [Unassigned] Approved; DEF-01 Remediation Approved; Remaining Manual Verification Pending) |
 | **Phase 04** | College Management (Tenant Management & Profile) | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED |
 | **Phase 05** | Academic Structure (Programs, Semesters, Subjects, Credits) | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED |
 | **Phase 06** | Student Records Management (Records & Enrollment) | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED |
@@ -765,8 +765,8 @@ Status Definitions:
 
 > [!IMPORTANT]
 > **Phase 03 Status Distinction:**  
-> **All Phase 03 Backend Modules (3.1A, 3.2, 3.3, 3.4 & 3.5) and Frontend Modules (3.1B, 3.2, 3.3, 3.4 & 3.5) APPROVED; Live Manual Browser/API Verification PENDING.**  
-> All five backend modules of Phase 03—Module 3.1A (Backend Registration Foundation), Module 3.2 (Email Verification & College Admin Verification Lifecycle), Module 3.3 (Restricted Dashboard, Document Management & Review Submission), Module 3.4 (Super Admin Approval Queue & Review Workflow), and Module 3.5 (Approval Lifecycle, College Activation & Revisions)—have been completed, verified on Testcontainers MySQL 8.0.36 (237/237 tests passing, Flyway schema V5), and explicitly approved by the user. All five frontend modules of Phase 03—Module 3.1B (Public College Registration Portal), Module 3.2 (Email Verification & Account Activation), Module 3.3 (College Admin Restricted Dashboard, Document Management & Review Submission), Module 3.4 (Super Admin Approval Queue & Review Workflow), and Module 3.5 (Approval Lifecycle, College Activation & Revisions)—have been implemented, verified via 168/168 automated tests across 13 test files, strict `tsc -b` compilation passed with 0 errors, and Vite production build passed, with Module 3.5 explicitly approved by the project owner on 2026-11-25 (reference report v1.2). Phase 03 overall remains `IN_PROGRESS` until live manual browser/API verification against Docker services is completed.
+> **All Phase 03 Baseline Backend Modules (3.1A, 3.2, 3.3, 3.4 & 3.5), Baseline Frontend Modules (3.1B, 3.2, 3.3, 3.4 & 3.5), Document Review Database Schema & Migration (Module 3.6A), Backend Document Review Service & APIs (Module 3.6B), Backend College Approval Integration & Lifecycle (Module 3.6C), Super Admin Frontend Document Review Workflow (Unassigned), Document Review UI Redesign & College Admin Hooks Fix (Unassigned), and DEF-01 Targeted Remediation APPROVED; Remaining Live Manual Browser/API Verification PENDING.**  
+> All five baseline backend modules of Phase 03—Module 3.1A (Backend Registration Foundation), Module 3.2 (Email Verification & College Admin Verification Lifecycle), Module 3.3 (Restricted Dashboard, Document Management & Review Submission), Module 3.4 (Super Admin Approval Queue & Review Workflow), and Module 3.5 (Approval Lifecycle, College Activation & Revisions)—have been completed, verified on Testcontainers MySQL 8.0.36 (237/237 tests passing, Flyway schema V5), and explicitly approved. All five baseline frontend modules of Phase 03 (3.1B, 3.2, 3.3, 3.4, and 3.5) have been implemented, verified via automated tests (200/200 tests passing across 13 test files; strict `tsc -b` passed, and production build passed), and explicitly approved. On 2026-11-26, the Project Owner explicitly APPROVED Module 3.6A (Document-Level Review Database Schema & Flyway Migration; reference report `Module-3.6A-Implementation-Report-v1.3.md`) activating Flyway schema V6 verified on Testcontainers MySQL 8.0.36 (17/17 migration test cases passing in `V6DocumentLevelReviewMigrationTest`). On 2026-11-26, following review of consolidated verification report v1.1, the Project Owner explicitly APPROVED Module 3.6B (Backend Document Review Service & APIs; reference report `Module-3.6B-Implementation-Report-v1.1.md`) verified on full backend test suite (273/273 tests passing). On 2026-11-26, the Project Owner explicitly APPROVED Module 3.6C (Backend College Approval Integration & Lifecycle; reference reports `Module-3.6C-Implementation-Report-v1.0.md` and `Module-3.6C-Replacement-Verification-Report-v1.0.md`) verified on full backend test suite (291/291 tests passing, 0 failures, 0 errors, 0 skipped, clean package build `BUILD SUCCESS`; 140 targeted Module 3.6 regression tests passing; 15/15 dedicated college approval integration tests in `CollegeApprovalIntegrationTest` on Testcontainers MySQL 8.0.36; replacement-document relationship and active-document selection verified correct with no production-code correction required). On 2026-11-26, the Project Owner explicitly APPROVED the Super Admin Frontend Document Review Workflow (Unassigned; reference report `Module-03-Frontend-Document-Review-Implementation-Report-v1.1.md`; planning baseline `Module-03-Frontend-Document-Review-Planning-Report-v1.1.md`) verified on full frontend test suite (212/212 tests passing across 13 test files, 58/58 review tests passing in `super-admin-review.test.tsx`, strict `tsc -b` clean, production Vite build clean; 14 total files affected). On 2026-11-27, the Project Owner explicitly APPROVED the Document Review UI Redesign & College Admin Hooks Fix (Unassigned; reference report `Module-03-Frontend-Document-Review-Implementation-Report-v1.0.md` / `v1.1`) delivering single Review action button per row, DocumentPreviewReviewModal, Direct Review provenance badge removal from UI, OnboardingStatusPage Rules of Hooks violation resolution, post-approval navigation correction, and elimination of invalid 409 review-detail refetch, verified via 211/211 automated tests and manual browser Tests 1–4. On 2026-11-27, the Project Owner explicitly APPROVED Phase 03 DEF-01 Targeted Remediation (reference reports `Phase-03-Final-Backend-Verification-And-Test-Stabilization-Report-v1.0.md` and `DEF-01-Test-A-Post-Request-Database-Invariant-Verification-Report-v1.0.md`) relocating the document verification gate into `case APPROVE ->`, keeping `REJECT` and `REQUEST_ACTION` unrestricted, disambiguating frontend 409 error handling for `STALE_APPLICATION_VERSION`, delivering `saveAndFlush` optimistic version synchronization, and stabilizing `DocumentReviewIntegrationTest`, verified across 296/296 backend tests, 213/213 frontend tests, clean package build, and Manual DEF-01 Test A returning HTTP 409 `DOCUMENTS_REJECTED` with zero database or outbox mutations. Phase 03 overall remains `IN_PROGRESS` until remaining live manual browser/API E2E verification against the live local application environment (Spring Boot backend, Vite frontend, and local MySQL) is completed.
 
 ---
 
@@ -834,6 +834,18 @@ Status Definitions:
       - Pessimistic write lock (`findByIdWithLock`) on `College` for archival operations.
     - Configuration: `CleanupProperties` (`acadlytic.cleanup.*` specifying batch sizes, abandoned retention days, and permanent rejection retention days).
     - Audit Events: `COLLEGE_ACTIVATED`, `COLLEGE_PERMANENTLY_REJECTED`, `COLLEGE_ADMIN_DEACTIVATED`, `ABANDONED_REGISTRATION_ARCHIVED`, `PERMANENTLY_REJECTED_COLLEGE_ARCHIVED`.
+  - *Phase 03 Module 3.6A Implementation (Document-Level Review Database Schema & Flyway Migration):*
+    - Enums & Entities: `DocumentVerificationStatus` (`PENDING`, `ACCEPTED`, `REJECTED`), `DocumentVerificationProvenance` (`NOT_REVIEWED`, `DIRECT_REVIEW`, `LEGACY_COLLEGE_APPROVAL`), and updated entity `CollegeRegistrationDocument` mapping verification status, notes, reviewer ID, timestamp, and provenance.
+    - Preflight Callback: `V6DocumentReviewMigrationPreflightCallback` (`com.acadlytic.modules.colleges.migration`), a Spring `@Component` implementing Flyway `Callback` (`BEFORE_EACH_MIGRATE` for target version 6) ensuring zero-artifact preflight validation against the exact 8-tuple whitelist.
+    - Audit Schema: Append-only table `college_document_reviews` with composite foreign key constraint `fk_cdr_document_ownership` referencing `college_registration_documents(id, college_id, registration_id)` and MySQL triggers `trg_cdr_prevent_update` and `trg_cdr_prevent_delete` preventing UPDATE and DELETE mutations.
+    - Migration Tests: `V6DocumentLevelReviewMigrationTest` (17 test cases on Testcontainers MySQL 8.0.36 validating schema DDL, exact 8-tuple whitelist backfill, NULL reviewer/timestamp preservation for legacy approval, composite foreign key integrity, append-only triggers, runtime user privilege isolation, zero-routine persistence on failure, and `flyway.repair()` recovery flow).
+  - *Phase 03 Module 3.6B Implementation (Backend Document Review Service & APIs):*
+    - Enums & DTOs: `DocumentReviewAction` (`ACCEPT`, `REJECT`), `DocumentReviewDecisionRequest` (`action`, `reviewNotes`, `rejectionReason`, `expectedDocumentVersion`), `DocumentReviewDecisionResponse`, `DocumentReviewHistoryItemResponse`, and updated `DocumentResponse` enriched with document verification fields.
+    - Entities & Repositories: JPA entity `CollegeDocumentReview`, repository `CollegeDocumentReviewRepository` with deterministic reverse-chronological ordering query (`findByCollegeIdAndDocumentIdOrderByReviewedAtDescCreatedAtDesc`), and `CollegeRegistrationDocumentRepository` with pessimistic write lock query `findByIdAndCollegeIdWithLock`.
+    - Review Service & Controller: `CollegeReviewService` implementing `recordDocumentDecision`, `executeRecordDocumentDecision`, and `getDocumentReviewHistory`. Enforces hierarchical locking (parent `College` row locked first, target `CollegeRegistrationDocument` row locked second), bounded retries with `TransactionTemplate` using `PROPAGATION_REQUIRES_NEW` (up to 3 attempts with exponential backoff), zero parent `College.version` mutation, optimistic concurrency version checking, and idempotency (matching rejection reason on retry returns 200 without version increment or duplicate audit entries; mismatched reason or action on stale version rejected with `409 STALE_DOCUMENT_VERSION`). `CollegeReviewController` exposing `POST /api/v1/super-admin/colleges/reviews/{collegeId}/documents/{documentId}/decision` and `GET /api/v1/super-admin/colleges/reviews/{collegeId}/documents/{documentId}/history`.
+    - Replacement Document Rules & Resubmission: `CollegeOnboardingService` enforcing duplicate replacement protection in draft revisions (`409 REPLACEMENT_ALREADY_EXISTS` and DB unique constraint `uq_crd_registration_replacement`), cross-revision replacement targeting rejected documents from immediately preceding submitted revision ($v-1$), category match enforcement, carry-forward exclusion of rejected documents, and restoring `college.setApprovalStatus(PENDING)` upon resubmission.
+    - Audit Events: `COLLEGE_REGISTRATION_DOC_ACCEPTED`, `COLLEGE_REGISTRATION_DOC_REJECTED`.
+    - Integration Tests: `DocumentReviewIntegrationTest` (19 test cases on Testcontainers MySQL 8.0.36 validating authentication, authorization, cross-college 404, cross-revision 409, valid ACCEPT, valid REJECT, rejection reason constraints, optimistic concurrency stale version 409, idempotent retry with matching status/reason, rejection reason mismatch 409, status reversals, parent-locked concurrency serialization, duplicate replacement prevention, cross-revision replacement rules, lifecycle freeze across APPROVE/REQUEST_ACTION/REJECT, resubmission unfreezing, append-only triggers, history API, and detail enrichment).
 - **`com.acadlytic.modules.outbox`**:
   - *Entities:* `OutboxEmail`, `OutboxStatus` (`PENDING`, `SENT`, `FAILED`).
   - *Repository:* `OutboxEmailRepository`.
@@ -850,6 +862,7 @@ Status Definitions:
 - `V3__auth_core_schema.sql`: Added `password_reset_tokens`, `outbox_emails`, college onboarding fields (`onboarding_status`, `rejection_reason`), user failed attempt counters, lockout timestamps, and audit event indexes.
 - `V4__college_registration_schema.sql`: Added `college_registrations` table (versioned application revisions, status checks, uniqueness on `(college_id, version_number)`), `college_registration_documents` table (verification documents, checksums, categories), and altered `colleges` adding `current_registration_id`, `resubmission_count`, `action_required_count`.
 - `V5__crd_file_purged_at.sql`: Added `file_purged_at TIMESTAMP NULL` column to `college_registration_documents` and index `idx_crd_file_purged_at (file_purged_at)` for durable tracking of physical file deletions without deleting document database rows.
+- `V6__document_level_review.sql`: Added columns `verification_status` (`VARCHAR(32)` defaulting to `'PENDING'`), `verification_notes` (`VARCHAR(1000)` NULL), `verified_by_user_id` (`BIGINT` FK to `users`), `verified_at` (`TIMESTAMP(6)` NULL), and `verification_provenance` (`VARCHAR(32)` defaulting to `'NOT_REVIEWED'`) to `college_registration_documents`. Created indexes `idx_crd_verification_status`, `idx_crd_review_lookup`, and composite unique key `uq_crd_composite_owner (id, college_id, registration_id)`. Created append-only audit table `college_document_reviews` with composite FK `fk_cdr_document_ownership` and MySQL triggers `trg_cdr_prevent_update` / `trg_cdr_prevent_delete` raising `SIGNAL SQLSTATE '45000'`. Backfilled legacy rows using exact 8-tuple `(college.approval_status, registration.status)` whitelist mapping `('APPROVED', 'APPROVED')` to `('ACCEPTED', 'LEGACY_COLLEGE_APPROVAL')` with NULL reviewer/timestamp, and remaining 7 valid tuples to `('PENDING', 'NOT_REVIEWED')`. Paired with zero-artifact Flyway Java preflight callback (`V6DocumentReviewMigrationPreflightCallback`).
 
 ### Security Implementation
 - Stateful session management via Spring Session JDBC (`ACADLYTIC_SID` HttpOnly, SameSite=Lax, Secure in prod).
@@ -888,7 +901,7 @@ Status Definitions:
 
 ## 13.4 Frontend Progress Tracker
 
-### Implemented Pages & UI Components (Phase 01, Phase 02, Phase 03 Module 3.1B, Module 3.2, Module 3.3 & Module 3.4)
+### Implemented Pages & UI Components (Phase 01, Phase 02, Phase 03 Module 3.1B, Module 3.2, Module 3.3, Module 3.4, Module 3.5 & Super Admin Frontend Document Review Workflow)
 - **Pages:**
   - `LoginPage` (`src/pages/auth/LoginPage.tsx`): Email/password credentials entry, failed attempt lockout display, CSRF bootstrap, redirect to dashboard or original target URL.
   - `ForgotPasswordPage` (`src/pages/auth/ForgotPasswordPage.tsx`): Password reset request with generic non-enumerating confirmation message.
@@ -899,7 +912,7 @@ Status Definitions:
   - `RegisterCollegePage` (`src/pages/auth/RegisterCollegePage.tsx`): Interactive self-service college registration intake wizard toggling between `RegistrationForm` and `RegistrationSuccessView`. *Phase 03 Module 3.1B APPROVED.*
   - `VerifyEmailPage` (`src/pages/auth/VerifyEmailPage.tsx`): Dedicated email token consumption view extracting raw token from query params, immediately stripping the token from the browser address bar before dispatching the redemption API request while preserving unrelated query params and router location state, rendering responsive status states (`VERIFYING`, `SUCCESS`, `INVALID_OR_EXPIRED`, `UNAUTHENTICATED`, `RATE_LIMITED`, `ERROR`). *Phase 03 Module 3.2 APPROVED.*
   - `SuperAdminReviewQueuePage` (`src/pages/admin/SuperAdminReviewQueuePage.tsx`): Super Admin college verification approval queue featuring search, client-side date range validation (`from <= to`) with ISO-8601 UTC boundary serialization, sort ordering, pagination reset on filter changes, and responsive table. *Phase 03 Module 3.4 APPROVED.*
-  - `CollegeReviewDetailPage` (`src/pages/admin/CollegeReviewDetailPage.tsx`): Comprehensive institutional review dossier displaying administrative credentials, profile details, active verification documents with SHA-256 checksums, decision history audit trail, optimistic version concurrency conflict recovery (`409 STALE_APPLICATION_VERSION`), and decision modal workflows. *Phase 03 Module 3.4 APPROVED.*
+  - `CollegeReviewDetailPage` (`src/pages/admin/CollegeReviewDetailPage.tsx`): Comprehensive institutional review dossier displaying administrative credentials, profile details, active verification documents with SHA-256 checksums, decision history audit trail, optimistic version concurrency conflict recovery (`409 STALE_APPLICATION_VERSION`), decision modal workflows, document-level review modal workflows (`DocumentReviewDecisionModal`), document review audit history inspection (`DocumentReviewHistoryModal`), document status and provenance badges (`DocumentStatusBadge`), readiness summary, and error mapping for document gates. *Phase 03 Module 3.4 & Super Admin Frontend Document Review Workflow APPROVED.*
   - `CollegeAdminDashboardPage`, `SuperAdminDashboardPage` (Minimal landing shells pending respective phases).
 - **Module 3.1B Registration Components (`src/components/registration/`):**
   - `RegistrationForm`: 16-control structured intake form across 3 sections (Institution Details, Campus Address & Location, Primary Administrator Account) with responsive layout (`sm:max-w-3xl` in `AuthLayout`), field-level server error mapping, dynamic rate-limit countdown, and CSRF token retry handling.
@@ -920,19 +933,22 @@ Status Definitions:
   - `SubmitApplicationModal`: Confirmation modal detailing irrevocable application freeze and checklist verification before triggering review submission.
   - `RevisionHistoryDrawer`: Timeline modal dialog presenting the historical revision audit trail ($v_1, v_2\dots$) with outcomes and reviewer notes.
   - `index.ts`: Barrel export cleanly encapsulating all 9 onboarding domain components.
-- **Module 3.4 Super Admin Review Components (`src/components/review/`):**
+- **Module 3.4 & Document Review Super Admin Review Components (`src/components/review/`):**
   - `CollegeReviewHeader`: Header displaying college legal name, approval status badge, code, revision number, submission timestamp, concurrency version lock, and embedded `ResubmissionAllowanceBadge`.
   - `ReviewAdminUserCard`: Proposed administrator card displaying full name, verified email badge, contact phone, and registration timestamp.
   - `CollegeProfileReviewCard`: Institutional profile card detailing legal entity name, affiliation, registered campus address, phone, and sanitized external website link.
   - `ResubmissionAllowanceBadge`: Badge tracking submitted correction revisions ($v_1=0$ initial vs $v_2..v_4$ corrections), action cycles ($0..10$), and final revision / action ceiling warnings.
-  - `ReviewDocumentListCard`: Table of active compliance documents with category badges, formatted file sizes, monospaced SHA-256 checksum snippets with full tooltip hashes, and streaming download trigger.
+  - `ReviewDocumentListCard`: Table of active compliance documents with category badges, formatted file sizes, monospaced SHA-256 checksum snippets with full tooltip hashes, streaming download trigger, document status badges (`DocumentStatusBadge`), provenance indicators, replacement lineage notes, fail-closed data integrity warning badge for missing version, and actions ("Review", "View History").
+  - `DocumentStatusBadge`: Category/status badge displaying document verification state (`PENDING`, `ACCEPTED`, `REJECTED`, `NOT_REVIEWED`) and provenance (`CARRIED_FORWARD`, `LEGACY_COLLEGE_APPROVAL`), plus fail-closed missing version warning badge with review lockout.
+  - `DocumentReviewDecisionModal`: Accessible modal dialog for document-level review decisions (`ACCEPT` or `REJECT` with mandatory reason 10–1000 chars), strictly bound to authoritative `doc.version` (supporting version 0 as valid initial upload), with concurrency conflict recovery and duplicate submit prevention.
+  - `DocumentReviewHistoryModal`: Modal dialog displaying chronological document decision audit history with status badges, reviewer emails, timestamps, and notes/reasons across all review lifecycle states.
   - `SubmittedRevisionCard`: Presentational snapshot card for specific revision details.
   - `RevisionHistoryTimelineCard`: Audit timeline displaying chronological past review decisions, reviewer admin emails, timestamps, decision badges, and constructive notes / rejection reasons.
-  - `ReviewDecisionPanel`: Prominent action toolbar with "Approve", "Request Action" (disabled if action count $\ge 10$), and "Reject" (annotated for final revisions) buttons. Disables all decisions if status is not `PENDING`.
-  - `ReviewDecisionModal`: Accessible modal dialog for review decision confirmation and input with React Hook Form + Zod validation, `noValidate` flag, concurrency version locking, guidance callouts, double-submission prevention, and explicit 409 conflict handling.
+  - `ReviewDecisionPanel`: Prominent action toolbar with "Approve", "Request Action" (disabled if action count $\ge 10$), and "Reject" (annotated for final revisions) buttons. Disables all decisions if status is not `PENDING`. Integrated with `assessDocumentReadiness` to enforce mandatory categories (`UNIVERSITY_AFFILIATION_CERTIFICATE` and `AUTHORIZED_SIGNATORY_ID`) and require all active uploaded documents to be `ACCEPTED` prior to application approval.
+  - `ReviewDecisionModal`: Accessible modal dialog for review decision confirmation and input with React Hook Form + Zod validation, `noValidate` flag, concurrency version locking, guidance callouts, double-submission prevention, explicit 409 conflict handling, and backend error code mapping (`REQUIRED_DOCUMENTS_MISSING`, `DOCUMENTS_REJECTED`, `DOCUMENTS_NOT_VERIFIED`).
   - `ReviewQueueFilterBar`: Accessible search and filter bar with search input, HTML5 date pickers (`htmlFor`/`id` paired), sorting dropdown, date range validation error banner, and clear filters reset button.
   - `ReviewQueueTable`: Responsive data table rendering pending applications, college code, revision badge, administrator contact, submission timestamp, document count badge, empty state, and review navigation button.
-  - `index.ts`: Clean barrel export encapsulating all 11 domain review components and formatting helpers.
+  - `index.ts`: Clean barrel export encapsulating all domain review components, badges, modals, and formatting helpers.
 - **Component Primitives (`src/components/ui/`):**
   - Accessible `Button`, `Card`, `Input`, `Select`, `Textarea`, `Modal`, `Alert`, `Table`, `LoadingSpinner`, `ErrorState`.
 - **Layouts & Navigation (`src/layouts/`, `src/components/navigation/`):**
@@ -948,22 +964,23 @@ Status Definitions:
 
 ### State Management & API Integration
 - **Client State (Zustand 5):** `useAuthStore` (tracks `user`, `isAuthenticated`, `isLoading`), `useAppStore` (tracks layout sidebar state). Strictly no Redux Toolkit.
-- **Server State (TanStack Query 5):** Centralized `queryKeys` factory (including `colleges.registration`, `auth.verifyEmail`, `auth.resendVerification`, `onboarding.myApplication`, `onboarding.activeDocuments`, `reviews.queueRoot`, `reviews.queue`, `reviews.detail`), `useCurrentUser` (syncs `GET /api/v1/auth/me`), `useLogin`, `useLogout`, `useHealth`, `useCollegeRegistration`, `useVerifyEmail`, `useResendVerification`, `useMyApplication`, `useCreateCorrectionDraft`, `useUpdateDraftProfile`, `useUploadDocument`, `useDeleteDocument`, `useSubmitApplication`, `useReviewQueue` (placeholderData: keepPreviousData), `useReviewDetail`, `useRecordDecision` (invalidates `queryKeys.reviews.queueRoot()` and `queryKeys.reviews.detail(collegeId)`), `useDownloadReviewDocument`.
+- **Server State (TanStack Query 5):** Centralized `queryKeys` factory (including `colleges.registration`, `auth.verifyEmail`, `auth.resendVerification`, `onboarding.myApplication`, `onboarding.activeDocuments`, `reviews.queueRoot`, `reviews.queue`, `reviews.detail`, `reviews.documentHistory`), `useCurrentUser` (syncs `GET /api/v1/auth/me`), `useLogin`, `useLogout`, `useHealth`, `useCollegeRegistration`, `useVerifyEmail`, `useResendVerification`, `useMyApplication`, `useCreateCorrectionDraft`, `useUpdateDraftProfile`, `useUploadDocument`, `useDeleteDocument`, `useSubmitApplication`, `useReviewQueue` (placeholderData: keepPreviousData), `useReviewDetail`, `useRecordDecision` (invalidates `queryKeys.reviews.queueRoot()` and `queryKeys.reviews.detail(collegeId)`), `useDownloadReviewDocument`, `useRecordDocumentDecision` (invalidates `detail` and `documentHistory`), `useDocumentReviewHistory`.
 - **HTTP Client (Axios) & Domain Services:** `src/services/api.ts` configured with `withCredentials: true`, automatic extraction of `XSRF-TOKEN` cookie into `X-XSRF-TOKEN` header, and transparent single-retry on `403 CSRF_TOKEN_INVALID`. Strictly no JWT or localStorage auth tokens. Enhanced with:
   - `ApiError`: Typed error carrying `errorCode`, `status`, field `errors`, `data`, and `retryAfter?: number`.
   - `parseRetryAfter`: Centralized, strict parser enforcing `/^\d+$/` regex matching, strictly rejecting non-integer prefixes (`"30abc"`), zeroes, negatives, and non-numeric values.
   - `isApiError`: Hardened type guard validating genuine `ApiError` instances and strict structural properties for cross-boundary objects, rejecting arbitrary objects containing only `errorCode`.
   - `onboardingService.ts`: Full API client for all 8 restricted onboarding endpoints, with multipart boundary handling (`{ headers: { 'Content-Type': undefined } }`) and safe delayed blob URL cleanup (`setTimeout(revokeObjectURL, 60000)`).
-  - `reviewService.ts`: Full API client for all 4 Super Admin review endpoints (`GET /reviews`, `GET /reviews/{id}`, `GET /reviews/{id}/documents/{docId}`, `POST /reviews/{id}/decision`) with safe delayed blob URL cleanup (`setTimeout(revokeObjectURL, 60000)`).
+  - `reviewService.ts`: Full API client for Super Admin review endpoints (queue, application detail, document download, decision submission, document decision submission `POST /colleges/reviews/{collegeId}/documents/{documentId}/decision`, and document history `GET /colleges/reviews/{collegeId}/documents/{documentId}/history`) with safe delayed blob URL cleanup (`setTimeout(revokeObjectURL, 60000)`).
 - **Form Validation & Schemas:**
   - `registerCollegeSchema`: React Hook Form + Zod validation schemas enforcing pre-validation trimming, college code normalization to uppercase, admin email normalization to lowercase, optional field nullification, and backend-identical password policy.
   - `verificationSchema.ts` (`src/schemas/verificationSchema.ts`): Zod schema defining `verifyEmailSchema` to validate token presence, length (20–255 characters), trimming, and non-empty string constraints.
   - `onboardingSchema.ts` (`src/schemas/onboardingSchema.ts`): Zod schemas defining `updateApplicationSchema`, `documentUploadSchema`, and `probeFileMagicBytes`.
-  - `reviewSchema.ts` (`src/schemas/reviewSchema.ts`): Zod schemas defining `reviewDecisionSchema` (enforcing action constraints, required review notes for `REQUEST_ACTION` $\ge 10$ chars, required rejection reason for `REJECT` $\ge 10$ chars, and `expectedVersion`) and `reviewQueueFilterSchema` (search $\le 100$ chars, date range `from <= to`).
+  - `reviewSchema.ts` (`src/schemas/reviewSchema.ts`): Zod schemas defining `reviewDecisionSchema` (enforcing action constraints, required review notes for `REQUEST_ACTION` $\ge 10$ chars, required rejection reason for `REJECT` $\ge 10$ chars, and `expectedVersion`), `reviewQueueFilterSchema` (search $\le 100$ chars, date range `from <= to`), and `documentReviewDecisionSchema` (validating action `ACCEPT` or `REJECT`, rejection reason $\ge 10$ and $\le 1000$ chars, optional review notes $\le 1000$ chars, and integer `expectedDocumentVersion >= 0`).
 
 ### Automated Tests & Quality Checks
-- **Vitest Unit & Component Tests: 136 Passed, 0 Failed across 12 test files.**
-  - `src/test/super-admin-review.test.tsx` (26 tests): PASSED (covers review queue rendering with items, empty state, search query dispatch, date range validation and ISO-8601 instant serialization, sort order dispatch, filter reset, resubmission semantics v1 vs v4 final, full review detail dossier rendering, SHA-256 checksum monospaced snippet and tooltip, streaming document download trigger, review audit timeline, APPROVE guidance and version locking, APPROVE submission with `expectedVersion`, REQUEST_ACTION validation requiring notes $\ge 10$ chars, REQUEST_ACTION submission with notes and `expectedVersion`, REQUEST_ACTION disabled when `actionRequiredCount >= 10`, REJECT validation requiring rejectionReason $\ge 10$ chars, REJECT submission with reason and `expectedVersion`, permanent rejection warning on revision v4, 409 `STALE_APPLICATION_VERSION` recovery without silent retry, 409 `APPLICATION_NOT_AWAITING_REVIEW` feedback, cache invalidation of `queueRoot` and detail, disabled decision actions when college is already APPROVED, malformed `collegeId` handling, 404/500 fetch error handling, and queue-to-detail navigation).
+- **Vitest Unit & Component Tests: 212 Passed, 0 Failed across 13 test files.**
+  - `src/test/super-admin-review.test.tsx` (58 tests): PASSED (covers review queue rendering with items, empty state, search query dispatch, date range validation and ISO-8601 instant serialization, sort order dispatch, filter reset, resubmission semantics v1 vs v4 final, full review detail dossier rendering, SHA-256 checksum monospaced snippet and tooltip, streaming document download trigger, review audit timeline, APPROVE guidance and version locking, APPROVE submission with `expectedVersion`, REQUEST_ACTION validation requiring notes $\ge 10$ chars, REQUEST_ACTION submission with notes and `expectedVersion`, REQUEST_ACTION disabled when `actionRequiredCount >= 10`, REJECT validation requiring rejectionReason $\ge 10$ chars, REJECT submission with reason and `expectedVersion`, permanent rejection warning on revision v4, 409 `STALE_APPLICATION_VERSION` recovery without silent retry, 409 `APPLICATION_NOT_AWAITING_REVIEW` feedback, cache invalidation of `queueRoot` and detail, disabled decision actions when college is already APPROVED, malformed `collegeId` handling, 404/500 fetch error handling, and queue-to-detail navigation; plus 12 dedicated document-review workflow tests: document status badges, provenance badges, accept action with version binding, reject modal validation 10–1000 chars, version 0 handling, fail-closed data integrity lockout, 409 stale conflict recovery, lifecycle freeze, history modal across states, replacement document indicators, readiness assessment rules, and backend error code mapping).
+  - `src/test/college-activation.test.tsx` (32 tests): PASSED
   - `src/test/onboarding-dashboard.test.tsx` (26 tests): PASSED
   - `src/test/email-verification.test.tsx` (43 tests): PASSED
   - `src/test/register-college.test.tsx` (26 tests): PASSED
@@ -977,7 +994,7 @@ Status Definitions:
   - `src/test/login-success.test.tsx` (1 test): PASSED
 - **Static Analysis & Build:**
   - TypeScript compilation (`tsc -b`): PASSED (0 errors under strict mode).
-  - Production build (`npm run build`): PASSED (`tsc && vite build`, 1,777 modules transformed in 9.92s, clean production bundle in `dist/`).
+  - Production build (`npm run build`): PASSED (`vite build`, 1,786 modules transformed in 27.54s, clean production bundle in `dist/`).
 
 ### Outstanding Frontend Work
 - Perform manual interactive verification in browser against a live running backend.
@@ -990,15 +1007,21 @@ Status Definitions:
 | Verification Item | Scope / Target | Status | Actual Evidence & Notes |
 | :--- | :--- | :--- | :--- |
 | **Backend Unit Tests** | `com.acadlytic` unit suite | **PASSED** | 122 unit tests passed cleanly across all modules (including 15 in `CollegeLifecycleServiceUnitTest`, 3 in `CollegeCleanupSchedulerUnitTest`, 16 in `CollegeReviewControllerUnitTest`, 17 in `CollegeReviewServiceUnitTest`, 15 in `CollegeOnboardingServiceUnitTest`, 9 in `DocumentValidatorUnitTest`, 7 in `LocalFileSystemDocumentStorageServiceUnitTest`, 4 in `DocumentStorageCompensationUnitTest`, and auth/outbox unit tests). |
-| **Backend Integration Tests** | Testcontainers MySQL suite | **PASSED** | 115 integration tests passed across all modules on Testcontainers MySQL 8.0.36 (including 23 in `CollegeLifecycleIntegrationTest`, 21 in `CollegeReviewIntegrationTest`, 10 in `CollegeOnboardingIntegrationTest`, 11 in `EmailVerificationIntegrationTest`, 5 in `CollegeRegistrationIntegrationTest`, and baseline Phase 01/02 integration tests). **237/237 total backend tests passing, 0 failures, 0 errors, 0 skipped.** |
-| **Frontend Tests** | Vitest component & hook suite | **PASSED** | 168 tests passed across 13 test files (including 32 in `college-activation.test.tsx`, 26 in `super-admin-review.test.tsx`, 26 in `onboarding-dashboard.test.tsx`, 43 in `email-verification.test.tsx`, 26 in `register-college.test.tsx`, and 15 in baseline Phase 01/02 suites). |
-| **Backend Build** | `mvn compile` | **PASSED** | Compiles cleanly on Java 21 / Spring Boot 3.3.4. |
-| **Frontend Build** | `npm run build` | **PASSED** | Vite transforms 1,783 modules cleanly with 0 type errors in 8.50s. |
+| **Backend Integration Tests** | Testcontainers MySQL suite | **PASSED** | **296/296 total backend tests passed** across all test suites on Testcontainers MySQL 8.0.36 with zero failures, zero errors, and zero skipped tests. Includes 140 targeted Module 3.6 regression tests across 6 test classes (15 in `CollegeApprovalIntegrationTest`, 21 in `CollegeReviewIntegrationTest`, 23 in `CollegeLifecycleIntegrationTest`, 40 in `CollegeOnboardingIntegrationTest`, 19 in `DocumentReviewIntegrationTest`, and 27 in `V6DocumentLevelReviewMigrationTest`). |
+| **Frontend Tests** | Vitest component & hook suite | **PASSED** | 213 tests passed across 14 test files (including 32 in `college-activation.test.tsx`, 45 in `super-admin-review.test.tsx`, 24 in `onboarding-dashboard.test.tsx`, 43 in `email-verification.test.tsx`, 26 in `register-college.test.tsx`, 8 in `auth-form-state-persistence.test.tsx`, and 35 in baseline auth/guard suites). |
+| **Backend Build** | `mvn clean package -DskipTests` | **PASSED** | Cleanly compiles 127 main source files and 36 test files on Java 21 / Spring Boot 3.3.4; packages executable archive `target/acadlytic-backend-0.0.1-SNAPSHOT.jar` in 22.5s. |
+| **Frontend Build** | `npm run build` | **PASSED** | Vite transforms 1,787 modules cleanly with 0 type errors in 6.72s. |
 | **Live API Verification** | `curl` / Postman auth flow | **PENDING** | Manual live login, session, and CSRF bootstrap check pending. |
-| **Database Verification** | MySQL 8 schema & migrations | **PENDING** | Flyway V1, V2, V3, V4, and V5 applied cleanly in tests on Testcontainers MySQL 8.0.36; live host DB migration pending. |
-| **Browser Verification** | Interactive UI & DevTools | **PENDING** | 10-step manual checklist in `docs/verification/phase-02-manual-checklist.md` awaiting execution. |
+| **Database Verification** | MySQL 8 schema & migrations | **PENDING** | Flyway V1, V2, V3, V4, V5, and V6 applied cleanly in tests on Testcontainers MySQL 8.0.36; Module 3.6A V6 migration verified across 17 Testcontainers tests (`V6DocumentLevelReviewMigrationTest.java`) covering zero-artifact failure cleanup, `flyway.repair()` recovery, exact 8-tuple backfill, composite foreign key integrity, append-only trigger blocking on UPDATE/DELETE, and privilege isolation; live host DB migration pending. |
+| **Database Schema & Migration (3.6A)** | Flyway V6 & Callback Suite | **PASSED** | 17/17 migration test cases passed in `V6DocumentLevelReviewMigrationTest` on Testcontainers MySQL 8.0.36; 41 backend integration regression tests passed; zero persistent routines on failure verified; exact 8-tuple legacy backfill verified. |
+| **Document Review Service & APIs (3.6B)** | Backend Review Service & Concurrency | **PASSED** | 19/19 tests passed in `DocumentReviewIntegrationTest` on Testcontainers MySQL 8.0.36; 273/273 full test suite passed; idempotency, status reversals, hierarchical locking, zero parent mutation, duplicate replacement protection, and lifecycle freeze verified; explicitly approved by project owner on 2026-11-26 (reference report `Module-3.6B-Implementation-Report-v1.1.md`). |
+| **College Approval Integration & Lifecycle (3.6C)** | Backend College Approval & Document Gates | **PASSED** | 15/15 dedicated tests passed in `CollegeApprovalIntegrationTest` on Testcontainers MySQL 8.0.36; 291/291 full backend test suite passed; replacement document active set verified; mandatory category and document status gates verified; explicitly approved by project owner on 2026-11-26 (reference reports `Module-3.6C-Implementation-Report-v1.0.md` and `Module-3.6C-Replacement-Verification-Report-v1.0.md`). |
+| **Frontend Document Review Workflow (Unassigned)** | Super Admin Document Review UI & Modals | **PASSED** | 58/58 tests passed in `super-admin-review.test.tsx`; 212/212 full frontend suite passed across 13 test files; strict `tsc -b` clean; production Vite build clean (1,786 modules transformed). Delivered across 14 files (3 created, 10 modified, 1 extended test) with document status/provenance badges, decision modal with authoritative version binding, fail-closed data integrity warning badge & lockout, lifecycle freeze lockout with active history access, assessDocumentReadiness mandatory category enforcement, and error mapping. Explicitly approved by project owner on 2026-11-26 (reference report `Module-03-Frontend-Document-Review-Implementation-Report-v1.1.md`; planning baseline `Module-03-Frontend-Document-Review-Planning-Report-v1.1.md`). |
+| **Document Review UI & Hooks Fix (Unassigned)** | Super Admin Preview Modal & Hooks Fix | **PASSED** | Single Review button per row, DocumentPreviewReviewModal with Accept/Reject, Direct Review provenance badge removed from UI, OnboardingStatusPage Rules of Hooks violation resolved, post-approval navigation corrected, invalid 409 review-detail refetch eliminated; 211/211 automated tests passed across 14 test files; manual browser Tests 1–4 passed. Explicitly approved by project owner on 2026-11-27 (reference report `Module-03-Frontend-Document-Review-Implementation-Report-v1.0.md` / `v1.1`). |
+| **DEF-01 Targeted Remediation** | Backend Document Gate & Frontend 409 Disambiguation | **PASSED (Automated) / IN_PROGRESS (Manual)** | Document verification gate relocated into `case APPROVE ->`; `REJECT` and `REQUEST_ACTION` unrestricted; frontend 409 error disambiguation for `STALE_APPLICATION_VERSION`; `saveAndFlush` optimistic version synchronization; 296/296 full backend tests passed; 213/213 full frontend tests passed; clean package build verified. Manual DEF-01 Test A PASSED (HTTP 409 `DOCUMENTS_REJECTED` with zero database or outbox mutations verified against College ID 5); remaining manual scenarios pending. Explicitly approved by project owner on 2026-11-27 (reference reports `Phase-03-Final-Backend-Verification-And-Test-Stabilization-Report-v1.0.md`, `DEF-01-Manual-API-Verification-Preflight-Report-v1.0.md`, `DEF-01-Test-A-Post-Request-Database-Invariant-Verification-Report-v1.0.md`, and `DEF-01-Test-A-Outbox-Invariant-Evidence-Report-v1.0.md`). |
+| **Browser Verification** | Interactive UI & DevTools | **IN_PROGRESS** | Manual browser Tests 1–4 passed (Document Review UI & Hooks Fix); 10-step manual checklist in `docs/verification/phase-02-manual-checklist.md` and remaining Phase 03 manual scenarios awaiting execution. |
 | **Security Verification** | CSRF, Cookies, Storage, RBAC | **PASSED (Automated)** / **PENDING (Live)** | CSRF interceptor, role guards, and store hygiene verified in tests; live cookie flags pending browser check. |
-| **Email & Storage Verification** | Mailpit SMTP dispatch | **PENDING** | Outbox worker unit tests passed; live reset email receipt in Mailpit pending. |
+| **Email & Storage Verification** | Mailpit SMTP dispatch | **PENDING** | Outbox worker unit tests passed; outbox invariant verified clean on DEF-01 Test A; live reset email receipt in Mailpit pending. |
 
 ---
 
@@ -1036,7 +1059,7 @@ Status Definitions:
 
 ## 13.7 Current Development Position & Next Planned Phase
 
-The current development position is in **Phase 03 — College Registration, Restricted Dashboard & Approval Workflow** with all Phase 03 backend modules **APPROVED**: **Module 3.1A (APPROVED)**, **Module 3.2 (APPROVED)**, **Module 3.3 (APPROVED)**, **Module 3.4 (APPROVED)**, and **Module 3.5 (APPROVED)** (237/237 backend tests on Testcontainers MySQL 8.0.36), and all Phase 03 frontend modules **APPROVED**: **Module 3.1B (APPROVED)**, **Module 3.2 (APPROVED)**, **Module 3.3 (APPROVED)**, **Module 3.4 (APPROVED)**, and **Module 3.5 (APPROVED)** (168/168 full suite tests across 13 test files). Phase 03 overall remains `IN_PROGRESS` pending live manual browser/API verification against Docker services.
+The current development position is in **Phase 03 — College Registration, Restricted Dashboard & Approval Workflow** with all Phase 03 baseline backend modules **APPROVED**: **Module 3.1A (APPROVED)**, **Module 3.2 (APPROVED)**, **Module 3.3 (APPROVED)**, **Module 3.4 (APPROVED)**, and **Module 3.5 (APPROVED)** (237/237 backend tests on Testcontainers MySQL 8.0.36), all Phase 03 baseline frontend modules **APPROVED**: **Module 3.1B (APPROVED)**, **Module 3.2 (APPROVED)**, **Module 3.3 (APPROVED)**, **Module 3.4 (APPROVED)**, and **Module 3.5 (APPROVED)** (200/200 full suite tests across 13 test files), Document-Level Review Database Schema & Flyway Migration **Module 3.6A (APPROVED)** (17/17 migration test cases on Testcontainers MySQL 8.0.36; reference report `Module-3.6A-Implementation-Report-v1.3.md`), Document-Level Review Backend Service & APIs **Module 3.6B (APPROVED)** (273/273 full backend tests passing, 125 targeted review/onboarding tests passing, clean package build verified; reference report `Module-3.6B-Implementation-Report-v1.1.md`), Backend College Approval Integration & Lifecycle **Module 3.6C (APPROVED)** (291/291 full backend tests passing, 140 targeted Module 3.6 regression tests passing, 15/15 dedicated college approval tests passing, clean package build verified; reference reports `Module-3.6C-Implementation-Report-v1.0.md` and `Module-3.6C-Replacement-Verification-Report-v1.0.md`), **Super Admin Frontend Document Review Workflow (Unassigned) (APPROVED)** (212/212 full frontend tests passing across 13 test files, 58/58 review tests passing in `super-admin-review.test.tsx`, clean production build; reference report `Module-03-Frontend-Document-Review-Implementation-Report-v1.1.md`), **Document Review UI Redesign & College Admin Hooks Fix (Unassigned) (APPROVED)** (211/211 automated tests passing across 14 test files, manual browser Tests 1–4 passed; reference report `Module-03-Frontend-Document-Review-Implementation-Report-v1.0.md` / `v1.1`), and **Phase 03 DEF-01 Targeted Remediation (APPROVED)** (296/296 full backend tests passing, 213/213 full frontend tests passing, clean package build, Manual DEF-01 Test A PASSED; reference reports `Phase-03-Final-Backend-Verification-And-Test-Stabilization-Report-v1.0.md` and `DEF-01-Test-A-Post-Request-Database-Invariant-Verification-Report-v1.0.md`). Phase 03 overall remains `IN_PROGRESS` pending remaining live manual browser/API E2E verification against the live local application environment (Spring Boot backend, Vite frontend, and local MySQL).
 
 ### Phase 03 Module Progress:
 - **Module 3.1A (Backend Registration Foundation):** `APPROVED`. Public registration intake endpoint (`POST /api/v1/college-registrations`), versioned registration revision (V4 schema), IP sliding-window rate limiter, transactional outbox dispatch, and `COLLEGE_REGISTRATION_CREATED` audit event. Explicitly approved by user.
@@ -1300,18 +1323,284 @@ The current development position is in **Phase 03 — College Registration, Rest
   - **Reference Reports:**
     - `docs/03-phase/phase-03-module-3.5-frontend-inspection-and-planning-report.md` (v1.1 APPROVED)
     - `docs/03-phase/phase-03-module-3.5-frontend-implementation-report.md` (v1.2 APPROVED)
+- **Module 3.6A (Document-Level Review Database Schema & Flyway Migration):** `APPROVED`.
+  - **Approval Status:** Explicitly approved by Project Owner on 2026-11-26.
+  - **Approved Implementation Report:** `Module-3.6A-Implementation-Report-v1.3.md`.
+  - **Planning Reference:** Approved Planning Report v1.1 + Final Targeted Clarification Addendum (BF-07 through BF-12).
+  - **Implementation Scope:**
+    - Backend database schema and Flyway migration only.
+    - Zero backend services, endpoints, or controllers modified (Module 3.6B strict boundary maintained).
+    - Zero college approval lifecycle gates modified (Module 3.6C strict boundary maintained).
+    - Zero frontend UI components modified.
+    - Production and migration files created:
+      - `backend/src/main/resources/db/migration/V6__document_level_review.sql`
+      - `backend/src/main/java/com/acadlytic/modules/colleges/entity/DocumentVerificationStatus.java`
+      - `backend/src/main/java/com/acadlytic/modules/colleges/entity/DocumentVerificationProvenance.java`
+      - `backend/src/main/java/com/acadlytic/modules/colleges/migration/V6DocumentReviewMigrationPreflightCallback.java`
+    - Production entity updated:
+      - `backend/src/main/java/com/acadlytic/modules/colleges/entity/CollegeRegistrationDocument.java` (mapped fields with `@Enumerated(EnumType.STRING)`).
+    - Test files created/updated:
+      - `backend/src/test/java/com/acadlytic/modules/colleges/V6DocumentLevelReviewMigrationTest.java` (17 comprehensive Testcontainers scenarios).
+      - `backend/src/test/java/com/acadlytic/support/AbstractMySqlIntegrationTest.java` (Flyway callback configuration).
+    - Total files affected: 7.
+  - **Implemented Schema & Database Architecture:**
+    - **`college_registration_documents` Schema Alterations:**
+      - Added `verification_status VARCHAR(32) NOT NULL DEFAULT 'PENDING'`.
+      - Added `verification_notes VARCHAR(1000) NULL`.
+      - Added `verified_by_user_id BIGINT NULL`, with constraint `fk_crd_verified_by_user FOREIGN KEY (verified_by_user_id) REFERENCES users(id) ON DELETE RESTRICT`.
+      - Added `verified_at TIMESTAMP(6) NULL`.
+      - Added `verification_provenance VARCHAR(32) NOT NULL DEFAULT 'NOT_REVIEWED'`.
+      - Added composite index `idx_crd_review_lookup (college_id, registration_id, verification_status)` and index `idx_crd_verification_status (verification_status)`.
+      - Added composite unique key `uq_crd_composite_owner (id, college_id, registration_id)` enabling composite foreign key referencing.
+    - **Exact Legacy State Backfill (8-Tuple Whitelist):**
+      - Evaluates the exact 8 supported `(college.approval_status, registration.status)` tuples from V1–V5.
+      - `('APPROVED', 'APPROVED')` $\to$ `verification_status = 'ACCEPTED'`, `verification_provenance = 'LEGACY_COLLEGE_APPROVAL'`.
+      - Preserves individual document reviewer ID (`verified_by_user_id`) and review timestamp (`verified_at`) strictly as `NULL` for legacy approvals.
+      - Remaining 7 supported legacy tuples $\to$ `verification_status = 'PENDING'`, `verification_provenance = 'NOT_REVIEWED'`.
+      - Any tuple outside the 8-tuple whitelist, NULL status, orphan document, or tenant mismatch triggers failure.
+    - **Zero-Artifact Preflight Validation (`V6DocumentReviewMigrationPreflightCallback.java`):**
+      - Spring `@Component` implementing Flyway's `Callback` interface (`BEFORE_EACH_MIGRATE` for target version 6).
+      - Validates all legacy documents against the 8-tuple whitelist, checks for orphaned documents, and verifies tenant consistency before `V6__document_level_review.sql` is read or executed.
+      - Guarantees zero persistent routines, tables, columns, or triggers in `information_schema` on preflight failure, leaving database at a completely clean V5 baseline.
+    - **Append-Only Audit Schema (`college_document_reviews`):**
+      - Created table `college_document_reviews` capturing review decisions (`document_id`, `college_id`, `registration_id`, `verification_status`, `notes`, `reviewer_user_id`, `reviewed_at`, `provenance`).
+      - Composite foreign key constraint `fk_cdr_document_ownership FOREIGN KEY (document_id, college_id, registration_id) REFERENCES college_registration_documents(id, college_id, registration_id) ON DELETE RESTRICT` enforces that review entries reference documents under the exact matching college and registration tenant boundaries.
+      - MySQL triggers `trg_cdr_prevent_update` and `trg_cdr_prevent_delete` raise `SIGNAL SQLSTATE '45000'` on any UPDATE or DELETE attempt on `college_document_reviews`.
+    - **Runtime Database Privilege Design:**
+      - Removed schema-wide UPDATE grants; explicit table-level grants defined for runtime user `acadlytic_app`.
+      - `college_document_reviews` restricted strictly to `SELECT` and `INSERT` privileges.
+    - **V6 Deployment Operational Condition:**
+      - Application writes (document uploads, registration submissions, review decisions) must be paused during preflight callback validation and V6 migration execution to ensure zero concurrent mutations while the backfill query and table alteration execute.
+  - **Automated Test Results (Testcontainers MySQL 8.0.36 / Docker Desktop / Java 21 / Spring Boot 3.3.4):**
+    - `V6DocumentLevelReviewMigrationTest`: **17 / 17 passed**, 0 failures, 0 errors, 0 skipped (`BUILD SUCCESS`).
+    - Validates:
+      1. Clean V5 to V6 migration on clean database.
+      2. Table column verification and defaults (`PENDING`, `NOT_REVIEWED`).
+      3. Index presence (`idx_crd_review_lookup`, `idx_crd_verification_status`).
+      4. Foreign key constraint `fk_crd_verified_by_user` referencing `users(id)`.
+      5. Composite unique key `uq_crd_composite_owner`.
+      6. `college_document_reviews` table structure.
+      7. Composite foreign key `fk_cdr_document_ownership` preventing tenant mismatched audit rows.
+      8. Append-only trigger blocking UPDATE with SQLSTATE 45000.
+      9. Append-only trigger blocking DELETE with SQLSTATE 45000.
+      10. Runtime database privilege isolation (`SELECT`, `INSERT` allowed; `UPDATE`, `DELETE` rejected).
+      11. Exact 8-tuple whitelist legacy backfill (Tuple 1: APPROVED + APPROVED $\to$ ACCEPTED / LEGACY_COLLEGE_APPROVAL with NULL reviewer and timestamp).
+      12. Exact 8-tuple whitelist legacy backfill (Tuples 2–8 $\to$ PENDING / NOT_REVIEWED).
+      13. Preflight callback rejection of unsupported legacy tuple.
+      14. Preflight callback rejection of NULL college approval status.
+      15. Preflight callback rejection of orphaned document.
+      16. Preflight callback rejection of tenant mismatch (`document.college_id != registration.college_id`).
+      17. Preflight callback failure leaving strictly 0 routines, 0 tables, 0 columns, 0 triggers in the database, with successful recovery via data remediation and `flyway.repair()`.
+    - Backend integration regression suite: **41 / 41 passed** (`CollegeReviewIntegrationTest`, `CollegeRegistrationIntegrationTest`, `CollegeOnboardingIntegrationTest`, `SchemaAndConstraintsIntegrationTest`).
+    - Frontend regression suite: **200 / 200 passed across 13 test files**.
+  - **Subsequent Module Status:**
+    - **Module 3.6B (Backend Document Review Service & APIs):** `APPROVED` (Explicitly approved by Project Owner on 2026-11-26; reference report `Module-3.6B-Implementation-Report-v1.1.md`).
+    - **Module 3.6C (Backend College Approval Integration & Lifecycle):** `APPROVED` (Explicitly approved by Project Owner on 2026-11-26; reference reports `Module-3.6C-Implementation-Report-v1.0.md` and `Module-3.6C-Replacement-Verification-Report-v1.0.md`).
+  - **Reference Reports:**
+    - `docs/03-phase/Module-3.6A-Implementation-Report-v1.3.md` (Approved Implementation Report v1.3)
+    - `docs/03-phase/Module-3.6A-Implementation-Report-v1.2.md`
+    - `docs/03-phase/Module-3.6A-Implementation-Report-v1.1.md`
+    - `docs/03-phase/Module-3.6A-Implementation-Report-v1.0.md`
+- **Module 3.6B (Backend Document Review Service & APIs):** `APPROVED`.
+  - **Approval Status:** Explicitly approved by Project Owner on 2026-11-26 following review of consolidated verification report v1.1.
+  - **Approved Implementation Report:** `docs/03-phase/Module-3.6B-Implementation-Report-v1.1.md` (Implementation Report v1.1 — Consolidated Verification Edition).
+  - **Planning Reference:** Approved Planning Report v1.1 + Final Targeted Clarification Addendum (BF-07 through BF-12).
+  - **Implementation Scope:**
+    - Backend document verification service, endpoints, repositories, DTOs, domain models, and concurrency controls.
+    - Zero database migrations added (Flyway V6 baseline cleanly maintained).
+    - Zero frontend UI components modified.
+    - College-level approval gating deferred strictly to Module 3.6C (Backend College Approval Integration & Lifecycle).
+    - Production files created/updated:
+      - `backend/src/main/java/com/acadlytic/modules/colleges/dto/DocumentReviewAction.java`
+      - `backend/src/main/java/com/acadlytic/modules/colleges/dto/DocumentReviewDecisionRequest.java`
+      - `backend/src/main/java/com/acadlytic/modules/colleges/dto/DocumentReviewDecisionResponse.java`
+      - `backend/src/main/java/com/acadlytic/modules/colleges/dto/DocumentReviewHistoryItemResponse.java`
+      - `backend/src/main/java/com/acadlytic/modules/colleges/dto/DocumentResponse.java` (enriched with verification fields)
+      - `backend/src/main/java/com/acadlytic/modules/colleges/entity/CollegeDocumentReview.java`
+      - `backend/src/main/java/com/acadlytic/modules/colleges/repository/CollegeDocumentReviewRepository.java`
+      - `backend/src/main/java/com/acadlytic/modules/colleges/repository/CollegeRegistrationDocumentRepository.java`
+      - `backend/src/main/java/com/acadlytic/modules/colleges/controller/CollegeReviewController.java`
+      - `backend/src/main/java/com/acadlytic/modules/colleges/service/CollegeReviewService.java`
+      - `backend/src/main/java/com/acadlytic/modules/colleges/service/CollegeOnboardingService.java`
+      - `backend/src/main/java/com/acadlytic/modules/auth/entity/AuditEventType.java`
+    - Test files created/updated:
+      - `backend/src/test/java/com/acadlytic/modules/colleges/DocumentReviewIntegrationTest.java` (19 comprehensive Testcontainers scenarios).
+      - `backend/src/test/java/com/acadlytic/modules/colleges/CollegeOnboardingIntegrationTest.java`
+  - **Delivered Capabilities & Architecture:**
+    - **Independent Verification Decisions (`ACCEPT`, `REJECT`):** Super Admin reviewers independently review each submitted registration document.
+    - **Provenance Tracking:** Preserves document origin explicitly (`NOT_REVIEWED`, `DIRECT_REVIEW`, `CARRIED_FORWARD`, `LEGACY_COLLEGE_APPROVAL`).
+    - **Optimistic Concurrency Control:** Compares `expectedDocumentVersion` against document's `@Version` column (`CollegeRegistrationDocument.version`). Newly uploaded documents start at version 0 (strictly valid for initial review). Stale requests fail with `409 STALE_DOCUMENT_VERSION`.
+    - **Idempotency & Retry Semantics:** Retrying an identical decision with the immediately preceding or current version returns HTTP 200 without duplicate audit row insertion, without duplicate `AuditEvent`, and without version increment. Retrying with mismatched reason or action at stale version is rejected with `409 STALE_DOCUMENT_VERSION` and cannot be silently accepted. Intentional status reversals require the current document version and advance version by 1.
+    - **Hierarchical Locking & Zero Parent Mutation:** Serializes concurrent review operations by acquiring a `PESSIMISTIC_WRITE` lock on the parent `College` row first, followed by the target `CollegeRegistrationDocument` row second. Zero mutation on `College.version` (parent entity is not modified or saved).
+    - **Bounded Deadlock/Timeout Retries:** Wrapped with `TransactionTemplate` using `PROPAGATION_REQUIRES_NEW`, providing up to 3 retry attempts with exponential backoff.
+    - **Lifecycle Freezing & Cross-Revision Isolation:** Document review freezes once a college decision commits (`APPROVE`, `REQUEST_ACTION`, `REJECT` reject reviews with `409 APPLICATION_NOT_AWAITING_REVIEW`). Creation of a correction draft opens revision $v+1$ in unsubmitted draft mode where reviews remain frozen. Resubmitting revision $v+1$ restores `college.approvalStatus = PENDING` and unfreezes review for revision $v+1$ while keeping older revision $v$ documents strictly frozen (`409 APPLICATION_NOT_AWAITING_REVIEW`).
+    - **Replacement Document Rules:** Protects against duplicate replacements in active draft revisions (`409 REPLACEMENT_ALREADY_EXISTS` and DB constraint `uq_crd_registration_replacement`), restricts cross-revision replacement strictly to rejected documents of the immediately preceding submitted revision ($v-1$), enforces category match, and skips carry-forward of rejected documents into revision $v+1$.
+    - **Deterministic History API:** Exposes reverse-chronological review audit history (`reviewedAt DESC, id DESC`) via `GET /api/v1/super-admin/colleges/reviews/{collegeId}/documents/{documentId}/history` with reviewer user emails.
+  - **Automated Test Results (Testcontainers MySQL 8.0.36 / Java 21 / Spring Boot 3.3.4):**
+    - **Full Backend Test Suite:** **273 / 273 passed**, 0 failures, 0 errors, 0 skipped (`BUILD SUCCESS`, 4m 50s execution across all 33 test suites).
+    - **Clean Compilation & Package Verification:** `mvn clean package -DskipTests` **BUILD SUCCESS** (41.6s, compiling 127 main and 35 test source files cleanly, building `target/acadlytic-backend-0.0.1-SNAPSHOT.jar`).
+    - **Targeted Module 3.6 Suites:** **125 tests passed** across 9 test classes (0 failures, 0 errors, 0 skipped):
+      - `DocumentReviewIntegrationTest`: 19 / 19 passed.
+      - `CollegeReviewIntegrationTest`: 21 / 21 passed.
+      - `CollegeOnboardingIntegrationTest`: 10 / 10 passed.
+      - `CollegeRegistrationIntegrationTest`: 5 / 5 passed.
+      - `SchemaAndConstraintsIntegrationTest`: 5 / 5 passed.
+      - `V6DocumentLevelReviewMigrationTest`: 17 / 17 passed.
+      - `CollegeReviewControllerUnitTest`: 16 / 16 passed.
+      - `CollegeReviewServiceUnitTest`: 17 / 17 passed.
+      - `CollegeOnboardingServiceUnitTest`: 15 / 15 passed.
+  - **Subsequent Module Status:**
+    - **Module 3.6C (Backend College Approval Integration & Lifecycle):** `APPROVED` (Explicitly approved by Project Owner on 2026-11-26; reference reports `Module-3.6C-Implementation-Report-v1.0.md` and `Module-3.6C-Replacement-Verification-Report-v1.0.md`).
+  - **Reference Reports:**
+    - `docs/03-phase/Module-3.6B-Implementation-Report-v1.1.md` (Approved Implementation Report v1.1 — Consolidated Verification Edition)
+    - `docs/03-phase/Module-3.6B-Implementation-Report-v1.0.md`
+- **Module 3.6C (Backend College Approval Integration & Lifecycle):** `APPROVED`.
+  - **Approval Status:** Explicitly approved by Project Owner on 2026-11-26.
+  - **Approved Implementation Reports:**
+    - `docs/03-phase/Module-3.6C-Implementation-Report-v1.0.md` (Implementation Report v1.0)
+    - `docs/03-phase/Module-3.6C-Replacement-Verification-Report-v1.0.md` (Replacement Document Active-Set Verification Report v1.0)
+  - **Planning Reference:** Approved Planning Report v1.1 + Final Targeted Clarification Addendum (BF-07 through BF-12).
+  - **Implementation Scope:**
+    - Document verification gates in `CollegeReviewService.recordDecision(APPROVE)` requiring all active submitted registration documents to be `ACCEPTED`.
+    - Enforced mandatory document categories (`UNIVERSITY_AFFILIATION_CERTIFICATE` and `AUTHORIZED_SIGNATORY_ID`). If any mandatory category is missing, `recordDecision(APPROVE)` raises `400 REQUIRED_DOCUMENTS_MISSING`.
+    - Document status enforcement: If any active document is `REJECTED`, approval raises `409 DOCUMENTS_REJECTED`. If any active document is `PENDING` (or unverified), approval raises `409 DOCUMENTS_NOT_VERIFIED`.
+    - Reviewer action autonomy: `REQUEST_ACTION` and `REJECT` application decisions remain unrestricted by document verification status.
+    - Hierarchical locking eliminating deadlocks: Parent `College` entity row is locked first under pessimistic write lock (`findByIdWithLock`), followed by target `CollegeRegistrationDocument` rows locked second with deterministic ordering (`findByRegistrationIdWithLock`).
+    - Transaction atomicity & rollback guarantees: Verification gate failures roll back completely with zero state mutations, zero audit events, and zero outbox notifications.
+    - Review freezing & revision isolation: Committing any college decision (`APPROVE`, `REQUEST_ACTION`, `REJECT`) freezes review eligibility (`409 APPLICATION_NOT_AWAITING_REVIEW`). Preceding revision documents are strictly isolated and cannot satisfy new revision approval gates.
+    - Module 3.5 lifecycle preservation: Approval activates the college (`CollegeStatus.ACTIVE`, `managementUnlocked = true`) and dispatches notifications; permanent rejection/suspension revokes active sessions via `SessionRevocationService`.
+  - **Replacement Document Active-Set Verification:**
+    - Verified `CollegeRegistrationDocument.replacesDocumentId` mapping and V4/V6 database schema constraints (`uq_crd_registration_replacement`).
+    - Validated that `CollegeReviewService` computes superseded documents via `supersededIds = { d.replacesDocumentId }` and selects active documents via `!supersededIds.contains(d.getId())`. Replacement documents are correctly retained in the active verification set.
+    - Confirmed zero production-code modifications were required for the replacement-document concern (the production code was already mathematically correct; the inquiry originated from shorthand phrasing in Report v1.0).
+    - Multi-stage lifecycle integration test (Scenario 15) validates: replacement document is included in active set; superseded original cannot satisfy gates; replacement document verification status (`PENDING` -> `REJECTED` -> `ACCEPTED`) strictly controls approval outcome; historical documents from earlier revisions cannot satisfy new revision mandatory categories.
+  - **Automated Test Results (Testcontainers MySQL 8.0.36 / Java 21 / Spring Boot 3.3.4):**
+    - **Full Backend Test Suite:** **291 / 291 passed**, 0 failures, 0 errors, 0 skipped.
+    - **Targeted Module 3.6 Regression Suites:** **140 / 140 passed** across 6 test classes:
+      - `CollegeApprovalIntegrationTest`: 15 / 15 passed (all 15 scenarios passed).
+      - `CollegeReviewIntegrationTest`: 20 / 20 passed.
+      - `CollegeLifecycleIntegrationTest`: 23 / 23 passed.
+      - `CollegeOnboardingIntegrationTest`: 40 / 40 passed.
+      - `DocumentReviewIntegrationTest`: 15 / 15 passed.
+      - `V6DocumentLevelReviewMigrationTest`: 27 / 27 passed.
+    - **Dedicated College Approval Suite (`CollegeApprovalIntegrationTest`):** **15 / 15 passed** (100% pass rate).
+    - **Clean Compilation & Package Verification:** `mvn clean package -DskipTests` **BUILD SUCCESS** (`target/acadlytic-backend-0.0.1-SNAPSHOT.jar`).
+  - **Subsequent Status:**
+    - Super Admin Frontend Document Review Workflow (Unassigned) is APPROVED (2026-11-26).
+    - Phase 03 overall remains `IN_PROGRESS` pending live manual browser/API E2E verification against the live local application environment (Spring Boot backend, Vite frontend, and local MySQL).
+  - **Reference Reports:**
+    - `docs/03-phase/Module-3.6C-Implementation-Report-v1.0.md`
+    - `docs/03-phase/Module-3.6C-Replacement-Verification-Report-v1.0.md`
+- **Super Admin Frontend Document Review Workflow (Unassigned):** `APPROVED`.
+  - **Approval Status:** Explicitly approved by Project Owner on 2026-11-26.
+  - **Approved Implementation Report:** `docs/03-phase/Module-03-Frontend-Document-Review-Implementation-Report-v1.1.md` (Implementation Report v1.1).
+  - **Planning Reference:** `docs/03-phase/Module-03-Frontend-Document-Review-Planning-Report-v1.1.md` (Planning Report v1.1).
+  - **Implementation Scope:**
+    - Frontend implementation only (zero backend source code, zero database migrations).
+    - 14 total files affected:
+      - 3 files created: `frontend/src/components/review/DocumentStatusBadge.tsx`, `frontend/src/components/review/DocumentReviewDecisionModal.tsx`, `frontend/src/components/review/DocumentReviewHistoryModal.tsx`.
+      - 10 files modified: `frontend/src/types/index.ts`, `frontend/src/schemas/reviewSchema.ts`, `frontend/src/services/queryKeys.ts`, `frontend/src/services/reviewService.ts`, `frontend/src/hooks/useCollegeReview.ts`, `frontend/src/components/review/ReviewDocumentListCard.tsx`, `frontend/src/components/review/ReviewDecisionPanel.tsx`, `frontend/src/components/review/ReviewDecisionModal.tsx`, `frontend/src/components/review/index.ts`, and `frontend/src/pages/admin/CollegeReviewDetailPage.tsx`.
+      - 1 test file extended: `frontend/src/test/super-admin-review.test.tsx`.
+  - **Delivered Capabilities & Architecture:**
+    - **Document Verification Status Badges (`DocumentStatusBadge`):** Renders verification states (`PENDING`, `ACCEPTED`, `REJECTED`, `NOT_REVIEWED`) and provenance badges (`CARRIED_FORWARD`, `LEGACY_COLLEGE_APPROVAL`).
+    - **Authoritative Version Isolation:** Strictly binds document review decisions to `doc.version` as `expectedDocumentVersion` (supporting version 0 as valid initial upload), never substituting college concurrency version.
+    - **Fail-Closed Data Integrity Protection:** If a document lacks `version` (null or undefined), displays a prominent amber warning badge and disables the "Review" action button, eliminating unversioned mutations.
+    - **Optimistic Concurrency Conflict Recovery:** Intercepts HTTP 409 `STALE_DOCUMENT_VERSION`, halts review flow, closes modal, refetches application details, and renders a prominent conflict banner prompting reviewer inspection of fresh state.
+    - **Lifecycle Freezing & History Access:** Disables document review actions if college is not awaiting review (`approvalStatus !== 'PENDING'`), while preserving full read-only "View History" modal access across all lifecycle states.
+    - **Document Review History Inspection (`DocumentReviewHistoryModal`):** Reverse-chronological audit timeline displaying past document review decisions, reviewer admin emails, timestamps, verification badges, and notes/rejection reasons.
+    - **College Approval Readiness Calculation (`assessDocumentReadiness`):** Enforces mandatory categories (`UNIVERSITY_AFFILIATION_CERTIFICATE` and `AUTHORIZED_SIGNATORY_ID`), verifies zero missing mandatory categories, zero pending active documents, and zero rejected active documents before application approval.
+    - **Backend Error Code Mapping:** Maps 400 `REQUIRED_DOCUMENTS_MISSING`, 409 `DOCUMENTS_REJECTED`, and 409 `DOCUMENTS_NOT_VERIFIED` to user-facing feedback alerts.
+  - **Automated Test Results (Vitest 2.1.9 / JSDOM / Node.js 22 / React 18):**
+    - **Focused Review Test Suite (`src/test/super-admin-review.test.tsx`):** **58 / 58 passed** (0 failures, 0 errors, 0 skipped; 26 baseline queue/detail tests + 20 existing review tests + 12 comprehensive document-review workflow scenarios).
+    - **Full Frontend Test Suite (`npx vitest run`):** **212 / 212 passed across 13 test files** (0 failures, 0 errors, 0 skipped).
+    - **Strict TypeScript Compilation (`tsc -b`):** PASSED (0 errors under strict mode).
+    - **Production Bundle Build (`npm run build`):** PASSED (`vite build`, 1,786 modules transformed in 27.54s, clean production bundle in `dist/`).
+  - **Subsequent Status:**
+    - Phase 03 overall remains `IN_PROGRESS` pending live manual browser/API E2E verification against the live local application environment (Spring Boot backend, Vite frontend, and local MySQL).
+  - **Reference Reports:**
+    - `docs/03-phase/Module-03-Frontend-Document-Review-Planning-Report-v1.1.md`
+    - `docs/03-phase/Module-03-Frontend-Document-Review-Implementation-Report-v1.1.md`
+
+- **Document Review UI Redesign & College Admin Hooks Fix (Unassigned):** `APPROVED`.
+  - **Approval Status:** Formally verified and explicitly APPROVED by the project owner on 2026-11-27.
+  - **Module Assignment:** `Unassigned` (preserved as unassigned; no module number invented).
+  - **Delivered Capabilities & Architecture:**
+    - **Redesigned Document Review UI (`ReviewDocumentListCard.tsx`):**
+      - Document table rows now present exactly one primary action button: `Review`.
+      - Clicking `Review` opens the interactive document preview and decision modal (`DocumentPreviewReviewModal`).
+      - Removed the confusing `Direct Review` provenance badge from the review table while preserving authoritative database and audit event provenance.
+      - Preserved secondary `View History` action button for inspecting the chronological decision audit timeline.
+    - **Integrated Document Preview & Decision Modal (`DocumentPreviewReviewModal.tsx`):**
+      - Reviewers preview document content and record verification decisions (`Accept` or `Reject` with rejection notes) directly inside the modal in a unified, intuitive review flow.
+    - **College Admin Onboarding Status Page Fix (`OnboardingStatusPage.tsx`):**
+      - Resolved a React Rules of Hooks violation caused by conditional execution of hooks before early returns.
+      - Guaranteed `useCollegeRegistration` hook executes unconditionally on every component render.
+      - Preserved correct, flicker-free rendering across loading, pending review, action requested, rejected, and approved states.
+    - **Post-Approval Redirection Fix (`ProtectedRoute.tsx` / `LoginPage.tsx` / `OnboardingStatusPage.tsx`):**
+      - College Admin login post-approval now immediately and correctly redirects to `/college/dashboard` instead of `/onboarding/status`.
+      - Eliminated infinite redirection loop for active approved colleges.
+    - **Review Detail Refetch Race Condition Fix (`CollegeReviewDetailPage.tsx`):**
+      - Eliminated invalid HTTP 409 review-detail refetch attempts on unmounted or stale review detail components following decision submission.
+  - **Automated Test Results (Vitest 2.1.9 / JSDOM / Node.js 22 / React 18):**
+    - **Full Frontend Test Suite (`npx vitest run`):** **211 / 211 passed across 14 test files** (0 failures, 0 errors, 0 skipped; 11 previously separate test assertions consolidated/updated to reflect the modal-driven preview workflow without loss of coverage).
+    - **Strict TypeScript Compilation (`tsc -b`):** PASSED (0 errors under strict mode).
+    - **Production Bundle Build (`npm run build`):** PASSED (`vite build`, clean production bundle generated in `dist/`).
+  - **Manual Browser Verification:**
+    - **Tests 1–4 PASSED:** Manual browser verification successfully performed by the user covering document preview modal workflow, single review action button, College Admin onboarding status view, and post-approval navigation.
+  - **Reference Reports:**
+    - `docs/03-phase/Module-03-Frontend-Document-Review-Implementation-Report-v1.0.md`
+    - `docs/03-phase/Module-03-Frontend-Document-Review-Implementation-Report-v1.1.md`
+
+- **Phase 03 DEF-01 Targeted Remediation (Backend Document Verification Gate & Frontend 409 Classification):** `APPROVED`.
+  - **Approval Status:** Formally verified and explicitly APPROVED by the project owner on 2026-11-27.
+  - **Delivered Capabilities & Architecture:**
+    - **Relocated Backend Document Verification Gate (`CollegeReviewService.java`):**
+      - Moved document completeness and verification status validation directly inside `case APPROVE ->` in `executeRecordDecision`.
+      - Enforces that all mandatory document categories are present, zero active documents have `REJECTED` verification status, and zero active documents remain `PENDING` or `NOT_REVIEWED` prior to college approval.
+      - Rejection of application (`case REJECT ->`) and action requests (`case REQUEST_ACTION ->`) remain completely unrestricted by document status, allowing reviewers to reject non-compliant applications or request revisions immediately.
+    - **Frontend 409 Error Disambiguation (`ReviewDecisionModal.tsx`):**
+      - Updated error classification logic to distinguish HTTP 409 error codes:
+        - `DOCUMENTS_REJECTED` and `DOCUMENTS_NOT_VERIFIED` correctly display document verification errors with explicit remediation instructions advising the reviewer to inspect rejected or pending documents.
+        - Only `STALE_APPLICATION_VERSION` triggers the application concurrency conflict message prompting a detail refetch.
+    - **Optimistic Document Version Synchronization Fix (`CollegeReviewService.java`):**
+      - Added `collegeRegistrationDocumentRepository.saveAndFlush(document)` in `executeRecordDocumentDecision`.
+      - Guarantees immediate database synchronization of the incremented document optimistic lock version before returning the DTO to the caller.
+    - **Integration Test Stabilization (`DocumentReviewIntegrationTest.java`):**
+      - Stabilized test fixtures and document creation helpers; all **19 / 19** integration tests pass cleanly on Testcontainers MySQL 8.0.36.
+  - **Automated Test Results:**
+    - **Full Backend Test Suite (`mvn clean test`):** **296 / 296 passed** across all unit, repository, and integration tests (including MySQL 8.0.36 Testcontainers) with 0 failures, 0 errors, and 0 skipped.
+    - **Full Frontend Test Suite (`npx vitest run`):** **213 / 213 passed across 14 test files** (including new DEF-01 regression tests in `super-admin-review.test.tsx`).
+    - **Clean Package Build:** `mvn clean package -DskipTests` cleanly compiles and packages `target/acadlytic-backend-0.0.1-SNAPSHOT.jar` (BUILD SUCCESS).
+  - **Manual API & Database Invariant Verification:**
+    - **DEF-01 Test A (APPROVAL blocked when active document REJECTED):** **`PASS`**.
+      - Executed manual API request `POST /api/v1/super-admin/colleges/reviews/5/decision` (Action: `APPROVE`, `expectedVersion`: `1`) against disposable `DEF01 Gate Test College` (College ID 5, Registration ID 6) where Authorized Signatory ID had `REJECTED` status.
+      - Verified exact API response: HTTP `409 Conflict`, `success: false`, `errorCode: DOCUMENTS_REJECTED`.
+      - Verified database invariants via SELECT-only queries:
+        - College ID 5 `approval_status` remained `PENDING`.
+        - College operational status remained `PENDING_VERIFICATION`.
+        - College version remained `1`.
+        - Registration ID 6 remained `PENDING`.
+        - Zero approval audit events were created in `audit_events`.
+        - Document review statuses and versions remained unchanged.
+      - Verified outbox invariants:
+        - Verified zero outbox email records created in `outbox_emails` for College ID 5 (`AUTO_INCREMENT` remained unchanged at 16, row count at 15).
+    - **Remaining Manual DEF-01 Scenarios:** `PENDING` (Approval after all documents accepted, application reject with rejected documents, request action with rejected documents, and reactivation flow to be validated during final Phase 03 manual verification).
+  - **Reference Reports:**
+    - `docs/03-phase/Phase-03-Final-Backend-Verification-And-Test-Stabilization-Report-v1.0.md`
+    - `docs/03-phase/DEF-01-Manual-API-Verification-Preflight-Report-v1.0.md`
+    - `docs/03-phase/DEF-01-Test-A-Post-Request-Database-Invariant-Verification-Report-v1.0.md`
+    - `docs/03-phase/DEF-01-Test-A-Outbox-Invariant-Evidence-Report-v1.0.md`
 
 ### Phase 03 Execution Strategy:
-**All Phase 03 backend modules (3.1A, 3.2, 3.3, 3.4, and 3.5) and all Phase 03 frontend modules (3.1B, 3.2, 3.3, 3.4, and 3.5) are COMPLETE and APPROVED.**  
-Phase 03 overall remains `IN_PROGRESS` until full end-to-end integration and live manual browser/API verification against Docker services are completed.
+**Phase 03 baseline backend modules (3.1A, 3.2, 3.3, 3.4, and 3.5), baseline frontend modules (3.1B, 3.2, 3.3, 3.4, and 3.5), Document-Level Review Database Schema & Flyway Migration (Module 3.6A), Document-Level Review Backend Service & APIs (Module 3.6B), Backend College Approval Integration & Lifecycle (Module 3.6C), Super Admin Frontend Document Review Workflow (Unassigned), Document Review UI Redesign & College Admin Hooks Fix (Unassigned), and DEF-01 Targeted Remediation are COMPLETE and APPROVED.**  
+Phase 03 overall remains `IN_PROGRESS` until full end-to-end integration and live manual browser/API verification against the live local application environment (Spring Boot backend, Vite frontend, and local MySQL) are completed.
 
 ### Next Planned Activity:
-**Phase 03 Manual End-to-End Browser & Live API Verification**
-- **Status:** `PENDING`
+**Phase 03 — Manual Browser/API E2E Verification & Integration Hardening against the live local application environment (Spring Boot backend, Vite frontend, and local MySQL)**
+- **Status:** `PENDING` (Live manual browser/API verification against the live local application environment [Spring Boot backend, Vite frontend, and local MySQL] pending).
 - **Scope:**
-  - Execute end-to-end verification checklist against live running backend, MySQL 8, and Mailpit containers.
-  - Verify complete lifecycle: public registration, email verification, restricted dashboard editing, document upload/replacement, review submission, Super Admin queue inspection, review decision execution (approve/action/reject), and college activation transition.
-  - Formal Phase 03 release closure sign-off prior to advancing to Phase 04 (College Management).
+  - End-to-end integration across backend and frontend in the live local application environment (Spring Boot backend on localhost:8080, Vite frontend on localhost:5173, and local MySQL on localhost:3306).
+  - Live manual browser and API checklist verification for Phase 03 closure (`phase-02-manual-checklist.md` / Phase 03 manual verification checklist, including remaining DEF-01 manual verification scenarios).
 
 # 14. IMPORTANT PROJECT BOUNDARIES
 

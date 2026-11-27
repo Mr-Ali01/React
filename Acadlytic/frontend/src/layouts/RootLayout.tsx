@@ -5,9 +5,9 @@ import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 
 export const RootLayout: React.FC = () => {
   // Bootstrap authentication session on initial application load
-  const { isLoading } = useCurrentUser();
+  const { isInitializing } = useCurrentUser();
 
-  if (isLoading) {
+  if (isInitializing) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="text-center space-y-3">

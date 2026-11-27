@@ -21,6 +21,7 @@ import com.acadlytic.modules.colleges.entity.CollegeRegistration;
 import com.acadlytic.modules.colleges.entity.CollegeRegistrationDocument;
 import com.acadlytic.modules.colleges.entity.CollegeStatus;
 import com.acadlytic.modules.colleges.entity.DocumentCategory;
+import com.acadlytic.modules.colleges.entity.DocumentVerificationStatus;
 import com.acadlytic.modules.colleges.repository.CollegeRegistrationDocumentRepository;
 import com.acadlytic.modules.colleges.repository.CollegeRegistrationRepository;
 import com.acadlytic.modules.colleges.repository.CollegeRepository;
@@ -54,6 +55,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -329,6 +331,23 @@ class CollegeReviewServiceUnitTest {
         when(userRepository.findByCollegeIdInAndRoleAndStatus(List.of(101L), Role.COLLEGE_ADMIN, UserStatus.ACTIVE))
                 .thenReturn(List.of(activeAdmin));
 
+        CollegeRegistrationDocument doc1 = new CollegeRegistrationDocument();
+        doc1.setId(1L);
+        doc1.setRegistrationId(205L);
+        doc1.setDocumentCategory(DocumentCategory.UNIVERSITY_AFFILIATION_CERTIFICATE);
+        doc1.setOriginalFilename("affiliation.pdf");
+        doc1.setVerificationStatus(DocumentVerificationStatus.ACCEPTED);
+
+        CollegeRegistrationDocument doc2 = new CollegeRegistrationDocument();
+        doc2.setId(2L);
+        doc2.setRegistrationId(205L);
+        doc2.setDocumentCategory(DocumentCategory.AUTHORIZED_SIGNATORY_ID);
+        doc2.setOriginalFilename("signatory.pdf");
+        doc2.setVerificationStatus(DocumentVerificationStatus.ACCEPTED);
+
+        when(collegeRegistrationDocumentRepository.findByRegistrationIdWithLock(205L))
+                .thenReturn(List.of(doc1, doc2));
+
         ReviewDecisionRequest request = new ReviewDecisionRequest(
                 ReviewDecisionAction.APPROVE, 0L, "All documents valid.", null);
 
@@ -351,6 +370,95 @@ class CollegeReviewServiceUnitTest {
         );
         verify(collegeLifecycleService).onCollegeApproved(
                 eq(pendingCollege), eq(pendingRegistration), eq(activeAdmin), eq(1L), eq(Role.SUPER_ADMIN));
+    }
+
+    @Test
+    @DisplayName("recordDecision - APPROVE with missing mandatory document throws REQUIRED_DOCUMENTS_MISSING")
+    void recordDecision_approve_missingMandatory_throwsRequiredDocumentsMissing() {
+        when(collegeRepository.findByIdWithLock(101L)).thenReturn(Optional.of(pendingCollege));
+        when(collegeRegistrationRepository.findById(205L)).thenReturn(Optional.of(pendingRegistration));
+
+        CollegeRegistrationDocument doc1 = new CollegeRegistrationDocument();
+        doc1.setId(1L);
+        doc1.setRegistrationId(205L);
+        doc1.setDocumentCategory(DocumentCategory.UNIVERSITY_AFFILIATION_CERTIFICATE);
+        doc1.setOriginalFilename("affiliation.pdf");
+        doc1.setVerificationStatus(DocumentVerificationStatus.ACCEPTED);
+
+        when(collegeRegistrationDocumentRepository.findByRegistrationIdWithLock(205L))
+                .thenReturn(List.of(doc1));
+
+        ReviewDecisionRequest request = new ReviewDecisionRequest(
+                ReviewDecisionAction.APPROVE, 0L, "Approving", null);
+
+        assertThatThrownBy(() -> collegeReviewService.recordDecision(101L, request))
+                .isInstanceOf(AppException.class)
+                .extracting("errorCode")
+                .isEqualTo("REQUIRED_DOCUMENTS_MISSING");
+    }
+
+    @Test
+    @DisplayName("recordDecision - APPROVE with unverified/pending document throws DOCUMENTS_NOT_VERIFIED")
+    void recordDecision_approve_pendingDoc_throwsDocumentsNotVerified() {
+        when(collegeRepository.findByIdWithLock(101L)).thenReturn(Optional.of(pendingCollege));
+        when(collegeRegistrationRepository.findById(205L)).thenReturn(Optional.of(pendingRegistration));
+
+        CollegeRegistrationDocument doc1 = new CollegeRegistrationDocument();
+        doc1.setId(1L);
+        doc1.setRegistrationId(205L);
+        doc1.setDocumentCategory(DocumentCategory.UNIVERSITY_AFFILIATION_CERTIFICATE);
+        doc1.setOriginalFilename("affiliation.pdf");
+        doc1.setVerificationStatus(DocumentVerificationStatus.ACCEPTED);
+
+        CollegeRegistrationDocument doc2 = new CollegeRegistrationDocument();
+        doc2.setId(2L);
+        doc2.setRegistrationId(205L);
+        doc2.setDocumentCategory(DocumentCategory.AUTHORIZED_SIGNATORY_ID);
+        doc2.setOriginalFilename("signatory.pdf");
+        doc2.setVerificationStatus(DocumentVerificationStatus.PENDING);
+
+        when(collegeRegistrationDocumentRepository.findByRegistrationIdWithLock(205L))
+                .thenReturn(List.of(doc1, doc2));
+
+        ReviewDecisionRequest request = new ReviewDecisionRequest(
+                ReviewDecisionAction.APPROVE, 0L, "Approving", null);
+
+        assertThatThrownBy(() -> collegeReviewService.recordDecision(101L, request))
+                .isInstanceOf(AppException.class)
+                .extracting("errorCode")
+                .isEqualTo("DOCUMENTS_NOT_VERIFIED");
+    }
+
+    @Test
+    @DisplayName("recordDecision - APPROVE with rejected document throws DOCUMENTS_REJECTED")
+    void recordDecision_approve_rejectedDoc_throwsDocumentsRejected() {
+        when(collegeRepository.findByIdWithLock(101L)).thenReturn(Optional.of(pendingCollege));
+        when(collegeRegistrationRepository.findById(205L)).thenReturn(Optional.of(pendingRegistration));
+
+        CollegeRegistrationDocument doc1 = new CollegeRegistrationDocument();
+        doc1.setId(1L);
+        doc1.setRegistrationId(205L);
+        doc1.setDocumentCategory(DocumentCategory.UNIVERSITY_AFFILIATION_CERTIFICATE);
+        doc1.setOriginalFilename("affiliation.pdf");
+        doc1.setVerificationStatus(DocumentVerificationStatus.ACCEPTED);
+
+        CollegeRegistrationDocument doc2 = new CollegeRegistrationDocument();
+        doc2.setId(2L);
+        doc2.setRegistrationId(205L);
+        doc2.setDocumentCategory(DocumentCategory.AUTHORIZED_SIGNATORY_ID);
+        doc2.setOriginalFilename("signatory.pdf");
+        doc2.setVerificationStatus(DocumentVerificationStatus.REJECTED);
+
+        when(collegeRegistrationDocumentRepository.findByRegistrationIdWithLock(205L))
+                .thenReturn(List.of(doc1, doc2));
+
+        ReviewDecisionRequest request = new ReviewDecisionRequest(
+                ReviewDecisionAction.APPROVE, 0L, "Approving", null);
+
+        assertThatThrownBy(() -> collegeReviewService.recordDecision(101L, request))
+                .isInstanceOf(AppException.class)
+                .extracting("errorCode")
+                .isEqualTo("DOCUMENTS_REJECTED");
     }
 
     @Test
@@ -455,5 +563,198 @@ class CollegeReviewServiceUnitTest {
                 .isInstanceOf(AppException.class)
                 .extracting("errorCode")
                 .isEqualTo("STALE_APPLICATION_VERSION");
+    }
+
+    @Test
+    @DisplayName("recordDecision - APPROVE with pending active optional document throws DOCUMENTS_NOT_VERIFIED")
+    void recordDecision_approve_pendingOptionalDoc_throwsDocumentsNotVerified() {
+        when(collegeRepository.findByIdWithLock(101L)).thenReturn(Optional.of(pendingCollege));
+        when(collegeRegistrationRepository.findById(205L)).thenReturn(Optional.of(pendingRegistration));
+
+        CollegeRegistrationDocument doc1 = new CollegeRegistrationDocument();
+        doc1.setId(1L);
+        doc1.setRegistrationId(205L);
+        doc1.setDocumentCategory(DocumentCategory.UNIVERSITY_AFFILIATION_CERTIFICATE);
+        doc1.setOriginalFilename("affiliation.pdf");
+        doc1.setVerificationStatus(DocumentVerificationStatus.ACCEPTED);
+
+        CollegeRegistrationDocument doc2 = new CollegeRegistrationDocument();
+        doc2.setId(2L);
+        doc2.setRegistrationId(205L);
+        doc2.setDocumentCategory(DocumentCategory.AUTHORIZED_SIGNATORY_ID);
+        doc2.setOriginalFilename("signatory.pdf");
+        doc2.setVerificationStatus(DocumentVerificationStatus.ACCEPTED);
+
+        CollegeRegistrationDocument doc3Optional = new CollegeRegistrationDocument();
+        doc3Optional.setId(3L);
+        doc3Optional.setRegistrationId(205L);
+        doc3Optional.setDocumentCategory(DocumentCategory.INSTITUTION_REGISTRATION_PROOF);
+        doc3Optional.setOriginalFilename("proof.pdf");
+        doc3Optional.setVerificationStatus(DocumentVerificationStatus.PENDING);
+
+        when(collegeRegistrationDocumentRepository.findByRegistrationIdWithLock(205L))
+                .thenReturn(List.of(doc1, doc2, doc3Optional));
+
+        ReviewDecisionRequest request = new ReviewDecisionRequest(
+                ReviewDecisionAction.APPROVE, 0L, "Approving", null);
+
+        assertThatThrownBy(() -> collegeReviewService.recordDecision(101L, request))
+                .isInstanceOf(AppException.class)
+                .extracting("errorCode")
+                .isEqualTo("DOCUMENTS_NOT_VERIFIED");
+    }
+
+    @Test
+    @DisplayName("recordDecision - REJECT with rejected and pending documents remains allowed")
+    void recordDecision_reject_withRejectedAndPendingDocuments_remainsAllowed() {
+        when(collegeRepository.findByIdWithLock(101L)).thenReturn(Optional.of(pendingCollege));
+        when(collegeRegistrationRepository.findById(205L)).thenReturn(Optional.of(pendingRegistration));
+        when(securityContextService.requireCurrentUserId()).thenReturn(1L);
+        when(securityContextService.requireCurrentRole()).thenReturn(Role.SUPER_ADMIN);
+        when(userRepository.findByCollegeIdInAndRoleAndStatus(List.of(101L), Role.COLLEGE_ADMIN, UserStatus.ACTIVE))
+                .thenReturn(List.of(activeAdmin));
+
+        ReviewDecisionRequest request = new ReviewDecisionRequest(
+                ReviewDecisionAction.REJECT, 0L, null, "Application rejected due to fraudulent documents.");
+
+        ReviewDecisionResponse response = collegeReviewService.recordDecision(101L, request);
+
+        assertThat(response.approvalStatus()).isEqualTo(CollegeApprovalStatus.REJECTED);
+        assertThat(pendingRegistration.getStatus()).isEqualTo(CollegeApprovalStatus.REJECTED);
+        assertThat(pendingCollege.getApprovalStatus()).isEqualTo(CollegeApprovalStatus.REJECTED);
+
+        verify(auditEventService).record(
+                eq(AuditEventType.COLLEGE_REGISTRATION_REJECTED),
+                eq(1L),
+                eq(Role.SUPER_ADMIN),
+                eq(55L),
+                eq(101L),
+                eq(AuditOutcome.SUCCESS),
+                any(),
+                any()
+        );
+        // Documents repository must NOT be queried for locking/verification during rejection
+        verify(collegeRegistrationDocumentRepository, never()).findByRegistrationIdWithLock(anyLong());
+    }
+
+    @Test
+    @DisplayName("recordDecision - REQUEST_ACTION with rejected and pending documents remains allowed")
+    void recordDecision_requestAction_withRejectedAndPendingDocuments_remainsAllowed() {
+        when(collegeRepository.findByIdWithLock(101L)).thenReturn(Optional.of(pendingCollege));
+        when(collegeRegistrationRepository.findById(205L)).thenReturn(Optional.of(pendingRegistration));
+        when(securityContextService.requireCurrentUserId()).thenReturn(1L);
+        when(securityContextService.requireCurrentRole()).thenReturn(Role.SUPER_ADMIN);
+        when(userRepository.findByCollegeIdInAndRoleAndStatus(List.of(101L), Role.COLLEGE_ADMIN, UserStatus.ACTIVE))
+                .thenReturn(List.of(activeAdmin));
+
+        ReviewDecisionRequest request = new ReviewDecisionRequest(
+                ReviewDecisionAction.REQUEST_ACTION, 0L, "Please replace rejected affiliation certificate.", null);
+
+        ReviewDecisionResponse response = collegeReviewService.recordDecision(101L, request);
+
+        assertThat(response.approvalStatus()).isEqualTo(CollegeApprovalStatus.ACTION_REQUIRED);
+        assertThat(pendingRegistration.getStatus()).isEqualTo(CollegeApprovalStatus.ACTION_REQUIRED);
+        assertThat(pendingCollege.getApprovalStatus()).isEqualTo(CollegeApprovalStatus.ACTION_REQUIRED);
+
+        verify(auditEventService).record(
+                eq(AuditEventType.COLLEGE_REGISTRATION_ACTION_REQUIRED),
+                eq(1L),
+                eq(Role.SUPER_ADMIN),
+                eq(55L),
+                eq(101L),
+                eq(AuditOutcome.SUCCESS),
+                any(),
+                any()
+        );
+        verify(collegeRegistrationDocumentRepository, never()).findByRegistrationIdWithLock(anyLong());
+    }
+
+    @Test
+    @DisplayName("recordDecision - failed approval causes no partial mutation of college, registration, or audit")
+    void recordDecision_failedApproval_noPartialMutation() {
+        when(collegeRepository.findByIdWithLock(101L)).thenReturn(Optional.of(pendingCollege));
+        when(collegeRegistrationRepository.findById(205L)).thenReturn(Optional.of(pendingRegistration));
+
+        CollegeRegistrationDocument doc1 = new CollegeRegistrationDocument();
+        doc1.setId(1L);
+        doc1.setRegistrationId(205L);
+        doc1.setDocumentCategory(DocumentCategory.UNIVERSITY_AFFILIATION_CERTIFICATE);
+        doc1.setOriginalFilename("affiliation.pdf");
+        doc1.setVerificationStatus(DocumentVerificationStatus.REJECTED);
+
+        CollegeRegistrationDocument doc2 = new CollegeRegistrationDocument();
+        doc2.setId(2L);
+        doc2.setRegistrationId(205L);
+        doc2.setDocumentCategory(DocumentCategory.AUTHORIZED_SIGNATORY_ID);
+        doc2.setOriginalFilename("signatory.pdf");
+        doc2.setVerificationStatus(DocumentVerificationStatus.ACCEPTED);
+
+        when(collegeRegistrationDocumentRepository.findByRegistrationIdWithLock(205L))
+                .thenReturn(List.of(doc1, doc2));
+
+        ReviewDecisionRequest request = new ReviewDecisionRequest(
+                ReviewDecisionAction.APPROVE, 0L, "Approving", null);
+
+        assertThatThrownBy(() -> collegeReviewService.recordDecision(101L, request))
+                .isInstanceOf(AppException.class)
+                .extracting("errorCode")
+                .isEqualTo("DOCUMENTS_REJECTED");
+
+        // Verify college and registration statuses remain unchanged
+        assertThat(pendingCollege.getApprovalStatus()).isEqualTo(CollegeApprovalStatus.PENDING);
+        assertThat(pendingRegistration.getStatus()).isEqualTo(CollegeApprovalStatus.PENDING);
+        assertThat(pendingRegistration.getReviewedAt()).isNull();
+
+        // Verify no audit events or lifecycle dispatches occurred
+        verify(auditEventService, never()).record(any(), anyLong(), any(), any(), anyLong(), any(), any(), any());
+        verifyNoInteractions(collegeLifecycleService);
+    }
+
+    @Test
+    @DisplayName("recordDecision - APPROVE with superseded rejected document and accepted replacement succeeds")
+    void recordDecision_approve_supersededRejectedDocWithAcceptedReplacement_success() {
+        when(collegeRepository.findByIdWithLock(101L)).thenReturn(Optional.of(pendingCollege));
+        when(collegeRegistrationRepository.findById(205L)).thenReturn(Optional.of(pendingRegistration));
+        when(securityContextService.requireCurrentUserId()).thenReturn(1L);
+        when(securityContextService.requireCurrentRole()).thenReturn(Role.SUPER_ADMIN);
+        when(userRepository.findByCollegeIdInAndRoleAndStatus(List.of(101L), Role.COLLEGE_ADMIN, UserStatus.ACTIVE))
+                .thenReturn(List.of(activeAdmin));
+
+        // Doc 1 was rejected in previous round
+        CollegeRegistrationDocument doc1 = new CollegeRegistrationDocument();
+        doc1.setId(1L);
+        doc1.setRegistrationId(205L);
+        doc1.setDocumentCategory(DocumentCategory.UNIVERSITY_AFFILIATION_CERTIFICATE);
+        doc1.setOriginalFilename("affiliation_v1.pdf");
+        doc1.setVerificationStatus(DocumentVerificationStatus.REJECTED);
+
+        // Doc 2 replaces doc 1 and is accepted
+        CollegeRegistrationDocument doc2 = new CollegeRegistrationDocument();
+        doc2.setId(2L);
+        doc2.setRegistrationId(205L);
+        doc2.setReplacesDocumentId(1L);
+        doc2.setDocumentCategory(DocumentCategory.UNIVERSITY_AFFILIATION_CERTIFICATE);
+        doc2.setOriginalFilename("affiliation_v2.pdf");
+        doc2.setVerificationStatus(DocumentVerificationStatus.ACCEPTED);
+
+        // Doc 3 is accepted signatory
+        CollegeRegistrationDocument doc3 = new CollegeRegistrationDocument();
+        doc3.setId(3L);
+        doc3.setRegistrationId(205L);
+        doc3.setDocumentCategory(DocumentCategory.AUTHORIZED_SIGNATORY_ID);
+        doc3.setOriginalFilename("signatory.pdf");
+        doc3.setVerificationStatus(DocumentVerificationStatus.ACCEPTED);
+
+        when(collegeRegistrationDocumentRepository.findByRegistrationIdWithLock(205L))
+                .thenReturn(List.of(doc1, doc2, doc3));
+
+        ReviewDecisionRequest request = new ReviewDecisionRequest(
+                ReviewDecisionAction.APPROVE, 0L, "All active documents verified.", null);
+
+        ReviewDecisionResponse response = collegeReviewService.recordDecision(101L, request);
+
+        assertThat(response.approvalStatus()).isEqualTo(CollegeApprovalStatus.APPROVED);
+        assertThat(pendingCollege.getApprovalStatus()).isEqualTo(CollegeApprovalStatus.APPROVED);
+        assertThat(pendingRegistration.getStatus()).isEqualTo(CollegeApprovalStatus.APPROVED);
     }
 }

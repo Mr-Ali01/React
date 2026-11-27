@@ -3,9 +3,13 @@ import { Navigate, Outlet } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
 
 export const PublicOnlyRoute: React.FC = () => {
-  const { isAuthenticated, user, isLoading } = useAuthStore();
+  const { isAuthenticated, user, isLoading, isInitialized } = useAuthStore();
 
-  if (isLoading) {
+  // Block rendering ONLY during initial application bootstrap.
+  // During background refetches (when isInitialized is true), keep child routes mounted
+  // so form state (Login, College Registration) is not destroyed.
+  const isInitializing = !isInitialized && isLoading;
+  if (isInitializing) {
     return null;
   }
 

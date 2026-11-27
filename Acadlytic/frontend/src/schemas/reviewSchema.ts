@@ -89,3 +89,65 @@ export const reviewQueueFilterSchema = z
   });
 
 export type ReviewQueueFilterFormValues = z.infer<typeof reviewQueueFilterSchema>;
+
+/**
+ * Zod validation schema for individual document review decisions (Module 3.6).
+ * Enforces business rules:
+ * - action: ACCEPT or REJECT.
+ * - expectedDocumentVersion: integer >= 0 matching current document version (version 0 is valid!).
+ * - notes: optional, max 1000 characters.
+ * - rejectionReason: mandatory if REJECT (10-1000 characters); must be empty/null if ACCEPT.
+ */
+export const documentReviewDecisionSchema = z
+  .object({
+    action: z.enum(['ACCEPT', 'REJECT'] as const, {
+      required_error: 'Review action is required.',
+    }),
+    expectedDocumentVersion: z
+      .number({ required_error: 'Document version is required.' })
+      .int('Document version must be an integer.')
+      .min(0, 'Invalid document version.'),
+    notes: z
+      .string()
+      .max(1000, 'Review notes cannot exceed 1000 characters.')
+      .optional()
+      .nullable(),
+    rejectionReason: z
+      .string()
+      .max(1000, 'Rejection reason cannot exceed 1000 characters.')
+      .optional()
+      .nullable(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.action === 'REJECT') {
+      const trimmed =
+        typeof data.rejectionReason === 'string'
+          ? data.rejectionReason.trim()
+          : '';
+      if (trimmed.length < 10) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['rejectionReason'],
+          message:
+            'Rejection reason must be at least 10 characters when rejecting a document.',
+        });
+      }
+    }
+    if (data.action === 'ACCEPT') {
+      const trimmed =
+        typeof data.rejectionReason === 'string'
+          ? data.rejectionReason.trim()
+          : '';
+      if (trimmed.length > 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['rejectionReason'],
+          message: 'Rejection reason must be empty when accepting a document.',
+        });
+      }
+    }
+  });
+
+export type DocumentReviewDecisionFormValues = z.infer<
+  typeof documentReviewDecisionSchema
+>;

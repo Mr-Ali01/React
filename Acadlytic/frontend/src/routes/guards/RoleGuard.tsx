@@ -8,9 +8,10 @@ interface RoleGuardProps {
 }
 
 export const RoleGuard: React.FC<RoleGuardProps> = ({ allowedRoles }) => {
-  const { user, isAuthenticated, isLoading } = useAuthStore();
+  const { user, isAuthenticated, isLoading, isInitialized } = useAuthStore();
 
-  if (isLoading) {
+  const isInitializing = !isInitialized && isLoading;
+  if (isInitializing) {
     return null;
   }
 

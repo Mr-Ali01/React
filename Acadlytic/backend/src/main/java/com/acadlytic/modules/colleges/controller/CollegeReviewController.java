@@ -4,6 +4,9 @@ import com.acadlytic.common.dto.PageResponse;
 import com.acadlytic.common.response.ApiResponse;
 import com.acadlytic.modules.colleges.dto.CollegeReviewDetailResponse;
 import com.acadlytic.modules.colleges.dto.DocumentDownload;
+import com.acadlytic.modules.colleges.dto.DocumentReviewDecisionRequest;
+import com.acadlytic.modules.colleges.dto.DocumentReviewDecisionResponse;
+import com.acadlytic.modules.colleges.dto.DocumentReviewHistoryItemResponse;
 import com.acadlytic.modules.colleges.dto.ReviewDecisionRequest;
 import com.acadlytic.modules.colleges.dto.ReviewDecisionResponse;
 import com.acadlytic.modules.colleges.dto.ReviewQueueItemResponse;
@@ -27,6 +30,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Instant;
+import java.util.List;
 
 /**
  * Super Admin controller for pending review queue inspection, detailed revision analysis,
@@ -119,5 +123,42 @@ public class CollegeReviewController {
 
         ReviewDecisionResponse response = collegeReviewService.recordDecision(collegeId, request);
         return ApiResponse.success("Application review decision recorded successfully.", response);
+    }
+
+    @PostMapping("/{collegeId}/documents/{documentId}/decision")
+    @Operation(summary = "Record Super Admin review decision for an individual document (ACCEPT, REJECT)")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Document review decision recorded successfully"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Validation error in decision request"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Unauthenticated session"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Forbidden - requires SUPER_ADMIN role"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Target college or document not found"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "Stale document version or application not awaiting review")
+    })
+    public ApiResponse<DocumentReviewDecisionResponse> recordDocumentDecision(
+            @PathVariable("collegeId") Long collegeId,
+            @PathVariable("documentId") Long documentId,
+            @Valid @RequestBody DocumentReviewDecisionRequest request) {
+
+        DocumentReviewDecisionResponse response = collegeReviewService.recordDocumentDecision(
+                collegeId, documentId, request);
+        return ApiResponse.success("Document review decision recorded successfully.", response);
+    }
+
+    @GetMapping("/{collegeId}/documents/{documentId}/history")
+    @Operation(summary = "Get review decision history for an individual document")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Document review history retrieved successfully"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Unauthenticated session"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Forbidden - requires SUPER_ADMIN role"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Target college or document not found")
+    })
+    public ApiResponse<List<DocumentReviewHistoryItemResponse>> getDocumentReviewHistory(
+            @PathVariable("collegeId") Long collegeId,
+            @PathVariable("documentId") Long documentId) {
+
+        List<DocumentReviewHistoryItemResponse> response = collegeReviewService.getDocumentReviewHistory(
+                collegeId, documentId);
+        return ApiResponse.success("Document review history retrieved successfully.", response);
     }
 }

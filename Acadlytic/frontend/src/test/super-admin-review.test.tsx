@@ -8,6 +8,7 @@ import {
   ReviewDocumentListCard,
   ReviewAdminUserCard,
   CollegeProfileReviewCard,
+  DocumentPreviewReviewModal,
 } from '@/components/review';
 import { normalizeReviewDetail, reviewService } from '@/services/reviewService';
 import { apiClient, ApiError } from '@/services/api';
@@ -19,6 +20,8 @@ import type {
   CollegeReviewDetailResponse,
   RawCollegeReviewDetailResponse,
   CurrentUser,
+  DocumentResponse,
+  DocumentReviewHistoryItemResponse,
 } from '@/types';
 
 // --- Mock Data ---
@@ -122,6 +125,9 @@ const mockDetailItem1: CollegeReviewDetailResponse = {
         'abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
       replacesDocumentId: null,
       createdAt: '2026-11-20T10:00:00Z',
+      verificationStatus: 'ACCEPTED',
+      verificationProvenance: 'DIRECT_REVIEW',
+      version: 1,
     },
     {
       id: 202,
@@ -134,6 +140,24 @@ const mockDetailItem1: CollegeReviewDetailResponse = {
         '9876543210fedcba9876543210fedcba9876543210fedcba9876543210fedcba',
       replacesDocumentId: null,
       createdAt: '2026-11-20T10:05:00Z',
+      verificationStatus: 'ACCEPTED',
+      verificationProvenance: 'DIRECT_REVIEW',
+      version: 1,
+    },
+    {
+      id: 203,
+      registrationId: 101,
+      documentCategory: 'UNIVERSITY_AFFILIATION_CERTIFICATE',
+      originalFilename: 'affiliation_certificate.pdf',
+      mimeType: 'application/pdf',
+      fileSizeBytes: 1048576,
+      sha256Checksum:
+        '1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+      replacesDocumentId: null,
+      createdAt: '2026-11-20T10:10:00Z',
+      verificationStatus: 'ACCEPTED',
+      verificationProvenance: 'DIRECT_REVIEW',
+      version: 1,
     },
   ],
   currentRevision: {
@@ -507,8 +531,15 @@ describe('Module 3.4 — Super Admin Approval Queue & Review Workflow (Frontend)
       expect(screen.getByText('charter_certificate.pdf')).toBeInTheDocument();
     });
 
-    const downloadButtons = screen.getAllByRole('button', { name: /download/i });
-    fireEvent.click(downloadButtons[0]);
+    const reviewBtn = screen.getByRole('button', {
+      name: /review charter_certificate\.pdf/i,
+    });
+    fireEvent.click(reviewBtn);
+
+    const downloadBtn = await screen.findByRole('button', {
+      name: /^download$/i,
+    });
+    fireEvent.click(downloadBtn);
 
     await waitFor(() => {
       expect(downloadSpy).toHaveBeenCalledWith(
@@ -919,25 +950,23 @@ describe('Module 3.4 — Super Admin Approval Queue & Review Workflow (Frontend)
     });
   });
 
-  it('22. invalidates queueRoot and detail query keys upon decision success', async () => {
+  it('21a. handles 409 DOCUMENTS_REJECTED with specific document rejection feedback inside modal without triggering stale conflict', async () => {
     vi.spyOn(reviewService, 'getReviewDetail').mockResolvedValue(mockDetailItem1);
-    vi.spyOn(reviewService, 'recordReviewDecision').mockResolvedValueOnce({
-      collegeId: 10,
-      action: 'APPROVE',
-      approvalStatus: 'APPROVED',
-      concurrencyVersion: 6,
-      message: 'Approved',
+
+    const docRejectedError = new ApiError('Document was rejected.', {
+      status: 409,
+      errorCode: 'DOCUMENTS_REJECTED',
     });
 
-    const { queryClient } = renderWithProviders(
+    vi.spyOn(reviewService, 'recordReviewDecision').mockRejectedValueOnce(docRejectedError);
+
+    renderWithProviders(
       <MemoryRouter initialEntries={['/admin/colleges/reviews/10']}>
         <Routes>
           <Route path="/admin/colleges/reviews/:collegeId" element={<CollegeReviewDetailPage />} />
         </Routes>
       </MemoryRouter>
     );
-
-    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /^approve$/i })).toBeInTheDocument();
@@ -951,14 +980,127 @@ describe('Module 3.4 — Super Admin Approval Queue & Review Workflow (Frontend)
 
     fireEvent.click(screen.getByRole('button', { name: /confirm approval/i }));
 
+    // Modal remains open and shows the specific DOCUMENTS_REJECTED error
     await waitFor(() => {
+      expect(
+        screen.getByText(/One or more active verification documents have been rejected/i)
+      ).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /confirm approval/i })).toBeInTheDocument();
+    });
+
+    // Stale conflict banner should NOT be displayed
+    expect(
+      screen.queryByText('Application Details Updated by Concurrent Process')
+    ).not.toBeInTheDocument();
+  });
+
+  it('21b. handles 409 DOCUMENTS_NOT_VERIFIED with specific unverified document feedback inside modal without triggering stale conflict', async () => {
+    vi.spyOn(reviewService, 'getReviewDetail').mockResolvedValue(mockDetailItem1);
+
+    const docNotVerifiedError = new ApiError('Document pending verification.', {
+      status: 409,
+      errorCode: 'DOCUMENTS_NOT_VERIFIED',
+    });
+
+    vi.spyOn(reviewService, 'recordReviewDecision').mockRejectedValueOnce(docNotVerifiedError);
+
+    renderWithProviders(
+      <MemoryRouter initialEntries={['/admin/colleges/reviews/10']}>
+        <Routes>
+          <Route path="/admin/colleges/reviews/:collegeId" element={<CollegeReviewDetailPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /^approve$/i })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /^approve$/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /confirm approval/i })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /confirm approval/i }));
+
+    // Modal remains open and shows the specific DOCUMENTS_NOT_VERIFIED error
+    await waitFor(() => {
+      expect(
+        screen.getByText(/All active verification documents must be verified and accepted before approving/i)
+      ).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /confirm approval/i })).toBeInTheDocument();
+    });
+
+    // Stale conflict banner should NOT be displayed
+    expect(
+      screen.queryByText('Application Details Updated by Concurrent Process')
+    ).not.toBeInTheDocument();
+  });
+
+  it('22. invalidates queueRoot and displays decision success confirmation without refetching review detail', async () => {
+    vi.spyOn(reviewService, 'getReviewDetail').mockResolvedValue(mockDetailItem1);
+    const detailSpy = vi.spyOn(reviewService, 'getReviewDetail');
+
+    vi.spyOn(reviewService, 'recordReviewDecision').mockResolvedValueOnce({
+      collegeId: 10,
+      action: 'APPROVE',
+      approvalStatus: 'APPROVED',
+      concurrencyVersion: 6,
+      message: 'Approved',
+    });
+
+    const { queryClient } = renderWithProviders(
+      <MemoryRouter initialEntries={['/admin/colleges/reviews/10']}>
+        <Routes>
+          <Route path="/admin/colleges/reviews" element={<div>Review Queue Home</div>} />
+          <Route path="/admin/colleges/reviews/:collegeId" element={<CollegeReviewDetailPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /^approve$/i })).toBeInTheDocument();
+    });
+
+    // Clear detail spy after initial load to verify refetch is not triggered
+    detailSpy.mockClear();
+
+    fireEvent.click(screen.getByRole('button', { name: /^approve$/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /confirm approval/i })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /confirm approval/i }));
+
+    await waitFor(() => {
+      // Invalidate queueRoot
       expect(invalidateSpy).toHaveBeenCalledWith({
         queryKey: ['reviews', 'queue'],
       });
-      expect(invalidateSpy).toHaveBeenCalledWith({
+      // Do NOT invalidate detail (prevents 409 refetch on approved college)
+      expect(invalidateSpy).not.toHaveBeenCalledWith({
         queryKey: ['reviews', 'detail', 10],
       });
+      // Displays clear approval confirmation view
+      expect(
+        screen.getByText('College Registration Application Approved!')
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText('Removed from Pending Review Queue')
+      ).toBeInTheDocument();
     });
+
+    // Detail endpoint was NOT refetched!
+    expect(detailSpy).not.toHaveBeenCalled();
+
+    // Return to Queue navigation works
+    const returnBtn = screen.getByRole('button', { name: /return to review queue/i });
+    fireEvent.click(returnBtn);
+    expect(screen.getByText('Review Queue Home')).toBeInTheDocument();
   });
 
   it('23. disables decision action buttons when college is already APPROVED', async () => {
@@ -1189,7 +1331,7 @@ describe('Module 3.4 — Super Admin Approval Queue & Review Workflow (Frontend)
       expect(normalized.reviewHistory[0].versionNumber).toBe(1);
       expect(normalized.reviewHistory[0].reviewNotes).toBe('Please provide valid affiliation certificate.');
       expect(normalized.reviewHistory[0].reviewerUserId).toBe(99);
-      expect(normalized.reviewHistory[0].decisionByAdminEmail).toBe('Reviewer #99');
+      expect(normalized.reviewHistory[0].decisionByAdminEmail).toBeNull();
     });
 
     it('29. renders Review Detail page with real backend wire format without crashing', async () => {
@@ -1314,6 +1456,530 @@ describe('Module 3.4 — Super Admin Approval Queue & Review Workflow (Frontend)
           rejectionReason: null,
         }
       );
+    });
+  });
+
+  describe('Document Review Redesign & DocumentPreviewReviewModal Tests', () => {
+    const mockPendingDoc: DocumentResponse = {
+      id: 301,
+      registrationId: 101,
+      documentCategory: 'AUTHORIZED_SIGNATORY_ID',
+      originalFilename: 'signatory_id.pdf',
+      mimeType: 'application/pdf',
+      fileSizeBytes: 204800,
+      sha256Checksum:
+        '1111222233334444555566667777888899990000aaaabbbbccccddddeeeeffff',
+      replacesDocumentId: null,
+      createdAt: '2026-11-20T10:00:00Z',
+      verificationStatus: 'PENDING',
+      verificationProvenance: 'NOT_REVIEWED',
+      rejectionReason: null,
+      lastReviewedAt: null,
+      lastReviewedByUserId: null,
+      version: 2,
+    };
+
+    const mockAcceptedAffiliationDoc: DocumentResponse = {
+      id: 302,
+      registrationId: 101,
+      documentCategory: 'UNIVERSITY_AFFILIATION_CERTIFICATE',
+      originalFilename: 'affiliation_cert.pdf',
+      mimeType: 'application/pdf',
+      fileSizeBytes: 512000,
+      sha256Checksum:
+        'aaaabbbbccccddddeeeeffff1111222233334444555566667777888899990000',
+      replacesDocumentId: null,
+      createdAt: '2026-11-20T10:05:00Z',
+      verificationStatus: 'ACCEPTED',
+      verificationProvenance: 'DIRECT_REVIEW',
+      rejectionReason: null,
+      lastReviewedAt: '2026-11-20T11:00:00Z',
+      lastReviewedByUserId: 1,
+      version: 1,
+    };
+
+    it('34. renders exactly one Review button per document row and no separate action buttons in table', () => {
+      renderWithProviders(
+        <ReviewDocumentListCard
+          collegeId={10}
+          documents={[mockPendingDoc, mockAcceptedAffiliationDoc]}
+          collegeApprovalStatus="PENDING"
+        />
+      );
+
+      // Exactly one Review button per document row
+      const reviewButtons = screen.getAllByRole('button', { name: /^review/i });
+      expect(reviewButtons).toHaveLength(2);
+
+      // Separate action buttons must NOT exist in table rows
+      expect(screen.queryByRole('button', { name: /^download$/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^accept$/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^reject$/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^history$/i })).not.toBeInTheDocument();
+    });
+
+    it('35. renders verification status badge and completely removes Direct Review provenance badge from table rows', () => {
+      renderWithProviders(
+        <ReviewDocumentListCard
+          collegeId={10}
+          documents={[mockPendingDoc, mockAcceptedAffiliationDoc]}
+          collegeApprovalStatus="PENDING"
+        />
+      );
+
+      // Status badges are present
+      expect(screen.getByText('Pending Verification')).toBeInTheDocument();
+      expect(screen.getByText('Accepted')).toBeInTheDocument();
+
+      // Direct Review provenance badge must be completely absent from table rows
+      expect(screen.queryByText('Direct Review')).not.toBeInTheDocument();
+    });
+
+    it('36. clicking Review opens DocumentPreviewReviewModal and renders PDF stream inside iframe', async () => {
+      vi.spyOn(reviewService, 'getDocumentPreviewBlob').mockResolvedValueOnce({
+        blob: new Blob(['fake pdf binary'], { type: 'application/pdf' }),
+        contentType: 'application/pdf',
+      });
+
+      renderWithProviders(
+        <ReviewDocumentListCard
+          collegeId={10}
+          documents={[mockPendingDoc]}
+          collegeApprovalStatus="PENDING"
+        />
+      );
+
+      const reviewBtn = screen.getByRole('button', {
+        name: /review signatory_id\.pdf/i,
+      });
+      fireEvent.click(reviewBtn);
+
+      await waitFor(() => {
+        const iframe = screen.getByTitle(/preview of signatory_id\.pdf/i);
+        expect(iframe).toBeInTheDocument();
+        expect(iframe.tagName.toLowerCase()).toBe('iframe');
+      });
+    });
+
+    it('37. renders image preview in DocumentPreviewReviewModal when stream returns image', async () => {
+      const mockImageDoc: DocumentResponse = {
+        ...mockPendingDoc,
+        originalFilename: 'signatory_photo.jpg',
+        mimeType: 'image/jpeg',
+      };
+
+      vi.spyOn(reviewService, 'getDocumentPreviewBlob').mockResolvedValueOnce({
+        blob: new Blob(['fake image binary'], { type: 'image/jpeg' }),
+        contentType: 'image/jpeg',
+      });
+
+      renderWithProviders(
+        <DocumentPreviewReviewModal
+          isOpen={true}
+          onClose={vi.fn()}
+          collegeId={10}
+          document={mockImageDoc}
+        />
+      );
+
+      await waitFor(() => {
+        const img = screen.getByAltText(/document signatory_photo\.jpg/i);
+        expect(img).toBeInTheDocument();
+        expect(img.tagName.toLowerCase()).toBe('img');
+      });
+    });
+
+    it('38. displays unsupported format state and fallback download in modal for non-renderable MIME type', async () => {
+      const mockZipDoc: DocumentResponse = {
+        ...mockPendingDoc,
+        originalFilename: 'supporting_archive.zip',
+        mimeType: 'application/zip',
+      };
+
+      vi.spyOn(reviewService, 'getDocumentPreviewBlob').mockResolvedValueOnce({
+        blob: new Blob(['fake zip binary'], { type: 'application/zip' }),
+        contentType: 'application/zip',
+      });
+
+      renderWithProviders(
+        <DocumentPreviewReviewModal
+          isOpen={true}
+          onClose={vi.fn()}
+          collegeId={10}
+          document={mockZipDoc}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Format Not Renderable Inline')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /download to view/i })).toBeInTheDocument();
+      });
+    });
+
+    it('39. displays error state in DocumentPreviewReviewModal when document stream fails', async () => {
+      vi.spyOn(reviewService, 'getDocumentPreviewBlob').mockRejectedValueOnce(
+        new Error('Failed to load storage stream.')
+      );
+
+      renderWithProviders(
+        <DocumentPreviewReviewModal
+          isOpen={true}
+          onClose={vi.fn()}
+          collegeId={10}
+          document={mockPendingDoc}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Preview Unavailable')).toBeInTheDocument();
+        expect(screen.getByText('Failed to load storage stream.')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /download document file instead/i })).toBeInTheDocument();
+      });
+    });
+
+    it('40. executes document download inside DocumentPreviewReviewModal', async () => {
+      vi.spyOn(reviewService, 'getDocumentPreviewBlob').mockResolvedValueOnce({
+        blob: new Blob(['fake content'], { type: 'application/pdf' }),
+        contentType: 'application/pdf',
+      });
+
+      const downloadSpy = vi
+        .spyOn(reviewService, 'downloadReviewDocument')
+        .mockResolvedValueOnce();
+
+      renderWithProviders(
+        <DocumentPreviewReviewModal
+          isOpen={true}
+          onClose={vi.fn()}
+          collegeId={10}
+          document={mockPendingDoc}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /download/i })).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /download/i }));
+
+      await waitFor(() => {
+        expect(downloadSpy).toHaveBeenCalledWith(
+          10,
+          301,
+          'signatory_id.pdf'
+        );
+      });
+    });
+
+    it('41. records ACCEPT decision inside DocumentPreviewReviewModal with expectedDocumentVersion bound strictly to document version', async () => {
+      vi.spyOn(reviewService, 'getDocumentPreviewBlob').mockResolvedValue({
+        blob: new Blob(['fake pdf binary'], { type: 'application/pdf' }),
+        contentType: 'application/pdf',
+      });
+
+      const decisionSpy = vi
+        .spyOn(reviewService, 'recordDocumentDecision')
+        .mockResolvedValueOnce({
+          documentId: 301,
+          registrationId: 101,
+          documentCategory: 'AUTHORIZED_SIGNATORY_ID',
+          verificationStatus: 'ACCEPTED',
+          verificationProvenance: 'DIRECT_REVIEW',
+          rejectionReason: null,
+          lastReviewedAt: '2026-11-26T12:00:00Z',
+          lastReviewedByUserId: 1,
+          version: 3,
+        });
+
+      renderWithProviders(
+        <DocumentPreviewReviewModal
+          isOpen={true}
+          onClose={vi.fn()}
+          collegeId={10}
+          document={mockPendingDoc}
+          collegeApprovalStatus="PENDING"
+        />
+      );
+
+      const acceptBtn = await screen.findByRole('button', {
+        name: /accept signatory_id\.pdf/i,
+      });
+      expect(acceptBtn).toBeEnabled();
+      fireEvent.click(acceptBtn);
+
+      await waitFor(() => {
+        expect(decisionSpy).toHaveBeenCalledWith(10, 301, {
+          action: 'ACCEPT',
+          expectedDocumentVersion: 2,
+        });
+      });
+    });
+
+    it('42. treats document version 0 as authoritative and valid for ACCEPT inside DocumentPreviewReviewModal', async () => {
+      vi.spyOn(reviewService, 'getDocumentPreviewBlob').mockResolvedValue({
+        blob: new Blob(['fake pdf binary'], { type: 'application/pdf' }),
+        contentType: 'application/pdf',
+      });
+
+      const docVersionZero: DocumentResponse = {
+        ...mockPendingDoc,
+        version: 0,
+      };
+
+      const decisionSpy = vi
+        .spyOn(reviewService, 'recordDocumentDecision')
+        .mockResolvedValueOnce({
+          documentId: 301,
+          registrationId: 101,
+          documentCategory: 'AUTHORIZED_SIGNATORY_ID',
+          verificationStatus: 'ACCEPTED',
+          verificationProvenance: 'DIRECT_REVIEW',
+          rejectionReason: null,
+          lastReviewedAt: '2026-11-26T12:00:00Z',
+          lastReviewedByUserId: 1,
+          version: 1,
+        });
+
+      renderWithProviders(
+        <DocumentPreviewReviewModal
+          isOpen={true}
+          onClose={vi.fn()}
+          collegeId={10}
+          document={docVersionZero}
+          collegeApprovalStatus="PENDING"
+        />
+      );
+
+      expect(screen.getByText('Version #0')).toBeInTheDocument();
+
+      const acceptBtn = await screen.findByRole('button', {
+        name: /accept signatory_id\.pdf/i,
+      });
+      expect(acceptBtn).toBeEnabled();
+      fireEvent.click(acceptBtn);
+
+      await waitFor(() => {
+        expect(decisionSpy).toHaveBeenCalledWith(10, 301, {
+          action: 'ACCEPT',
+          expectedDocumentVersion: 0,
+        });
+      });
+    });
+
+    it('43. validates rejection reason length (10-2000 chars) and records REJECT decision inside DocumentPreviewReviewModal', async () => {
+      vi.spyOn(reviewService, 'getDocumentPreviewBlob').mockResolvedValue({
+        blob: new Blob(['fake pdf binary'], { type: 'application/pdf' }),
+        contentType: 'application/pdf',
+      });
+
+      const decisionSpy = vi
+        .spyOn(reviewService, 'recordDocumentDecision')
+        .mockResolvedValueOnce({
+          documentId: 301,
+          registrationId: 101,
+          documentCategory: 'AUTHORIZED_SIGNATORY_ID',
+          verificationStatus: 'REJECTED',
+          verificationProvenance: 'DIRECT_REVIEW',
+          rejectionReason: 'The government ID is expired and illegible.',
+          lastReviewedAt: '2026-11-26T12:00:00Z',
+          lastReviewedByUserId: 1,
+          version: 3,
+        });
+
+      renderWithProviders(
+        <DocumentPreviewReviewModal
+          isOpen={true}
+          onClose={vi.fn()}
+          collegeId={10}
+          document={mockPendingDoc}
+          collegeApprovalStatus="PENDING"
+        />
+      );
+
+      const rejectBtn = await screen.findByRole('button', {
+        name: /reject signatory_id\.pdf/i,
+      });
+      expect(rejectBtn).toBeEnabled();
+      fireEvent.click(rejectBtn);
+
+      await waitFor(() => {
+        expect(
+          screen.getByText(/document rejection reason \(required\)/i)
+        ).toBeInTheDocument();
+      });
+
+      const submitBtn = screen.getByRole('button', {
+        name: /confirm rejection/i,
+      });
+
+      // Submit without reason -> required validation error
+      fireEvent.click(submitBtn);
+      await waitFor(() => {
+        expect(
+          screen.getByText(/Rejection reason must be at least 10 characters/i)
+        ).toBeInTheDocument();
+      });
+      expect(decisionSpy).not.toHaveBeenCalled();
+
+      // Submit < 10 chars -> validation error
+      const textarea = screen.getByPlaceholderText(/describe specific compliance issues/i);
+      fireEvent.change(textarea, { target: { value: 'Bad photo' } });
+      fireEvent.click(submitBtn);
+      await waitFor(() => {
+        expect(
+          screen.getByText(/Rejection reason must be at least 10 characters/i)
+        ).toBeInTheDocument();
+      });
+      expect(decisionSpy).not.toHaveBeenCalled();
+
+      // Submit valid reason >= 10 chars
+      fireEvent.change(textarea, {
+        target: { value: 'The government ID is expired and illegible.' },
+      });
+      fireEvent.click(submitBtn);
+
+      await waitFor(() => {
+        expect(decisionSpy).toHaveBeenCalledWith(10, 301, {
+          action: 'REJECT',
+          expectedDocumentVersion: 2,
+          rejectionReason: 'The government ID is expired and illegible.',
+          notes: null,
+        });
+      });
+    });
+
+    it('44. handles 409 STALE_DOCUMENT_VERSION conflict in DocumentPreviewReviewModal and triggers conflict refresh', async () => {
+      vi.spyOn(reviewService, 'getDocumentPreviewBlob').mockResolvedValue({
+        blob: new Blob(['fake pdf binary'], { type: 'application/pdf' }),
+        contentType: 'application/pdf',
+      });
+
+      const conflictError = new ApiError('Conflict', {
+        status: 409,
+        errorCode: 'STALE_DOCUMENT_VERSION',
+      });
+
+      vi.spyOn(reviewService, 'recordDocumentDecision').mockRejectedValueOnce(
+        conflictError
+      );
+
+      const mockOnClose = vi.fn();
+      const mockOnStaleConflict = vi.fn();
+
+      renderWithProviders(
+        <DocumentPreviewReviewModal
+          isOpen={true}
+          onClose={mockOnClose}
+          collegeId={10}
+          document={mockPendingDoc}
+          onStaleConflict={mockOnStaleConflict}
+        />
+      );
+
+      const rejectBtn = await screen.findByRole('button', {
+        name: /reject signatory_id\.pdf/i,
+      });
+      fireEvent.click(rejectBtn);
+
+      const textarea = screen.getByPlaceholderText(/describe specific compliance issues/i);
+      fireEvent.change(textarea, {
+        target: { value: 'Document version is outdated on server.' },
+      });
+
+      fireEvent.click(
+        screen.getByRole('button', { name: /confirm rejection/i })
+      );
+
+      await waitFor(() => {
+        expect(mockOnClose).toHaveBeenCalled();
+        expect(mockOnStaleConflict).toHaveBeenCalled();
+      });
+    });
+
+    it('45. freezes document review decisions in DocumentPreviewReviewModal when college approval status is not PENDING, but preserves history access', async () => {
+      vi.spyOn(reviewService, 'getDocumentPreviewBlob').mockResolvedValue({
+        blob: new Blob(['fake pdf binary'], { type: 'application/pdf' }),
+        contentType: 'application/pdf',
+      });
+
+      const frozenStatuses: ('APPROVED' | 'REJECTED' | 'ACTION_REQUIRED')[] = [
+        'APPROVED',
+        'REJECTED',
+        'ACTION_REQUIRED',
+      ];
+
+      for (const status of frozenStatuses) {
+        const { unmount } = renderWithProviders(
+          <DocumentPreviewReviewModal
+            isOpen={true}
+            onClose={vi.fn()}
+            collegeId={10}
+            document={mockPendingDoc}
+            collegeApprovalStatus={status}
+          />
+        );
+
+        // Accept and Reject buttons inside modal are disabled
+        const acceptBtn = await screen.findByRole('button', {
+          name: /accept signatory_id\.pdf/i,
+        });
+        expect(acceptBtn).toBeDisabled();
+        expect(
+          screen.getByRole('button', { name: /reject signatory_id\.pdf/i })
+        ).toBeDisabled();
+
+        // Download and History tabs remain available
+        expect(screen.getByRole('button', { name: /^download$/i })).toBeEnabled();
+        expect(screen.getByRole('button', { name: /^history$/i })).toBeEnabled();
+
+        unmount();
+      }
+    });
+
+    it('46. displays chronological decision history inside DocumentPreviewReviewModal history tab', async () => {
+      vi.spyOn(reviewService, 'getDocumentPreviewBlob').mockResolvedValueOnce({
+        blob: new Blob(['fake content'], { type: 'application/pdf' }),
+        contentType: 'application/pdf',
+      });
+
+      const mockHistory: DocumentReviewHistoryItemResponse[] = [
+        {
+          id: 701,
+          documentId: 301,
+          registrationId: 101,
+          collegeId: 10,
+          action: 'REJECTED',
+          rejectionReason: 'Signature not matching passport records.',
+          reviewerUserId: 1,
+          reviewerEmail: 'owner@acadlytic.com',
+          reviewedAt: '2026-11-26T15:00:00Z',
+          createdAt: '2026-11-26T15:00:00Z',
+        },
+      ];
+
+      vi.spyOn(reviewService, 'getDocumentReviewHistory').mockResolvedValueOnce(
+        mockHistory
+      );
+
+      renderWithProviders(
+        <DocumentPreviewReviewModal
+          isOpen={true}
+          onClose={vi.fn()}
+          collegeId={10}
+          document={mockPendingDoc}
+        />
+      );
+
+      // Switch to History tab
+      const historyTab = screen.getByRole('button', { name: /^history$/i });
+      fireEvent.click(historyTab);
+
+      await waitFor(() => {
+        expect(screen.getByText('Decision Audit Trail')).toBeInTheDocument();
+        expect(screen.getByText('REJECTED')).toBeInTheDocument();
+        expect(screen.getByText('Signature not matching passport records.')).toBeInTheDocument();
+        expect(screen.getByText('owner@acadlytic.com')).toBeInTheDocument();
+      });
     });
   });
 });

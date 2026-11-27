@@ -17,6 +17,8 @@ import com.acadlytic.modules.colleges.entity.CollegeRegistration;
 import com.acadlytic.modules.colleges.entity.CollegeRegistrationDocument;
 import com.acadlytic.modules.colleges.entity.CollegeStatus;
 import com.acadlytic.modules.colleges.entity.DocumentCategory;
+import com.acadlytic.modules.colleges.entity.DocumentVerificationProvenance;
+import com.acadlytic.modules.colleges.entity.DocumentVerificationStatus;
 import com.acadlytic.modules.colleges.repository.CollegeRegistrationDocumentRepository;
 import com.acadlytic.modules.colleges.repository.CollegeRegistrationRepository;
 import com.acadlytic.modules.colleges.repository.CollegeRepository;
@@ -113,8 +115,9 @@ class CollegeLifecycleIntegrationTest extends AbstractMySqlIntegrationTest {
         SecurityContextHolder.clearContext();
         jdbcTemplate.execute("DELETE FROM SPRING_SESSION_ATTRIBUTES");
         jdbcTemplate.execute("DELETE FROM SPRING_SESSION");
+        jdbcTemplate.execute("TRUNCATE TABLE college_document_reviews");
         jdbcTemplate.execute("UPDATE colleges SET current_registration_id = NULL");
-        jdbcTemplate.execute("UPDATE college_registration_documents SET replaces_document_id = NULL");
+        jdbcTemplate.execute("UPDATE college_registration_documents SET source_document_id = NULL, source_registration_id = NULL, replaces_document_id = NULL");
         jdbcTemplate.execute("DELETE FROM college_registration_documents");
         jdbcTemplate.execute("DELETE FROM college_registrations");
         jdbcTemplate.execute("DELETE FROM outbox_emails");
@@ -216,7 +219,23 @@ class CollegeLifecycleIntegrationTest extends AbstractMySqlIntegrationTest {
         doc.setFileSizeBytes(VALID_PDF_BYTES.length);
         doc.setSha256Checksum("checksum123");
         doc.setStorageKey(stored.storageKey());
+        doc.setVerificationStatus(DocumentVerificationStatus.ACCEPTED);
+        doc.setVerificationProvenance(DocumentVerificationProvenance.DIRECT_REVIEW);
         documentRepository.saveAndFlush(doc);
+
+        var storedSign = documentStorageService.store(VALID_PDF_BYTES, "signatory.pdf", "application/pdf", "checksumSign123");
+        CollegeRegistrationDocument docSign = new CollegeRegistrationDocument();
+        docSign.setCollegeId(college.getId());
+        docSign.setRegistrationId(reg.getId());
+        docSign.setDocumentCategory(DocumentCategory.AUTHORIZED_SIGNATORY_ID);
+        docSign.setOriginalFilename("signatory.pdf");
+        docSign.setMimeType("application/pdf");
+        docSign.setFileSizeBytes(VALID_PDF_BYTES.length);
+        docSign.setSha256Checksum("checksumSign123");
+        docSign.setStorageKey(storedSign.storageKey());
+        docSign.setVerificationStatus(DocumentVerificationStatus.ACCEPTED);
+        docSign.setVerificationProvenance(DocumentVerificationProvenance.DIRECT_REVIEW);
+        documentRepository.saveAndFlush(docSign);
 
         return new CollegeContext(college, reg, admin);
     }

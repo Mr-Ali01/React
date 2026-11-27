@@ -25,6 +25,8 @@ import com.acadlytic.modules.colleges.entity.CollegeApprovalStatus;
 import com.acadlytic.modules.colleges.entity.CollegeRegistration;
 import com.acadlytic.modules.colleges.entity.CollegeRegistrationDocument;
 import com.acadlytic.modules.colleges.entity.DocumentCategory;
+import com.acadlytic.modules.colleges.entity.DocumentVerificationProvenance;
+import com.acadlytic.modules.colleges.entity.DocumentVerificationStatus;
 import com.acadlytic.modules.colleges.repository.CollegeRegistrationDocumentRepository;
 import com.acadlytic.modules.colleges.repository.CollegeRegistrationRepository;
 import com.acadlytic.modules.colleges.repository.CollegeRepository;
@@ -311,6 +313,13 @@ public class CollegeOnboardingService {
                 .toList();
 
         for (CollegeRegistrationDocument prevDoc : activePrevDocs) {
+            // Module 3.6B: Only non-rejected documents are carried forward into correction drafts
+            if (prevDoc.getVerificationStatus() == DocumentVerificationStatus.REJECTED) {
+                log.info("Skipping carry-forward for rejected document [{}] in revision v{}",
+                        prevDoc.getId(), submittedRevision.getVersionNumber());
+                continue;
+            }
+
             StoredFileMetadata duplicated = documentStorageService.duplicate(
                     prevDoc.getStorageKey(),
                     prevDoc.getOriginalFilename(),
@@ -330,6 +339,15 @@ public class CollegeOnboardingService {
             carriedDoc.setFileSizeBytes(prevDoc.getFileSizeBytes());
             carriedDoc.setSha256Checksum(prevDoc.getSha256Checksum());
             carriedDoc.setReplacesDocumentId(null);
+            carriedDoc.setVerificationStatus(prevDoc.getVerificationStatus() != null
+                    ? prevDoc.getVerificationStatus()
+                    : DocumentVerificationStatus.ACCEPTED);
+            carriedDoc.setVerificationProvenance(DocumentVerificationProvenance.CARRIED_FORWARD);
+            carriedDoc.setLastReviewedByUserId(prevDoc.getLastReviewedByUserId());
+            carriedDoc.setLastReviewedAt(prevDoc.getLastReviewedAt());
+            carriedDoc.setSourceDocumentId(prevDoc.getId());
+            carriedDoc.setSourceRegistrationId(prevDoc.getRegistrationId());
+            carriedDoc.setVersion(0L);
             collegeRegistrationDocumentRepository.save(carriedDoc);
         }
 
@@ -465,17 +483,44 @@ public class CollegeOnboardingService {
                     .orElse(null);
 
             if (targetDoc == null) {
-                // Check if document exists anywhere in this college
+                // Check if document belongs to immediately preceding submitted revision
+                CollegeRegistration prevSubmitted = college.getCurrentRegistrationId() != null
+                        ? collegeRegistrationRepository.findById(college.getCurrentRegistrationId()).orElse(null)
+                        : null;
+
                 Optional<CollegeRegistrationDocument> existingAnywhere = collegeRegistrationDocumentRepository
                         .findByIdAndCollegeId(replacesDocumentId, college.getId());
+
                 if (existingAnywhere.isPresent()) {
-                    throw new AppException(
-                            "CROSS_REVISION_REPLACEMENT_NOT_ALLOWED",
-                            "replacesDocumentId must belong to the active draft revision.",
-                            HttpStatus.BAD_REQUEST);
+                    CollegeRegistrationDocument candidate = existingAnywhere.get();
+                    if (prevSubmitted != null && candidate.getRegistrationId().equals(prevSubmitted.getId())) {
+                        if (candidate.getVerificationStatus() != DocumentVerificationStatus.REJECTED) {
+                            throw new AppException(
+                                    "CANNOT_REPLACE_NON_REJECTED_DOCUMENT",
+                                    "Only rejected documents from the previous submitted revision can be replaced.",
+                                    HttpStatus.BAD_REQUEST);
+                        }
+                        targetDoc = candidate;
+                    } else {
+                        throw new AppException(
+                                "CROSS_REVISION_REPLACEMENT_NOT_ALLOWED",
+                                "replacesDocumentId must belong to the active draft revision or immediately preceding submitted revision.",
+                                HttpStatus.BAD_REQUEST);
+                    }
                 } else {
                     throw new AppException("DOCUMENT_NOT_FOUND", "Target replacement document not found.", HttpStatus.NOT_FOUND);
                 }
+            }
+
+            final Long resolvedTargetId = targetDoc.getId();
+            // Enforce duplicate replacement protection within current draft
+            boolean alreadyReplaced = draftDocs.stream()
+                    .anyMatch(d -> Objects.equals(d.getReplacesDocumentId(), resolvedTargetId));
+            if (alreadyReplaced) {
+                throw new AppException(
+                        "REPLACEMENT_ALREADY_EXISTS",
+                        "A replacement for document ID " + resolvedTargetId + " already exists in this revision.",
+                        HttpStatus.CONFLICT);
             }
 
             if (supersededIds.contains(targetDoc.getId())) {
@@ -529,6 +574,9 @@ public class CollegeOnboardingService {
         doc.setFileSizeBytes(stored.fileSizeBytes());
         doc.setSha256Checksum(stored.sha256Checksum());
         doc.setReplacesDocumentId(targetReplacementId);
+        doc.setVerificationStatus(DocumentVerificationStatus.PENDING);
+        doc.setVerificationProvenance(DocumentVerificationProvenance.NOT_REVIEWED);
+        doc.setVersion(0L);
         doc = collegeRegistrationDocumentRepository.save(doc);
 
         Map<String, Object> metadata = new HashMap<>();
@@ -717,6 +765,7 @@ public class CollegeOnboardingService {
 
         if (isInitialSubmission) {
             college.setCurrentRegistrationId(draftRevision.getId());
+            college.setApprovalStatus(CollegeApprovalStatus.PENDING);
             collegeRepository.save(college);
 
             Map<String, Object> metadata = new HashMap<>();
@@ -764,6 +813,7 @@ public class CollegeOnboardingService {
             }
 
             college.setCurrentRegistrationId(draftRevision.getId());
+            college.setApprovalStatus(CollegeApprovalStatus.PENDING);
             collegeRepository.save(college);
 
             Map<String, Object> metadata = new HashMap<>();
@@ -846,7 +896,14 @@ public class CollegeOnboardingService {
                 doc.getFileSizeBytes(),
                 doc.getSha256Checksum(),
                 doc.getReplacesDocumentId(),
-                doc.getCreatedAt());
+                doc.getCreatedAt(),
+                doc.getVerificationStatus() != null ? doc.getVerificationStatus() : DocumentVerificationStatus.PENDING,
+                doc.getVerificationProvenance() != null ? doc.getVerificationProvenance() : DocumentVerificationProvenance.NOT_REVIEWED,
+                doc.getRejectionReason(),
+                doc.getLastReviewedAt(),
+                doc.getLastReviewedByUserId(),
+                doc.getVersion() != null ? doc.getVersion() : 0L
+        );
     }
 
     private CurrentRevisionResponse toCurrentRevisionResponse(CollegeRegistration revision, boolean isDraft) {

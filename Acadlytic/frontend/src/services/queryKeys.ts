@@ -33,6 +33,8 @@ export const queryKeys = {
       [...queryKeys.reviews.queueRoot(), params] as const,
     detail: (collegeId: number) =>
       [...queryKeys.reviews.all, 'detail', collegeId] as const,
+    documentHistory: (collegeId: number, documentId: number) =>
+      [...queryKeys.reviews.detail(collegeId), 'documents', documentId, 'history'] as const,
   },
 };
 

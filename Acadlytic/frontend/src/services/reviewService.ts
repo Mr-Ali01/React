@@ -11,11 +11,16 @@ import type {
   ReviewDecisionRequest,
   ReviewDecisionResponse,
   ReviewQueueParams,
+  CollegeApprovalStatus,
+  DocumentReviewDecisionRequest,
+  DocumentReviewDecisionResponse,
+  DocumentReviewHistoryItemResponse,
 } from '@/types';
 
 /**
  * Normalizes raw backend CollegeReviewDetailResponse wire format into the
  * frontend presentation model required by review detail components.
+ * Strictly preserves authoritative backend data without unsafe fallback fabrication.
  */
 export function normalizeReviewDetail(
   raw: RawCollegeReviewDetailResponse | CollegeReviewDetailResponse
@@ -28,6 +33,10 @@ export function normalizeReviewDetail(
     rawAny.revisionHistory ?? rawAny.reviewHistory ?? [];
 
   // Filter completed review decisions (past decisions made by reviewer)
+  // Backend lifecycle semantics:
+  // 1. Initial pending v1 has reviewedAt: null and status PENDING -> must NOT enter decision history.
+  // 2. Only revisions with explicit reviewedAt and verified decision statuses (APPROVED, ACTION_REQUIRED, REJECTED)
+  //    represent completed review decisions. Unknown or unreviewed statuses must NEVER be converted to decisions.
   let completedReviewDecisions: ReviewHistoryItemResponse[] = [];
   if (
     Array.isArray(rawAny.reviewHistory) &&
@@ -38,85 +47,107 @@ export function normalizeReviewDetail(
   } else if (Array.isArray(rawRevisionHistory)) {
     completedReviewDecisions = rawRevisionHistory
       .filter((rev) => {
-        // Mock data or pre-formatted items with decision property
-        if ((rev as any).decision) return true;
-        // Backend wire format: only revisions that were reviewed or reached a terminal/action status
-        return rev.reviewedAt != null || (rev.status && rev.status !== 'PENDING');
+        // Mock data with explicit valid decision action
+        if ((rev as any).decision) {
+          const d = (rev as any).decision;
+          return d === 'APPROVE' || d === 'REQUEST_ACTION' || d === 'REJECT';
+        }
+        // Authoritative wire format: must be reviewed and have a verified decision status
+        if (!rev.reviewedAt) {
+          return false;
+        }
+        return (
+          rev.status === 'APPROVED' ||
+          rev.status === 'ACTION_REQUIRED' ||
+          rev.status === 'REJECTED'
+        );
       })
-      .map((rev) => {
-        const mappedDecision: ReviewDecisionAction =
-          (rev as any).decision ??
-          (rev.status === 'APPROVED'
-            ? 'APPROVE'
-            : rev.status === 'ACTION_REQUIRED'
-              ? 'REQUEST_ACTION'
-              : 'REJECT');
+      .map((rev): ReviewHistoryItemResponse => {
+        let mappedDecision: ReviewDecisionAction = 'APPROVE';
+        if ((rev as any).decision) {
+          mappedDecision = (rev as any).decision;
+        } else if (rev.status === 'APPROVED') {
+          mappedDecision = 'APPROVE';
+        } else if (rev.status === 'ACTION_REQUIRED') {
+          mappedDecision = 'REQUEST_ACTION';
+        } else if (rev.status === 'REJECTED') {
+          mappedDecision = 'REJECT';
+        }
 
         return {
-          id: rev.id,
-          versionNumber: rev.versionNumber,
+          id: rev.id ?? null,
+          versionNumber: rev.versionNumber ?? null,
           decision: mappedDecision,
           notes: rev.reviewNotes ?? (rev as any).notes ?? null,
           reviewNotes: rev.reviewNotes ?? (rev as any).notes ?? null,
           rejectionReason: rev.rejectionReason ?? null,
-          isPermanentRejection: rev.isPermanentRejection ?? false,
+          isPermanentRejection: Boolean(rev.isPermanentRejection),
+          // Do not fabricate historical action counts or resubmission counts
           actionRequiredCountAtDecision:
-            (rev as any).actionRequiredCountAtDecision ?? 0,
+            (rev as any).actionRequiredCountAtDecision ?? null,
           resubmissionCountAtDecision:
-            (rev as any).resubmissionCountAtDecision ??
-            (rev.versionNumber > 0 ? rev.versionNumber - 1 : 0),
-          decisionAt: rev.reviewedAt ?? (rev as any).decisionAt ?? rev.createdAt,
-          decisionByAdminEmail:
-            (rev as any).decisionByAdminEmail ??
-            (rev.reviewerUserId ? `Reviewer #${rev.reviewerUserId}` : 'Super Admin'),
+            (rev as any).resubmissionCountAtDecision ?? null,
+          // Strictly from reviewedAt, NEVER from createdAt
+          decisionAt: rev.reviewedAt ?? (rev as any).decisionAt ?? null,
+          // Do not invent reviewer emails or roles
+          decisionByAdminEmail: (rev as any).decisionByAdminEmail ?? null,
           reviewerUserId: rev.reviewerUserId ?? null,
         };
       });
   }
 
-  const concurrencyVersion =
-    raw.concurrencyVersion ?? rawCollege?.concurrencyVersion ?? 0;
+  // Authoritative root concurrencyVersion: DO NOT default to 0
+  const authoritativeConcurrencyVersion =
+    typeof raw.concurrencyVersion === 'number'
+      ? raw.concurrencyVersion
+      : typeof rawCollege?.concurrencyVersion === 'number'
+        ? rawCollege.concurrencyVersion
+        : null;
+
+  // College identifiers & version: DO NOT default to 0 or 1
+  const collegeId = rawCollege?.id ?? rawCollege?.collegeId ?? null;
+  const versionNumber =
+    rawSubmitted?.versionNumber ?? rawCollege?.versionNumber ?? null;
 
   return {
     college: {
-      collegeId: rawCollege?.id ?? rawCollege?.collegeId ?? 0,
-      id: rawCollege?.id ?? rawCollege?.collegeId ?? 0,
-      collegeCode: rawCollege?.code ?? rawCollege?.collegeCode ?? '',
-      code: rawCollege?.code ?? rawCollege?.collegeCode ?? '',
+      collegeId: collegeId,
+      id: collegeId,
+      collegeCode: rawCollege?.code ?? rawCollege?.collegeCode ?? null,
+      code: rawCollege?.code ?? rawCollege?.collegeCode ?? null,
       legalName:
         rawSubmitted?.legalName ??
         rawCollege?.legalName ??
         rawCollege?.name ??
-        '',
-      name: rawCollege?.name ?? rawCollege?.legalName ?? '',
+        null,
+      name: rawCollege?.name ?? rawCollege?.legalName ?? null,
       approvalStatus: rawCollege?.approvalStatus,
       status: rawCollege?.status,
-      registrationId: rawSubmitted?.id ?? rawCollege?.registrationId,
-      versionNumber:
-        rawSubmitted?.versionNumber ?? rawCollege?.versionNumber ?? 1,
+      registrationId: rawSubmitted?.id ?? rawCollege?.registrationId ?? null,
+      versionNumber: versionNumber,
       submittedForReviewAt:
         rawSubmitted?.submittedForReviewAt ??
         rawCollege?.submittedForReviewAt ??
         null,
-      concurrencyVersion,
+      concurrencyVersion: authoritativeConcurrencyVersion,
       resubmissionCount: rawCollege?.resubmissionCount ?? 0,
       actionRequiredCount: rawCollege?.actionRequiredCount ?? 0,
       permanentlyRejected: rawCollege?.permanentlyRejected ?? false,
     },
     adminUser: rawAdmin
       ? {
-        id: rawAdmin.id,
+        id: rawAdmin.id ?? null,
         fullName:
           rawAdmin.fullName ??
           (`${rawAdmin.firstName ?? ''} ${rawAdmin.lastName ?? ''}`.trim() ||
-            'Administrator'),
+            null),
         email: rawAdmin.email,
         phone: rawAdmin.phone ?? rawSubmitted?.contactPhone ?? null,
         emailVerified:
           rawAdmin.emailVerified !== undefined
             ? Boolean(rawAdmin.emailVerified)
             : Boolean(rawAdmin.emailVerifiedAt),
-        registeredAt: rawAdmin.registeredAt ?? rawAdmin.createdAt,
+        registeredAt: rawAdmin.registeredAt ?? rawAdmin.createdAt ?? null,
       }
       : null,
     activeDocuments: raw.activeDocuments ?? [],
@@ -125,13 +156,13 @@ export function normalizeReviewDetail(
         ...rawSubmitted,
         isDraft: false,
       }
-      : rawAny.currentRevision,
-    submittedRevision: rawSubmitted,
+      : rawAny.currentRevision ?? null,
+    submittedRevision: rawSubmitted ?? null,
     submittedRevisions: rawRevisionHistory.map((rev) => ({
-      id: rev.id,
-      versionNumber: rev.versionNumber,
-      status: rev.status,
-      legalName: rev.legalName,
+      id: rev.id ?? null,
+      versionNumber: rev.versionNumber ?? null,
+      status: (rev.status as CollegeApprovalStatus) || undefined,
+      legalName: rev.legalName ?? '',
       addressLine1: (rev as any).addressLine1 ?? '',
       addressLine2: (rev as any).addressLine2 ?? null,
       city: (rev as any).city ?? '',
@@ -147,7 +178,7 @@ export function normalizeReviewDetail(
     })),
     reviewHistory: completedReviewDecisions,
     revisionHistory: rawRevisionHistory,
-    concurrencyVersion,
+    concurrencyVersion: authoritativeConcurrencyVersion,
   };
 }
 
@@ -208,6 +239,36 @@ export const reviewService = {
   },
 
   /**
+   * Fetches raw document binary content and content-type for preview in review modals.
+   * Endpoint: GET /api/v1/super-admin/colleges/reviews/{collegeId}/documents/{documentId}
+   */
+  async getDocumentPreviewBlob(
+    collegeId: number,
+    documentId: number
+  ): Promise<{ blob: Blob; contentType: string }> {
+    if (typeof collegeId !== 'number' || isNaN(collegeId) || collegeId <= 0) {
+      throw new Error('Invalid college ID for document preview');
+    }
+    if (typeof documentId !== 'number' || isNaN(documentId) || documentId <= 0) {
+      throw new Error('Invalid document ID for document preview');
+    }
+
+    const response = await apiClient.get(
+      `/super-admin/colleges/reviews/${collegeId}/documents/${documentId}`,
+      {
+        responseType: 'blob',
+      }
+    );
+
+    const contentType =
+      (response.headers['content-type'] as string) ||
+      (response.headers['Content-Type'] as string) ||
+      'application/octet-stream';
+    const blob = new Blob([response.data], { type: contentType });
+    return { blob, contentType };
+  },
+
+  /**
    * Streams a verification document with safe attachment headers.
    * Employs delayed object URL revocation (60s) to guarantee browser download manager
    * finishes spooling binary content before releasing memory.
@@ -218,6 +279,13 @@ export const reviewService = {
     documentId: number,
     originalFilename?: string
   ): Promise<void> {
+    if (typeof collegeId !== 'number' || isNaN(collegeId) || collegeId <= 0) {
+      throw new Error('Invalid college ID for document download');
+    }
+    if (typeof documentId !== 'number' || isNaN(documentId) || documentId <= 0) {
+      throw new Error('Invalid document ID for document download');
+    }
+
     const response = await apiClient.get(
       `/super-admin/colleges/reviews/${collegeId}/documents/${documentId}`,
       {
@@ -263,6 +331,67 @@ export const reviewService = {
     const response = await apiClient.post<
       ApiResponse<ReviewDecisionResponse>
     >(`/super-admin/colleges/reviews/${collegeId}/decision`, payload);
+
+    return response.data.data;
+  },
+
+  /**
+   * Records an authoritative Super Admin review decision (ACCEPT or REJECT) for an individual document.
+   * Enforces optimistic version locking via expectedDocumentVersion.
+   * Endpoint: POST /api/v1/super-admin/colleges/reviews/{collegeId}/documents/{documentId}/decision
+   */
+  async recordDocumentDecision(
+    collegeId: number,
+    documentId: number,
+    request: DocumentReviewDecisionRequest
+  ): Promise<DocumentReviewDecisionResponse> {
+    if (typeof collegeId !== 'number' || isNaN(collegeId) || collegeId <= 0) {
+      throw new Error('Invalid college ID for document review decision');
+    }
+    if (typeof documentId !== 'number' || isNaN(documentId) || documentId <= 0) {
+      throw new Error('Invalid document ID for document review decision');
+    }
+
+    const payload = {
+      action: request.action,
+      expectedDocumentVersion: request.expectedDocumentVersion,
+      notes: request.notes?.trim() ? request.notes.trim() : null,
+      rejectionReason: request.rejectionReason?.trim()
+        ? request.rejectionReason.trim()
+        : null,
+    };
+
+    const response = await apiClient.post<
+      ApiResponse<DocumentReviewDecisionResponse>
+    >(
+      `/super-admin/colleges/reviews/${collegeId}/documents/${documentId}/decision`,
+      payload
+    );
+
+    return response.data.data;
+  },
+
+  /**
+   * Retrieves chronological review decision history records for an individual document.
+   * Unblocked by college lifecycle freeze (read-only audit trail).
+   * Endpoint: GET /api/v1/super-admin/colleges/reviews/{collegeId}/documents/{documentId}/history
+   */
+  async getDocumentReviewHistory(
+    collegeId: number,
+    documentId: number
+  ): Promise<DocumentReviewHistoryItemResponse[]> {
+    if (typeof collegeId !== 'number' || isNaN(collegeId) || collegeId <= 0) {
+      throw new Error('Invalid college ID for document review history');
+    }
+    if (typeof documentId !== 'number' || isNaN(documentId) || documentId <= 0) {
+      throw new Error('Invalid document ID for document review history');
+    }
+
+    const response = await apiClient.get<
+      ApiResponse<DocumentReviewHistoryItemResponse[]>
+    >(
+      `/super-admin/colleges/reviews/${collegeId}/documents/${documentId}/history`
+    );
 
     return response.data.data;
   },
