@@ -1,5 +1,6 @@
 package com.acadlytic.modules.colleges.service;
 
+import com.acadlytic.common.exception.AppException;
 import com.acadlytic.config.CleanupProperties;
 import com.acadlytic.modules.auth.entity.AuditEventType;
 import com.acadlytic.modules.auth.entity.AuditOutcome;
@@ -34,6 +35,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -95,6 +97,15 @@ class CollegeLifecycleServiceUnitTest {
         registration.setVersionNumber(1);
         registration.setStatus(CollegeApprovalStatus.PENDING);
         registration.setLegalName("Osmania University College of Technology");
+        registration.setAddressLine1("Administrative Building, Main Road");
+        registration.setAddressLine2("Near Library");
+        registration.setCity("Hyderabad");
+        registration.setState("Telangana");
+        registration.setCountry("India");
+        registration.setPostalCode("500007");
+        registration.setContactPhone("+91-40-27098254");
+        registration.setWebsiteUrl("https://www.uceou.edu");
+        registration.setAffiliatedUniversityName("Osmania University");
 
         adminUser = new User();
         adminUser.setId(501L);
@@ -107,11 +118,28 @@ class CollegeLifecycleServiceUnitTest {
     }
 
     @Test
-    @DisplayName("onCollegeApproved - transitions status to ACTIVE, records COLLEGE_ACTIVATED audit, and enqueues outbox")
+    @DisplayName("onCollegeApproved - transitions status to ACTIVE, synchronizes operational profile, records COLLEGE_ACTIVATED audit, and enqueues outbox")
     void onCollegeApproved_success() {
+        college.setApprovalStatus(CollegeApprovalStatus.APPROVED);
+        registration.setStatus(CollegeApprovalStatus.APPROVED);
+
         lifecycleService.onCollegeApproved(college, registration, adminUser, 1L, Role.SUPER_ADMIN);
 
         assertThat(college.getStatus()).isEqualTo(CollegeStatus.ACTIVE);
+        assertThat(college.getAddressLine1()).isEqualTo("Administrative Building, Main Road");
+        assertThat(college.getAddressLine2()).isEqualTo("Near Library");
+        assertThat(college.getCity()).isEqualTo("Hyderabad");
+        assertThat(college.getState()).isEqualTo("Telangana");
+        assertThat(college.getCountry()).isEqualTo("India");
+        assertThat(college.getPostalCode()).isEqualTo("500007");
+        assertThat(college.getContactPhone()).isEqualTo("+91-40-27098254");
+        assertThat(college.getWebsiteUrl()).isEqualTo("https://www.uceou.edu");
+        assertThat(college.getAffiliatedUniversityName()).isEqualTo("Osmania University");
+        assertThat(college.getContactEmail()).isNull();
+        assertThat(college.getEstablishedYear()).isNull();
+        assertThat(college.getAccreditationDetails()).isNull();
+        assertThat(college.getLogoStorageKey()).isNull();
+
         verify(collegeRepository).save(college);
 
         verify(auditEventService).record(
@@ -132,6 +160,96 @@ class CollegeLifecycleServiceUnitTest {
                 eq("COLLEGE_REGISTRATION_APPROVED"),
                 any()
         );
+    }
+
+    @Test
+    @DisplayName("onCollegeApproved - throws AppException when target college is null")
+    void onCollegeApproved_nullCollege_throwsAppException() {
+        registration.setStatus(CollegeApprovalStatus.APPROVED);
+
+        assertThatThrownBy(() -> lifecycleService.onCollegeApproved(null, registration, adminUser, 1L, Role.SUPER_ADMIN))
+                .isInstanceOf(AppException.class)
+                .satisfies(ex -> {
+                    AppException appEx = (AppException) ex;
+                    assertThat(appEx.getErrorCode()).isEqualTo("INVALID_COLLEGE");
+                });
+        verify(collegeRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("onCollegeApproved - throws AppException when submitted revision is null")
+    void onCollegeApproved_nullRevision_throwsAppException() {
+        college.setApprovalStatus(CollegeApprovalStatus.APPROVED);
+
+        assertThatThrownBy(() -> lifecycleService.onCollegeApproved(college, null, adminUser, 1L, Role.SUPER_ADMIN))
+                .isInstanceOf(AppException.class)
+                .satisfies(ex -> {
+                    AppException appEx = (AppException) ex;
+                    assertThat(appEx.getErrorCode()).isEqualTo("INVALID_REVISION");
+                });
+        verify(collegeRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("onCollegeApproved - throws AppException on cross-tenant revision mismatch")
+    void onCollegeApproved_crossTenantMismatch_throwsAppException() {
+        college.setApprovalStatus(CollegeApprovalStatus.APPROVED);
+        registration.setStatus(CollegeApprovalStatus.APPROVED);
+        registration.setCollegeId(999L); // Mismatched college ID
+
+        assertThatThrownBy(() -> lifecycleService.onCollegeApproved(college, registration, adminUser, 1L, Role.SUPER_ADMIN))
+                .isInstanceOf(AppException.class)
+                .satisfies(ex -> {
+                    AppException appEx = (AppException) ex;
+                    assertThat(appEx.getErrorCode()).isEqualTo("CROSS_TENANT_REVISION_MISMATCH");
+                });
+        verify(collegeRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("onCollegeApproved - throws AppException on non-authoritative revision pointer mismatch")
+    void onCollegeApproved_nonAuthoritativeRevision_throwsAppException() {
+        college.setApprovalStatus(CollegeApprovalStatus.APPROVED);
+        college.setCurrentRegistrationId(888L); // Mismatched pointer
+        registration.setStatus(CollegeApprovalStatus.APPROVED);
+
+        assertThatThrownBy(() -> lifecycleService.onCollegeApproved(college, registration, adminUser, 1L, Role.SUPER_ADMIN))
+                .isInstanceOf(AppException.class)
+                .satisfies(ex -> {
+                    AppException appEx = (AppException) ex;
+                    assertThat(appEx.getErrorCode()).isEqualTo("NON_AUTHORITATIVE_REVISION");
+                });
+        verify(collegeRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("onCollegeApproved - throws AppException when revision status is not APPROVED")
+    void onCollegeApproved_invalidRevisionStatus_throwsAppException() {
+        college.setApprovalStatus(CollegeApprovalStatus.APPROVED);
+        registration.setStatus(CollegeApprovalStatus.PENDING); // Not APPROVED
+
+        assertThatThrownBy(() -> lifecycleService.onCollegeApproved(college, registration, adminUser, 1L, Role.SUPER_ADMIN))
+                .isInstanceOf(AppException.class)
+                .satisfies(ex -> {
+                    AppException appEx = (AppException) ex;
+                    assertThat(appEx.getErrorCode()).isEqualTo("INVALID_REVISION_STATUS");
+                });
+        verify(collegeRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("onCollegeApproved - throws AppException when college approval status is not APPROVED")
+    void onCollegeApproved_invalidCollegeStatus_throwsAppException() {
+        college.setApprovalStatus(CollegeApprovalStatus.PENDING); // Not APPROVED
+        registration.setStatus(CollegeApprovalStatus.APPROVED);
+
+        assertThatThrownBy(() -> lifecycleService.onCollegeApproved(college, registration, adminUser, 1L, Role.SUPER_ADMIN))
+                .isInstanceOf(AppException.class)
+                .satisfies(ex -> {
+                    AppException appEx = (AppException) ex;
+                    assertThat(appEx.getErrorCode()).isEqualTo("INVALID_COLLEGE_STATUS");
+                });
+        verify(collegeRepository, never()).save(any());
     }
 
     @Test

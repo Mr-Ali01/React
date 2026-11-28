@@ -56,6 +56,47 @@ public class College {
     @Column(name = "archived_at")
     private Instant archivedAt;
 
+    // --- Operational Profile Fields (Phase 04 Module 4.1) ---
+
+    @Column(name = "address_line1", length = 255)
+    private String addressLine1;
+
+    @Column(name = "address_line2", length = 255)
+    private String addressLine2;
+
+    @Column(name = "city", length = 100)
+    private String city;
+
+    @Column(name = "state", length = 100)
+    private String state;
+
+    @Column(name = "country", length = 100)
+    private String country;
+
+    @Column(name = "postal_code", length = 30)
+    private String postalCode;
+
+    @Column(name = "contact_phone", length = 50)
+    private String contactPhone;
+
+    @Column(name = "contact_email", length = 255)
+    private String contactEmail;
+
+    @Column(name = "website_url", length = 255)
+    private String websiteUrl;
+
+    @Column(name = "affiliated_university_name", length = 255)
+    private String affiliatedUniversityName;
+
+    @Column(name = "established_year")
+    private Integer establishedYear;
+
+    @Column(name = "accreditation_details", length = 255)
+    private String accreditationDetails;
+
+    @Column(name = "logo_storage_key", length = 255)
+    private String logoStorageKey;
+
     @Version
     @Column(name = "version", nullable = false)
     private Long version = 0L;
@@ -189,5 +230,109 @@ public class College {
 
     public void setUpdatedAt(Instant updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public String getAddressLine1() {
+        return addressLine1;
+    }
+
+    public void setAddressLine1(String addressLine1) {
+        this.addressLine1 = addressLine1;
+    }
+
+    public String getAddressLine2() {
+        return addressLine2;
+    }
+
+    public void setAddressLine2(String addressLine2) {
+        this.addressLine2 = addressLine2;
+    }
+
+    public String getCity() {
+        return city;
+    }
+
+    public void setCity(String city) {
+        this.city = city;
+    }
+
+    public String getState() {
+        return state;
+    }
+
+    public void setState(String state) {
+        this.state = state;
+    }
+
+    public String getCountry() {
+        return country;
+    }
+
+    public void setCountry(String country) {
+        this.country = country;
+    }
+
+    public String getPostalCode() {
+        return postalCode;
+    }
+
+    public void setPostalCode(String postalCode) {
+        this.postalCode = postalCode;
+    }
+
+    public String getContactPhone() {
+        return contactPhone;
+    }
+
+    public void setContactPhone(String contactPhone) {
+        this.contactPhone = contactPhone;
+    }
+
+    public String getContactEmail() {
+        return contactEmail;
+    }
+
+    public void setContactEmail(String contactEmail) {
+        this.contactEmail = contactEmail;
+    }
+
+    public String getWebsiteUrl() {
+        return websiteUrl;
+    }
+
+    public void setWebsiteUrl(String websiteUrl) {
+        this.websiteUrl = websiteUrl;
+    }
+
+    public String getAffiliatedUniversityName() {
+        return affiliatedUniversityName;
+    }
+
+    public void setAffiliatedUniversityName(String affiliatedUniversityName) {
+        this.affiliatedUniversityName = affiliatedUniversityName;
+    }
+
+    public Integer getEstablishedYear() {
+        return establishedYear;
+    }
+
+    public void setEstablishedYear(Integer establishedYear) {
+        this.establishedYear = establishedYear;
+    }
+
+    public String getAccreditationDetails() {
+        return accreditationDetails;
+    }
+
+    public void setAccreditationDetails(String accreditationDetails) {
+        this.accreditationDetails = accreditationDetails;
+    }
+
+    public String getLogoStorageKey() {
+        return logoStorageKey;
+    }
+
+    public void setLogoStorageKey(String logoStorageKey) {
+        this.logoStorageKey = logoStorageKey;
     }
 }

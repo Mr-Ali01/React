@@ -1,5 +1,6 @@
 package com.acadlytic.modules.colleges.service;
 
+import com.acadlytic.common.exception.AppException;
 import com.acadlytic.config.CleanupProperties;
 import com.acadlytic.modules.auth.entity.AuditEventType;
 import com.acadlytic.modules.auth.entity.AuditOutcome;
@@ -24,6 +25,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -98,7 +100,49 @@ public class CollegeLifecycleService {
             Long reviewerUserId,
             Role reviewerRole) {
 
+        // 1. Invariant & Ownership Validation
+        if (college == null) {
+            throw new AppException("INVALID_COLLEGE", "Target college cannot be null.", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+        if (submittedRevision == null) {
+            throw new AppException("INVALID_REVISION", "Approved registration revision cannot be null.", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+        // Tenant matching invariant
+        if (!Objects.equals(college.getId(), submittedRevision.getCollegeId())) {
+            throw new AppException("CROSS_TENANT_REVISION_MISMATCH",
+                    "Submitted revision college ID does not match target college.", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+        // Authoritative pointer match invariant
+        if (!Objects.equals(college.getCurrentRegistrationId(), submittedRevision.getId())) {
+            throw new AppException("NON_AUTHORITATIVE_REVISION",
+                    "Submitted revision is not the current active registration revision for this college.", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+        // Status invariants at invocation point
+        if (submittedRevision.getStatus() != CollegeApprovalStatus.APPROVED) {
+            throw new AppException("INVALID_REVISION_STATUS",
+                    "Cannot synchronize profile: submitted revision status is not APPROVED.", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+        if (college.getApprovalStatus() != CollegeApprovalStatus.APPROVED) {
+            throw new AppException("INVALID_COLLEGE_STATUS",
+                    "Cannot synchronize profile: college approval status is not APPROVED.", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+
+        // 2. Status Update
         college.setStatus(CollegeStatus.ACTIVE);
+
+        // 3. Phase 04 Module 4.1 Profile Synchronization
+        college.setAddressLine1(submittedRevision.getAddressLine1());
+        college.setAddressLine2(submittedRevision.getAddressLine2());
+        college.setCity(submittedRevision.getCity());
+        college.setState(submittedRevision.getState());
+        college.setCountry(submittedRevision.getCountry());
+        college.setPostalCode(submittedRevision.getPostalCode());
+        college.setContactPhone(submittedRevision.getContactPhone());
+        college.setWebsiteUrl(submittedRevision.getWebsiteUrl());
+        college.setAffiliatedUniversityName(submittedRevision.getAffiliatedUniversityName());
+        // Note: contactEmail remains NULL until set by tenant administrator
+        // Note: establishedYear, accreditationDetails, and logoStorageKey remain untouched
+
         collegeRepository.save(college);
 
         Map<String, Object> metadata = new HashMap<>();

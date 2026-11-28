@@ -108,6 +108,40 @@ public class EmailTemplateRenderer {
                         + "This application has been closed and the administrative account has been deactivated.\n\n"
                         + "Thank you,\nAcadlytic Team";
             }
+            case "COLLEGE_SUSPENDED" -> {
+                String collegeName = stringOrDefault(payload.get("legalName"), "your institution");
+                String reason = stringOrDefault(payload.get("reason"), "Administrative compliance action.");
+                yield "Hello " + name + ",\n\n"
+                        + "The operational status of " + collegeName + " has been changed to SUSPENDED.\n\n"
+                        + "Reason for suspension:\n"
+                        + reason + "\n\n"
+                        + "While suspended, access to all college administrative and operational features is blocked. "
+                        + "Please contact Acadlytic platform administration immediately for resolution.\n\n"
+                        + "Thank you,\nAcadlytic Administration Team";
+            }
+            case "COLLEGE_DEACTIVATED" -> {
+                String collegeName = stringOrDefault(payload.get("legalName"), "your institution");
+                String reason = stringOrDefault(payload.get("reason"), "Contract closure or operational discontinuation.");
+                yield "Hello " + name + ",\n\n"
+                        + "The operational status of " + collegeName + " has been changed to INACTIVE (Deactivated).\n\n"
+                        + "Reason for deactivation:\n"
+                        + reason + "\n\n"
+                        + "Administrative access for your institution has been deactivated. "
+                        + "If this was in error, please contact Acadlytic platform administration.\n\n"
+                        + "Thank you,\nAcadlytic Administration Team";
+            }
+            case "COLLEGE_ACTIVATED" -> {
+                String collegeName = stringOrDefault(payload.get("legalName"), "your institution");
+                String reason = stringOrDefault(payload.get("reason"), "Administrative reactivation.");
+                String loginLink = frontendBaseUrl + "/login";
+                yield "Hello " + name + ",\n\n"
+                        + "Great news! The operational status of " + collegeName + " has been reactivated to ACTIVE.\n\n"
+                        + "Administrative remarks:\n"
+                        + reason + "\n\n"
+                        + "Your administrative access has been restored. You may now log in to manage your institution:\n"
+                        + loginLink + "\n\n"
+                        + "Thank you,\nAcadlytic Administration Team";
+            }
             default -> "Hello " + name + ",\n\nYou have a new notification from Acadlytic.";
         };
     }

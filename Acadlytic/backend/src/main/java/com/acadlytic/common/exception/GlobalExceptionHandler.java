@@ -100,6 +100,16 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.errorWithCode("DATA_CONFLICT", "The request conflicts with existing data."));
     }
 
+    @ExceptionHandler(org.springframework.orm.ObjectOptimisticLockingFailureException.class)
+    public ResponseEntity<ApiResponse<Void>> handleOptimisticLockFailure(org.springframework.orm.ObjectOptimisticLockingFailureException ex) {
+        log.warn("Optimistic locking failure encountered: {}", ex.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(ApiResponse.errorWithCode(
+                        "STALE_COLLEGE_VERSION",
+                        "The college record has been modified by another administrator. Please refresh and retry."));
+    }
+
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<ApiResponse<Void>> handleAccessDeniedException(AccessDeniedException ex) {
         log.warn("Access denied: {}", ex.getMessage());

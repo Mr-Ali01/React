@@ -1,5 +1,6 @@
 package com.acadlytic.modules.colleges;
 
+import com.acadlytic.common.exception.AppException;
 import com.acadlytic.modules.auth.entity.AuditEventType;
 import com.acadlytic.modules.auth.entity.Role;
 import com.acadlytic.modules.auth.entity.User;
@@ -23,6 +24,7 @@ import com.acadlytic.modules.colleges.repository.CollegeDocumentReviewRepository
 import com.acadlytic.modules.colleges.repository.CollegeRegistrationDocumentRepository;
 import com.acadlytic.modules.colleges.repository.CollegeRegistrationRepository;
 import com.acadlytic.modules.colleges.repository.CollegeRepository;
+import com.acadlytic.modules.colleges.service.CollegeLifecycleService;
 import com.acadlytic.modules.colleges.service.CollegeOnboardingService;
 import com.acadlytic.modules.colleges.service.CollegeReviewService;
 import com.acadlytic.modules.colleges.service.IpRateLimiter;
@@ -55,6 +57,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -100,6 +103,8 @@ class CollegeApprovalIntegrationTest extends AbstractMySqlIntegrationTest {
     private JdbcTemplate jdbcTemplate;
     @Autowired
     private CollegeReviewService collegeReviewService;
+    @Autowired
+    private CollegeLifecycleService collegeLifecycleService;
     @Autowired
     private CollegeOnboardingService collegeOnboardingService;
     @Autowired
@@ -936,5 +941,332 @@ class CollegeApprovalIntegrationTest extends AbstractMySqlIntegrationTest {
         College approvedCollege = collegeRepository.findById(ctx.college().getId()).orElseThrow();
         assertThat(approvedCollege.getApprovalStatus()).isEqualTo(CollegeApprovalStatus.APPROVED);
         assertThat(approvedCollege.getStatus()).isEqualTo(CollegeStatus.ACTIVE);
+    }
+
+    // ==============================================================================
+    // Phase 04 Module 4.1 Lifecycle Integration Tests (LC-01 through LC-10)
+    // ==============================================================================
+
+    @Test
+    @DisplayName("LC-01: Profile synchronized on APPROVE - all operational profile fields copied to College")
+    void lc01_profileSynchronizedOnApprove() throws Exception {
+        SessionCookies superAdmin = setupSuperAdmin();
+        CollegeContext ctx = seedPendingCollege("LC01-COLL", "LC-01 Tech Institute", "admin@lc01.edu");
+
+        // Add both mandatory documents as ACCEPTED
+        addDocument(ctx.college(), ctx.registration(), DocumentCategory.UNIVERSITY_AFFILIATION_CERTIFICATE,
+                "affiliation.pdf", DocumentVerificationStatus.ACCEPTED, null);
+        addDocument(ctx.college(), ctx.registration(), DocumentCategory.AUTHORIZED_SIGNATORY_ID,
+                "signatory.pdf", DocumentVerificationStatus.ACCEPTED, null);
+
+        ReviewDecisionRequest request = new ReviewDecisionRequest(
+                ReviewDecisionAction.APPROVE, ctx.college().getVersion(), "LC-01 Approved.", null);
+
+        mockMvc.perform(post("/api/v1/super-admin/colleges/reviews/" + ctx.college().getId() + "/decision")
+                        .cookie(superAdmin.sessionCookie(), superAdmin.xsrfCookie())
+                        .header("X-XSRF-TOKEN", superAdmin.xsrfCookie().getValue())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.approvalStatus").value("APPROVED"));
+
+        College refreshed = collegeRepository.findById(ctx.college().getId()).orElseThrow();
+        assertThat(refreshed.getStatus()).isEqualTo(CollegeStatus.ACTIVE);
+        assertThat(refreshed.getAddressLine1()).isEqualTo("Campus Road");
+        assertThat(refreshed.getCity()).isEqualTo("Metropolis");
+        assertThat(refreshed.getState()).isEqualTo("State");
+        assertThat(refreshed.getCountry()).isEqualTo("India");
+        assertThat(refreshed.getPostalCode()).isEqualTo("123456");
+        assertThat(refreshed.getContactPhone()).isEqualTo("+919876543210");
+        assertThat(refreshed.getAffiliatedUniversityName()).isEqualTo("Central University");
+        // Nullable fields that were not in registration must remain null
+        assertThat(refreshed.getContactEmail()).isNull();
+        assertThat(refreshed.getEstablishedYear()).isNull();
+        assertThat(refreshed.getAccreditationDetails()).isNull();
+        assertThat(refreshed.getLogoStorageKey()).isNull();
+    }
+
+    @Test
+    @DisplayName("LC-02: Cross-tenant revision mismatch throws AppException and aborts activation")
+    void lc02_crossTenantRevisionMismatch() {
+        CollegeContext ctxA = seedPendingCollege("LC02-A", "College A", "admin@lc02a.edu");
+        CollegeContext ctxB = seedPendingCollege("LC02-B", "College B", "admin@lc02b.edu");
+
+        College colA = ctxA.college();
+        colA.setApprovalStatus(CollegeApprovalStatus.APPROVED);
+        College savedColA = collegeRepository.saveAndFlush(colA);
+
+        CollegeRegistration regB = ctxB.registration();
+        regB.setStatus(CollegeApprovalStatus.APPROVED);
+        CollegeRegistration savedRegB = registrationRepository.saveAndFlush(regB);
+
+        assertThatThrownBy(() -> collegeLifecycleService.onCollegeApproved(
+                savedColA, savedRegB, ctxA.adminUser(), 1L, Role.SUPER_ADMIN))
+                .isInstanceOf(AppException.class)
+                .satisfies(ex -> assertThat(((AppException) ex).getErrorCode()).isEqualTo("CROSS_TENANT_REVISION_MISMATCH"));
+
+        College refreshedA = collegeRepository.findById(savedColA.getId()).orElseThrow();
+        assertThat(refreshedA.getStatus()).isEqualTo(CollegeStatus.PENDING_VERIFICATION);
+        assertThat(refreshedA.getAddressLine1()).isNull();
+    }
+
+    @Test
+    @DisplayName("LC-03: Non-authoritative revision pointer throws AppException and aborts activation")
+    void lc03_nonAuthoritativeRevisionPointer() {
+        CollegeContext ctx = seedPendingCollege("LC03-COLL", "Pointer Test College", "admin@lc03.edu");
+
+        // Create a second revision for the same college
+        CollegeRegistration reg2 = new CollegeRegistration();
+        reg2.setCollegeId(ctx.college().getId());
+        reg2.setVersionNumber(2);
+        reg2.setStatus(CollegeApprovalStatus.APPROVED);
+        reg2.setLegalName("Pointer Test College v2");
+        reg2.setAddressLine1("New Campus Road");
+        reg2.setCity("Metropolis");
+        reg2.setState("State");
+        reg2.setCountry("India");
+        reg2.setPostalCode("123456");
+        reg2.setContactPhone("+919876543210");
+        reg2.setAffiliatedUniversityName("Central University");
+        CollegeRegistration savedReg2 = registrationRepository.saveAndFlush(reg2);
+
+        // Target college points to reg1, NOT reg2
+        College col = ctx.college();
+        col.setApprovalStatus(CollegeApprovalStatus.APPROVED);
+        College savedCol = collegeRepository.saveAndFlush(col);
+
+        assertThatThrownBy(() -> collegeLifecycleService.onCollegeApproved(
+                savedCol, savedReg2, ctx.adminUser(), 1L, Role.SUPER_ADMIN))
+                .isInstanceOf(AppException.class)
+                .satisfies(ex -> assertThat(((AppException) ex).getErrorCode()).isEqualTo("NON_AUTHORITATIVE_REVISION"));
+
+        College refreshed = collegeRepository.findById(savedCol.getId()).orElseThrow();
+        assertThat(refreshed.getStatus()).isEqualTo(CollegeStatus.PENDING_VERIFICATION);
+        assertThat(refreshed.getAddressLine1()).isNull();
+    }
+
+    @Test
+    @DisplayName("LC-04: Non-approved status invariant throws AppException")
+    void lc04_nonApprovedStatusInvariant() {
+        CollegeContext ctx1 = seedPendingCollege("LC04-COLL1", "Status Test College 1", "admin@lc04a.edu");
+        College col1 = ctx1.college();
+        col1.setApprovalStatus(CollegeApprovalStatus.APPROVED);
+        College savedCol1 = collegeRepository.saveAndFlush(col1);
+
+        CollegeRegistration reg1 = ctx1.registration();
+        reg1.setStatus(CollegeApprovalStatus.PENDING);
+        CollegeRegistration savedReg1 = registrationRepository.saveAndFlush(reg1);
+
+        assertThatThrownBy(() -> collegeLifecycleService.onCollegeApproved(
+                savedCol1, savedReg1, ctx1.adminUser(), 1L, Role.SUPER_ADMIN))
+                .isInstanceOf(AppException.class)
+                .satisfies(ex -> assertThat(((AppException) ex).getErrorCode()).isEqualTo("INVALID_REVISION_STATUS"));
+
+        CollegeContext ctx2 = seedPendingCollege("LC04-COLL2", "Status Test College 2", "admin@lc04b.edu");
+        College col2 = ctx2.college();
+        col2.setApprovalStatus(CollegeApprovalStatus.PENDING);
+        College savedCol2 = collegeRepository.saveAndFlush(col2);
+
+        CollegeRegistration reg2 = ctx2.registration();
+        reg2.setStatus(CollegeApprovalStatus.APPROVED);
+        CollegeRegistration savedReg2 = registrationRepository.saveAndFlush(reg2);
+
+        assertThatThrownBy(() -> collegeLifecycleService.onCollegeApproved(
+                savedCol2, savedReg2, ctx2.adminUser(), 1L, Role.SUPER_ADMIN))
+                .isInstanceOf(AppException.class)
+                .satisfies(ex -> assertThat(((AppException) ex).getErrorCode()).isEqualTo("INVALID_COLLEGE_STATUS"));
+    }
+
+    @Test
+    @DisplayName("LC-05: Rollback on profile synchronization failure leaves college PENDING and 0 outbox emails")
+    void lc05_rollbackOnProfileFailure() throws Exception {
+        SessionCookies superAdmin = setupSuperAdmin();
+        CollegeContext ctx = seedPendingCollege("LC05-COLL", "Rollback Test College", "admin@lc05.edu");
+        CollegeContext ctxOther = seedPendingCollege("LC05-OTHER", "Other College", "other@lc05.edu");
+
+        addDocument(ctx.college(), ctx.registration(), DocumentCategory.UNIVERSITY_AFFILIATION_CERTIFICATE,
+                "affiliation.pdf", DocumentVerificationStatus.ACCEPTED, null);
+        addDocument(ctx.college(), ctx.registration(), DocumentCategory.AUTHORIZED_SIGNATORY_ID,
+                "signatory.pdf", DocumentVerificationStatus.ACCEPTED, null);
+
+        // Point registration's college_id to another valid college so document gate passes on revision,
+        // but lifecycle synchronization fails on CROSS_TENANT_REVISION_MISMATCH invariant.
+        // Use version_number = 99 to avoid colliding with other college's version 1.
+        jdbcTemplate.update("UPDATE college_registrations SET college_id = ?, version_number = 99 WHERE id = ?",
+                ctxOther.college().getId(), ctx.registration().getId());
+
+        long outboxCountBefore = outboxEmailRepository.count();
+
+        ReviewDecisionRequest request = new ReviewDecisionRequest(
+                ReviewDecisionAction.APPROVE, ctx.college().getVersion(), "Attempting approval with mismatched revision.", null);
+
+        mockMvc.perform(post("/api/v1/super-admin/colleges/reviews/" + ctx.college().getId() + "/decision")
+                        .cookie(superAdmin.sessionCookie(), superAdmin.xsrfCookie())
+                        .header("X-XSRF-TOKEN", superAdmin.xsrfCookie().getValue())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isInternalServerError());
+
+        College refreshedCollege = collegeRepository.findById(ctx.college().getId()).orElseThrow();
+        CollegeRegistration refreshedReg = registrationRepository.findById(ctx.registration().getId()).orElseThrow();
+
+        // Atomicity check: both roll back to PENDING, zero outbox emails
+        assertThat(refreshedCollege.getApprovalStatus()).isEqualTo(CollegeApprovalStatus.PENDING);
+        assertThat(refreshedCollege.getStatus()).isEqualTo(CollegeStatus.PENDING_VERIFICATION);
+        assertThat(refreshedReg.getStatus()).isEqualTo(CollegeApprovalStatus.PENDING);
+        assertThat(outboxEmailRepository.count()).isEqualTo(outboxCountBefore);
+    }
+
+    @Test
+    @DisplayName("LC-06: DEF-01 Gate: Rejected mandatory document blocks approval with DOCUMENTS_REJECTED")
+    void lc06_def01Gate_rejectedMandatoryDocument() throws Exception {
+        SessionCookies superAdmin = setupSuperAdmin();
+        CollegeContext ctx = seedPendingCollege("LC06-COLL", "DEF-01 Mandatory Rejection", "admin@lc06.edu");
+
+        addDocument(ctx.college(), ctx.registration(), DocumentCategory.UNIVERSITY_AFFILIATION_CERTIFICATE,
+                "affiliation.pdf", DocumentVerificationStatus.ACCEPTED, null);
+        addDocument(ctx.college(), ctx.registration(), DocumentCategory.AUTHORIZED_SIGNATORY_ID,
+                "signatory.pdf", DocumentVerificationStatus.REJECTED, null);
+
+        ReviewDecisionRequest request = new ReviewDecisionRequest(
+                ReviewDecisionAction.APPROVE, ctx.college().getVersion(), "Approving with rejected signatory.", null);
+
+        mockMvc.perform(post("/api/v1/super-admin/colleges/reviews/" + ctx.college().getId() + "/decision")
+                        .cookie(superAdmin.sessionCookie(), superAdmin.xsrfCookie())
+                        .header("X-XSRF-TOKEN", superAdmin.xsrfCookie().getValue())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.errorCode").value("DOCUMENTS_REJECTED"));
+
+        College refreshed = collegeRepository.findById(ctx.college().getId()).orElseThrow();
+        assertThat(refreshed.getStatus()).isEqualTo(CollegeStatus.PENDING_VERIFICATION);
+        assertThat(refreshed.getAddressLine1()).isNull();
+    }
+
+    @Test
+    @DisplayName("LC-07: DEF-01 Gate: Rejected OPTIONAL document blocks approval with DOCUMENTS_REJECTED")
+    void lc07_def01Gate_rejectedOptionalDocument() throws Exception {
+        SessionCookies superAdmin = setupSuperAdmin();
+        CollegeContext ctx = seedPendingCollege("LC07-COLL", "DEF-01 Optional Rejection", "admin@lc07.edu");
+
+        addDocument(ctx.college(), ctx.registration(), DocumentCategory.UNIVERSITY_AFFILIATION_CERTIFICATE,
+                "affiliation.pdf", DocumentVerificationStatus.ACCEPTED, null);
+        addDocument(ctx.college(), ctx.registration(), DocumentCategory.AUTHORIZED_SIGNATORY_ID,
+                "signatory.pdf", DocumentVerificationStatus.ACCEPTED, null);
+        addDocument(ctx.college(), ctx.registration(), DocumentCategory.ADDITIONAL_SUPPORTING_DOCUMENT,
+                "optional_doc.pdf", DocumentVerificationStatus.REJECTED, null);
+
+        ReviewDecisionRequest request = new ReviewDecisionRequest(
+                ReviewDecisionAction.APPROVE, ctx.college().getVersion(), "Approving with rejected optional doc.", null);
+
+        mockMvc.perform(post("/api/v1/super-admin/colleges/reviews/" + ctx.college().getId() + "/decision")
+                        .cookie(superAdmin.sessionCookie(), superAdmin.xsrfCookie())
+                        .header("X-XSRF-TOKEN", superAdmin.xsrfCookie().getValue())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.errorCode").value("DOCUMENTS_REJECTED"));
+
+        College refreshed = collegeRepository.findById(ctx.college().getId()).orElseThrow();
+        assertThat(refreshed.getStatus()).isEqualTo(CollegeStatus.PENDING_VERIFICATION);
+        assertThat(refreshed.getAddressLine1()).isNull();
+    }
+
+    @Test
+    @DisplayName("LC-08: DEF-01 Gate: Pending OPTIONAL document blocks approval with DOCUMENTS_NOT_VERIFIED")
+    void lc08_def01Gate_pendingOptionalDocument() throws Exception {
+        SessionCookies superAdmin = setupSuperAdmin();
+        CollegeContext ctx = seedPendingCollege("LC08-COLL", "DEF-01 Optional Pending", "admin@lc08.edu");
+
+        addDocument(ctx.college(), ctx.registration(), DocumentCategory.UNIVERSITY_AFFILIATION_CERTIFICATE,
+                "affiliation.pdf", DocumentVerificationStatus.ACCEPTED, null);
+        addDocument(ctx.college(), ctx.registration(), DocumentCategory.AUTHORIZED_SIGNATORY_ID,
+                "signatory.pdf", DocumentVerificationStatus.ACCEPTED, null);
+        addDocument(ctx.college(), ctx.registration(), DocumentCategory.ADDITIONAL_SUPPORTING_DOCUMENT,
+                "optional_doc.pdf", DocumentVerificationStatus.PENDING, null);
+
+        ReviewDecisionRequest request = new ReviewDecisionRequest(
+                ReviewDecisionAction.APPROVE, ctx.college().getVersion(), "Approving with pending optional doc.", null);
+
+        mockMvc.perform(post("/api/v1/super-admin/colleges/reviews/" + ctx.college().getId() + "/decision")
+                        .cookie(superAdmin.sessionCookie(), superAdmin.xsrfCookie())
+                        .header("X-XSRF-TOKEN", superAdmin.xsrfCookie().getValue())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.errorCode").value("DOCUMENTS_NOT_VERIFIED"));
+
+        College refreshed = collegeRepository.findById(ctx.college().getId()).orElseThrow();
+        assertThat(refreshed.getStatus()).isEqualTo(CollegeStatus.PENDING_VERIFICATION);
+        assertThat(refreshed.getAddressLine1()).isNull();
+    }
+
+    @Test
+    @DisplayName("LC-09: DEF-01 Gate: Superseded rejected document does not block approval; profile is synchronized")
+    void lc09_def01Gate_supersededRejectedDocument() throws Exception {
+        SessionCookies superAdmin = setupSuperAdmin();
+        CollegeContext ctx = seedPendingCollege("LC09-COLL", "Superseded Test College", "admin@lc09.edu");
+
+        // Add accepted affiliation
+        addDocument(ctx.college(), ctx.registration(), DocumentCategory.UNIVERSITY_AFFILIATION_CERTIFICATE,
+                "affiliation.pdf", DocumentVerificationStatus.ACCEPTED, null);
+
+        // Add rejected signatory
+        CollegeRegistrationDocument rejectedDoc = addDocument(ctx.college(), ctx.registration(),
+                DocumentCategory.AUTHORIZED_SIGNATORY_ID, "signatory_v1.pdf", DocumentVerificationStatus.REJECTED, null);
+
+        // Add accepted replacement document that supersedes the rejected document
+        addDocument(ctx.college(), ctx.registration(), DocumentCategory.AUTHORIZED_SIGNATORY_ID,
+                "signatory_v2.pdf", DocumentVerificationStatus.ACCEPTED, rejectedDoc.getId());
+
+        ReviewDecisionRequest request = new ReviewDecisionRequest(
+                ReviewDecisionAction.APPROVE, ctx.college().getVersion(), "Approved with replacement.", null);
+
+        mockMvc.perform(post("/api/v1/super-admin/colleges/reviews/" + ctx.college().getId() + "/decision")
+                        .cookie(superAdmin.sessionCookie(), superAdmin.xsrfCookie())
+                        .header("X-XSRF-TOKEN", superAdmin.xsrfCookie().getValue())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.approvalStatus").value("APPROVED"));
+
+        College refreshed = collegeRepository.findById(ctx.college().getId()).orElseThrow();
+        assertThat(refreshed.getStatus()).isEqualTo(CollegeStatus.ACTIVE);
+        assertThat(refreshed.getAddressLine1()).isEqualTo("Campus Road");
+    }
+
+    @Test
+    @DisplayName("LC-10: Audit and Outbox consistency on successful approval")
+    void lc10_auditAndOutboxConsistency() throws Exception {
+        SessionCookies superAdmin = setupSuperAdmin();
+        CollegeContext ctx = seedPendingCollege("LC10-COLL", "Audit Outbox College", "admin@lc10.edu");
+
+        addDocument(ctx.college(), ctx.registration(), DocumentCategory.UNIVERSITY_AFFILIATION_CERTIFICATE,
+                "affiliation.pdf", DocumentVerificationStatus.ACCEPTED, null);
+        addDocument(ctx.college(), ctx.registration(), DocumentCategory.AUTHORIZED_SIGNATORY_ID,
+                "signatory.pdf", DocumentVerificationStatus.ACCEPTED, null);
+
+        ReviewDecisionRequest request = new ReviewDecisionRequest(
+                ReviewDecisionAction.APPROVE, ctx.college().getVersion(), "Audit verification approval.", null);
+
+        mockMvc.perform(post("/api/v1/super-admin/colleges/reviews/" + ctx.college().getId() + "/decision")
+                        .cookie(superAdmin.sessionCookie(), superAdmin.xsrfCookie())
+                        .header("X-XSRF-TOKEN", superAdmin.xsrfCookie().getValue())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk());
+
+        // Verify COLLEGE_ACTIVATED audit event
+        assertThat(auditEventRepository.findByCollegeId(ctx.college().getId()))
+                .anyMatch(event -> event.getEventType() == AuditEventType.COLLEGE_ACTIVATED
+                        && event.getMetadataJson() != null
+                        && event.getMetadataJson().contains("LC10-COLL")
+                        && event.getMetadataJson().contains("Audit Outbox College"));
+
+        // Verify outbox email notification
+        assertThat(outboxEmailRepository.findAll())
+                .anyMatch(email -> "admin@lc10.edu".equals(email.getRecipientEmail())
+                        && "COLLEGE_REGISTRATION_APPROVED".equals(email.getEventType()));
     }
 }
